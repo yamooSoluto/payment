@@ -11,6 +11,14 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'YAMOO - 결제 및 구독 관리',
   description: 'YAMOO CS 자동화 서비스 결제 및 구독 관리',
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 }
 
 export default function RootLayout({
