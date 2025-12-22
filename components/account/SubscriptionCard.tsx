@@ -102,23 +102,25 @@ export default function SubscriptionCard({ subscription, authParam }: Subscripti
                 <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
               </div>
             </div>
-            {subscription.cardCompany && (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 text-gray-600">
-                  <CreditCard className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">결제 수단</p>
-                    <p className="font-medium">{subscription.cardCompany}카드 {subscription.cardNumber}</p>
-                  </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-gray-600">
+                <CreditCard className="w-5 h-5 text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">결제 수단</p>
+                  <p className="font-medium">
+                    {subscription.cardCompany
+                      ? `${subscription.cardCompany}카드 ${subscription.cardNumber || ''}`
+                      : '등록된 카드'}
+                  </p>
                 </div>
-                <a
-                  href={`/account/change-card?${authParam}`}
-                  className="text-sm text-yamoo-primary hover:underline"
-                >
-                  변경
-                </a>
               </div>
-            )}
+              <a
+                href={`/account/change-card?${authParam}`}
+                className="text-sm text-yamoo-primary hover:underline"
+              >
+                변경
+              </a>
+            </div>
           </div>
         )}
 
