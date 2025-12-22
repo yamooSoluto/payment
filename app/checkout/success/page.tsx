@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle } from 'lucide-react';
+import { Suspense } from 'react';
 
 // 플랜 이름 (클라이언트용)
 function getPlanName(plan: string): string {
@@ -15,7 +16,7 @@ function getPlanName(plan: string): string {
   return names[plan] || plan;
 }
 
-export default function CheckoutSuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get('plan') || '';
   const orderId = searchParams.get('orderId') || '';
@@ -66,5 +67,17 @@ export default function CheckoutSuccessPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yamoo-primary"></div>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   );
 }
