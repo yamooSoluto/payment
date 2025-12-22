@@ -4,7 +4,8 @@ import { useEffect } from 'react';
 
 declare global {
   interface Window {
-    ChannelIO?: (command: string, options?: Record<string, unknown>) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ChannelIO?: any;
     ChannelIOInitialized?: boolean;
   }
 }
@@ -17,14 +18,15 @@ export default function ChannelTalk() {
       if (w.ChannelIO) {
         return console.error('ChannelIO script included twice.');
       }
-      const ch = function (...args: unknown[]) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ch: any = function (...args: unknown[]) {
         ch.c(args);
       };
       ch.q = [] as unknown[][];
       ch.c = function (args: unknown[]) {
         ch.q.push(args);
       };
-      w.ChannelIO = ch as typeof w.ChannelIO;
+      w.ChannelIO = ch;
 
       function l() {
         if (w.ChannelIOInitialized) {

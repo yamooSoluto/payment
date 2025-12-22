@@ -8,7 +8,12 @@
       "Bash(npx tsc:*)",
       "Bash(find:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: YAMOO Payment subscription system\n\n- Toss Payments integration \\(billing key, payments, cancellation\\)\n- Firebase Firestore for subscriptions and payments\n- Plan management: Trial, Basic, Business\n- Features: plan upgrade/downgrade, card management, Toss webhooks\n- Next.js 15 App Router with TypeScript\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
