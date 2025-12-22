@@ -15,6 +15,7 @@ interface SubscriptionCardProps {
     currentPeriodEnd?: Date | string;
     cardCompany?: string;
     cardNumber?: string;
+    cardAlias?: string;
     trialEndDate?: Date | string;
   };
   authParam: string;
@@ -108,9 +109,11 @@ export default function SubscriptionCard({ subscription, authParam }: Subscripti
                 <div>
                   <p className="text-sm text-gray-500">결제 수단</p>
                   <p className="font-medium">
-                    {subscription.cardCompany
-                      ? `${subscription.cardCompany}카드 ${subscription.cardNumber || ''}`
-                      : '등록된 카드'}
+                    {subscription.cardAlias
+                      ? `${subscription.cardAlias} (${subscription.cardCompany || ''}카드)`
+                      : subscription.cardCompany
+                        ? `${subscription.cardCompany}카드 ${subscription.cardNumber || ''}`
+                        : '등록된 카드'}
                   </p>
                 </div>
               </div>

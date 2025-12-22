@@ -6,13 +6,15 @@ import { CreditCard } from 'lucide-react';
 interface ChangeCardButtonProps {
   email: string;
   authParam: string;
+  currentAlias?: string;
 }
 
-export default function ChangeCardButton({ email, authParam }: ChangeCardButtonProps) {
+export default function ChangeCardButton({ email, authParam, currentAlias }: ChangeCardButtonProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
+  const [cardAlias, setCardAlias] = useState(currentAlias || '');
 
   useEffect(() => {
     const loadTossPaymentsSDK = () => {
@@ -56,10 +58,13 @@ export default function ChangeCardButton({ email, authParam }: ChangeCardButtonP
 
       const tossPayments = window.TossPayments(clientKey);
 
+      // 별칭을 URL에 포함
+      const aliasParam = cardAlias ? `&cardAlias=${encodeURIComponent(cardAlias)}` : '';
+
       // 빌링키 발급 요청 (새 카드 등록)
       await tossPayments.requestBillingAuth('카드', {
         customerKey: email,
-        successUrl: `${window.location.origin}/api/payments/update-card?${authParam}`,
+        successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}`,
         failUrl: `${window.location.origin}/account/change-card?${authParam}&error=card_change_failed`,
         customerEmail: email,
       });
@@ -77,6 +82,21 @@ export default function ChangeCardButton({ email, authParam }: ChangeCardButtonP
           {error}
         </div>
       )}
+
+      <div>
+        <label htmlFor="cardAlias" className="block text-sm font-medium text-gray-700 mb-1">
+          카드 별칭 (선택)
+        </label>
+        <input
+          type="text"
+          id="cardAlias"
+          value={cardAlias}
+          onChange={(e) => setCardAlias(e.target.value)}
+          placeholder="예: 회사카드, 개인카드"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
+          maxLength={20}
+        />
+      </div>
 
       <button
         onClick={handleChangeCard}
@@ -96,7 +116,7 @@ export default function ChangeCardButton({ email, authParam }: ChangeCardButtonP
         ) : (
           <>
             <CreditCard className="w-5 h-5" />
-            새 카드 등록하기
+            카드 변경하기
           </>
         )}
       </button>

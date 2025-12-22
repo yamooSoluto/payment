@@ -9,11 +9,12 @@ export async function GET(request: NextRequest) {
   const customerKey = searchParams.get('customerKey');
   const token = searchParams.get('token');
   const emailParam = searchParams.get('email');
+  const cardAlias = searchParams.get('cardAlias');
 
   // email 결정
   const email = customerKey || emailParam;
 
-  console.log('Card update received:', { authKey, customerKey, token, email });
+  console.log('Card update received:', { authKey, customerKey, token, email, cardAlias });
 
   if (!authKey || !email) {
     const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email || '')}`;
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
     await db.collection('subscriptions').doc(email).update({
       billingKey: newBillingKey,
       cardInfo: billingResponse.card || null,
+      cardAlias: cardAlias || null,
       cardUpdatedAt: new Date(),
       updatedAt: new Date(),
     });
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
     await db.collection('card_changes').add({
       email,
       newCardInfo: billingResponse.card || null,
+      cardAlias: cardAlias || null,
       changedAt: new Date(),
     });
 

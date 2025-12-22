@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscription } from '@/lib/auth';
 import Link from 'next/link';
-import { ArrowLeft, CreditCard, Shield } from 'lucide-react';
+import { ArrowLeft, CreditCard } from 'lucide-react';
 import ChangeCardButton from '@/components/account/ChangeCardButton';
 
 interface ChangeCardPageProps {
@@ -35,6 +35,7 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
   const cardInfo = subscription.cardInfo || {};
   const cardCompany = cardInfo.company || cardInfo.issuerCode || '알 수 없음';
   const cardNumber = cardInfo.number || '****';
+  const cardAlias = subscription.cardAlias || '';
 
   return (
     <div className="max-w-lg mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -59,7 +60,9 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
             <CreditCard className="w-6 h-6 text-gray-500" />
           </div>
           <div>
-            <p className="font-medium text-gray-900">{cardCompany}카드</p>
+            <p className="font-medium text-gray-900">
+              {cardAlias ? `${cardAlias} (${cardCompany}카드)` : `${cardCompany}카드`}
+            </p>
             <p className="text-sm text-gray-500">{cardNumber}</p>
           </div>
         </div>
@@ -67,17 +70,12 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
 
       {/* Change Card */}
       <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">새 카드 등록</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">카드 변경</h2>
         <p className="text-sm text-gray-600 mb-6">
           새 카드를 등록하면 기존 카드는 자동으로 해제되고, 다음 결제부터 새 카드로 결제됩니다.
         </p>
 
-        <ChangeCardButton email={email} authParam={authParam} />
-
-        <div className="mt-6 flex items-center gap-2 text-sm text-gray-500">
-          <Shield className="w-4 h-4 text-green-500" />
-          <span>카드 정보는 토스페이먼츠에 안전하게 저장됩니다.</span>
-        </div>
+        <ChangeCardButton email={email} authParam={authParam} currentAlias={cardAlias} />
       </div>
 
       {/* Notice */}

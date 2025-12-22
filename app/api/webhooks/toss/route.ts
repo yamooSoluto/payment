@@ -90,6 +90,53 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case 'CANCEL_STATUS_CHANGED': {
+        // 취소 상태 변경
+        const paymentKey = data?.paymentKey;
+        console.log('Cancel status changed:', paymentKey, data?.cancelStatus);
+
+        if (paymentKey) {
+          const paymentsSnapshot = await db
+            .collection('payments')
+            .where('paymentKey', '==', paymentKey)
+            .get();
+
+          if (!paymentsSnapshot.empty) {
+            const paymentDoc = paymentsSnapshot.docs[0];
+            await paymentDoc.ref.update({
+              cancelStatus: data?.cancelStatus,
+              cancelData: data,
+              updatedAt: new Date(),
+            });
+          }
+        }
+        break;
+      }
+
+      case 'BILLING_DELETED': {
+        // 빌링키 삭제 (사용자가 토스에서 카드 삭제)
+        const billingKey = data?.billingKey;
+        const customerKey = data?.customerKey;
+        console.log('Billing key deleted:', billingKey, customerKey);
+
+        if (customerKey) {
+          // customerKey는 보통 email
+          const subscriptionDoc = await db.collection('subscriptions').doc(customerKey).get();
+
+          if (subscriptionDoc.exists) {
+            await db.collection('subscriptions').doc(customerKey).update({
+              billingKey: null,
+              cardInfo: null,
+              cardAlias: null,
+              billingDeletedAt: new Date(),
+              updatedAt: new Date(),
+            });
+            console.log('Billing key removed from subscription:', customerKey);
+          }
+        }
+        break;
+      }
+
       default:
         console.log('Unhandled webhook event:', eventType);
     }
