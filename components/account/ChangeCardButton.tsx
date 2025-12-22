@@ -3,24 +3,6 @@
 import { useEffect, useState } from 'react';
 import { CreditCard } from 'lucide-react';
 
-interface TossPaymentsInstance {
-  requestBillingAuth: (
-    method: '카드',
-    params: {
-      customerKey: string;
-      successUrl: string;
-      failUrl: string;
-      customerEmail?: string;
-    }
-  ) => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    TossPayments?: (clientKey: string) => TossPaymentsInstance;
-  }
-}
-
 interface ChangeCardButtonProps {
   email: string;
   authParam: string;

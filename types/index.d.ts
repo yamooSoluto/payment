@@ -1,3 +1,23 @@
+// TossPayments SDK 타입 정의
+interface TossPaymentsInstance {
+  requestBillingAuth: (
+    method: '카드',
+    params: {
+      customerKey: string;
+      successUrl: string;
+      failUrl: string;
+      customerEmail?: string;
+      customerName?: string;
+    }
+  ) => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    TossPayments?: (clientKey: string) => TossPaymentsInstance;
+  }
+}
+
 // Subscription types
 export interface Subscription {
   email: string;

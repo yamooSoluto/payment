@@ -3,26 +3,6 @@
 import { useEffect, useState } from 'react';
 import { formatPrice } from '@/lib/utils';
 
-// TossPayments SDK 타입 정의 (v1 API 개별 연동)
-interface TossPaymentsInstance {
-  requestBillingAuth: (
-    method: '카드',
-    params: {
-      customerKey: string;
-      successUrl: string;
-      failUrl: string;
-      customerEmail?: string;
-      customerName?: string;
-    }
-  ) => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    TossPayments?: (clientKey: string) => TossPaymentsInstance;
-  }
-}
-
 interface TossPaymentWidgetProps {
   email: string;
   plan: string;
