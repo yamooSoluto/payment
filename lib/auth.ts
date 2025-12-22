@@ -126,7 +126,8 @@ export async function getPaymentHistory(email: string, limit: number = 10) {
       .get();
 
     // 클라이언트에서 정렬 (인덱스 불필요)
-    const payments = snapshot.docs.map((doc) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payments: any[] = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
