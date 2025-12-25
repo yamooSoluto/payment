@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscription } from '@/lib/auth';
+import { verifyToken, getSubscription, getTenantInfo } from '@/lib/auth';
 import { getPlanAmount, getPlanName } from '@/lib/toss';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
-import { ArrowLeft, Shield, Lock } from 'lucide-react';
+import { ArrowLeft, Shield, Lock, Store, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface CheckoutPageProps {
@@ -10,17 +10,34 @@ interface CheckoutPageProps {
     plan?: string;
     token?: string;
     email?: string;
+    tenantId?: string;  // 매장 ID
     mode?: string;      // 'immediate' for upgrade
     refund?: string;    // 현재 플랜 환불액
+    newTenant?: string; // 신규 매장 (매장 없이 결제)
+    error?: string;     // 결제 실패 에러
   }>;
 }
 
+// 에러 메시지 매핑
+const ERROR_MESSAGES: Record<string, string> = {
+  payment_failed: '결제가 실패했습니다. 카드 정보를 확인하고 다시 시도해주세요.',
+  missing_params: '필수 정보가 누락되었습니다. 다시 시도해주세요.',
+  database_unavailable: '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+  unknown_error: '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.',
+};
+
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const params = await searchParams;
-  const { plan, token, email: emailParam, mode, refund } = params;
+  const { plan, token, email: emailParam, tenantId, mode, refund, newTenant, error } = params;
 
   if (!plan) {
     redirect('/error?message=invalid_access');
+  }
+
+  // 신규 매장이 아닌 경우에만 tenantId 필수
+  const isNewTenant = newTenant === 'true';
+  if (!tenantId && !isNewTenant) {
+    redirect('/error?message=missing_tenant_id');
   }
 
   let email: string | null = null;
@@ -38,8 +55,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect('/login?redirect=/checkout?plan=' + plan);
   }
 
-  const subscription = await getSubscription(email);
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+
+  // 병렬로 데이터 조회 (성능 최적화)
+  const [subscription, tenantInfo] = await Promise.all([
+    getSubscription(email),
+    tenantId ? getTenantInfo(tenantId) : Promise.resolve(null),
+  ]);
 
   // 이미 같은 플랜을 사용 중인 경우
   if (subscription?.plan === plan && subscription?.status === 'active') {
@@ -107,6 +129,41 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         </p>
       </div>
 
+      {/* 에러 메시지 */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-red-800">결제 오류</p>
+            <p className="text-sm text-red-600 mt-1">
+              {ERROR_MESSAGES[error] || decodeURIComponent(error)}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 매장 정보 */}
+      {tenantInfo && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+            <Store className="w-5 h-5 text-yamoo-primary" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">적용 매장</p>
+            <p className="font-semibold text-gray-900">{tenantInfo.brandName}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 신규 매장 안내 */}
+      {isNewTenant && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <p className="text-sm text-yellow-800">
+            <strong>신규 매장:</strong> 결제 완료 후 담당자가 매장 설정을 도와드립니다.
+          </p>
+        </div>
+      )}
+
       {/* Upgrade Info */}
       {isUpgradeMode && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -124,8 +181,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           plan={plan}
           planName={planName}
           amount={amount}
+          tenantId={tenantId}
           isUpgrade={isUpgradeMode}
           fullAmount={fullAmount}
+          isNewTenant={isNewTenant}
+          authParam={authParam}
         />
       </div>
 
@@ -133,7 +193,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-gray-500">
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-green-500" />
-          <span>토스페이먼츠 안전결제</span>
+          <span>안전결제</span>
         </div>
         <div className="flex items-center gap-2">
           <Lock className="w-4 h-4 text-green-500" />

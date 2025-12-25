@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
-import { ChevronDown, ChevronUp, Receipt, CheckCircle, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Receipt, CheckCircle, XCircle, FileText, MinusCircle } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -11,10 +11,14 @@ interface Payment {
   amount: number;
   plan: string;
   status: 'done' | 'canceled' | 'failed';
+  type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund';
+  previousPlan?: string;
+  refundReason?: string;
   paidAt?: Date | string;
   createdAt: Date | string;
   cardCompany?: string;
   cardNumber?: string;
+  receiptUrl?: string;
 }
 
 interface PaymentHistoryProps {
@@ -26,7 +30,10 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
 
   const displayPayments = showAll ? payments : payments.slice(0, 5);
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string, type?: string) => {
+    if (type === 'refund') {
+      return <MinusCircle className="w-4 h-4 text-red-500" />;
+    }
     switch (status) {
       case 'done':
         return <CheckCircle className="w-4 h-4 text-green-500" />;
@@ -73,10 +80,14 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
           <div key={payment.id} className="py-4 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {getStatusIcon(payment.status)}
+                {getStatusIcon(payment.status, payment.type)}
                 <div>
                   <p className="font-medium text-gray-900">
-                    {getPlanName(payment.plan)} 플랜
+                    {payment.type === 'refund' && payment.previousPlan
+                      ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 다운그레이드`
+                      : payment.type === 'upgrade' && payment.previousPlan
+                        ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 업그레이드`
+                        : `${getPlanName(payment.plan)} 플랜`}
                   </p>
                   <p className="text-sm text-gray-500">
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
@@ -84,17 +95,33 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className={`font-semibold ${payment.status === 'canceled' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                  {formatPrice(payment.amount)}원
-                </p>
-                <p className={`text-xs ${
+              <div className="flex items-center gap-2">
+                <span className={`font-semibold ${
+                  payment.type === 'refund' ? 'text-red-600' :
+                  payment.status === 'canceled' ? 'text-gray-400 line-through' :
+                  'text-gray-900'
+                }`}>
+                  {payment.type === 'refund' ? `-${formatPrice(Math.abs(payment.amount))}원` : `${formatPrice(payment.amount)}원`}
+                </span>
+                <span className={`text-xs ${
+                  payment.type === 'refund' ? 'text-red-600' :
                   payment.status === 'done' ? 'text-green-600' :
                   payment.status === 'canceled' ? 'text-gray-400' :
                   'text-red-600'
                 }`}>
-                  {getStatusText(payment.status)}
-                </p>
+                  {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
+                </span>
+                {payment.status === 'done' && payment.receiptUrl && (
+                  <a
+                    href={payment.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                    title="영수증 보기"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </a>
+                )}
               </div>
             </div>
           </div>

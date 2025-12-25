@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey, getPlanName, getPlanAmount } from '@/lib/toss';
+import { syncNewSubscription } from '@/lib/tenant-sync';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -10,20 +11,28 @@ export async function GET(request: NextRequest) {
   const customerKey = searchParams.get('customerKey');
   const plan = searchParams.get('plan');
   const amount = searchParams.get('amount');
+  const tenantId = searchParams.get('tenantId');
+  const token = searchParams.get('token');
+  const emailParam = searchParams.get('email');
 
-  console.log('Billing confirm received:', { authKey, customerKey, plan, amount });
+  // 인증 파라미터 생성 (리다이렉트 시 사용)
+  const authParam = token ? `token=${token}` : emailParam ? `email=${encodeURIComponent(emailParam)}` : '';
+
+  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, hasToken: !!token });
 
   // 필수 파라미터 검증
-  if (!authKey || !customerKey || !plan) {
+  if (!authKey || !customerKey || !plan || !tenantId) {
+    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan || 'basic'}&error=missing_params`, request.url)
+      new URL(`/checkout?plan=${plan || 'basic'}&tenantId=${tenantId || ''}${authQuery}&error=missing_params`, request.url)
     );
   }
 
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
+    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan}&error=database_unavailable`, request.url)
+      new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=database_unavailable`, request.url)
     );
   }
 
@@ -40,10 +49,10 @@ export async function GET(request: NextRequest) {
     const email = customerKey;
 
     // 3. 첫 결제 수행
-    const orderId = `SUB_${Date.now()}_${email.replace('@', '_at_')}`;
+    const orderId = `SUB_${Date.now()}_${tenantId}`;
     const orderName = `YAMOO ${getPlanName(plan)} 플랜 - 첫 결제`;
 
-    console.log('Processing first payment:', { orderId, paymentAmount });
+    console.log('Processing first payment:', { orderId, paymentAmount, tenantId });
 
     const paymentResponse = await payWithBillingKey(
       billingKey,
@@ -56,12 +65,24 @@ export async function GET(request: NextRequest) {
 
     console.log('First payment completed:', paymentResponse.status);
 
-    // 4. 구독 정보 저장
+    // 4. 구독 정보 저장 (tenantId를 document ID로 사용)
     const now = new Date();
     const nextBillingDate = new Date(now);
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
-    await db.collection('subscriptions').doc(email).set({
+    // tenant 정보 조회 (매장명 가져오기)
+    let tenantName = '';
+    try {
+      const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+      if (tenantDoc.exists) {
+        tenantName = tenantDoc.data()?.name || '';
+      }
+    } catch {
+      // 무시
+    }
+
+    await db.collection('subscriptions').doc(tenantId).set({
+      tenantId,
       email,
       plan,
       billingKey,
@@ -77,6 +98,7 @@ export async function GET(request: NextRequest) {
 
     // 5. 결제 내역 저장
     await db.collection('payments').add({
+      tenantId,
       email,
       orderId,
       paymentKey: paymentResponse.paymentKey,
@@ -85,11 +107,15 @@ export async function GET(request: NextRequest) {
       status: 'done',
       method: paymentResponse.method,
       cardInfo: paymentResponse.card || null,
+      receiptUrl: paymentResponse.receipt?.url || null,
       paidAt: now,
       createdAt: now,
     });
 
-    // 6. n8n 웹훅 호출 (구독 성공 알림)
+    // 6. tenants 컬렉션에 구독 정보 동기화
+    await syncNewSubscription(tenantId, plan, nextBillingDate);
+
+    // 7. n8n 웹훅 호출 (구독 성공 알림)
     if (process.env.N8N_WEBHOOK_URL) {
       try {
         await fetch(process.env.N8N_WEBHOOK_URL, {
@@ -97,6 +123,7 @@ export async function GET(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event: 'subscription_created',
+            tenantId,
             email,
             plan,
             amount: paymentAmount,
@@ -108,8 +135,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 성공 페이지로 리다이렉트
+    const authQuery = authParam ? `&${authParam}` : '';
+    const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout/success?plan=${plan}&orderId=${orderId}`, request.url)
+      new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&orderId=${orderId}${tenantNameQuery}${authQuery}`, request.url)
     );
   } catch (error) {
     console.error('Billing confirm failed:', error);
@@ -120,8 +149,9 @@ export async function GET(request: NextRequest) {
       errorMessage = error.message;
     }
 
+    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan}&error=${encodeURIComponent(errorMessage)}`, request.url)
+      new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent(errorMessage)}`, request.url)
     );
   }
 }

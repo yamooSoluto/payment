@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName } from '@/lib/toss';
+import { syncPaymentSuccess, syncPaymentFailure } from '@/lib/tenant-sync';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
 // 매일 00:00 (KST) 실행
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
       .get();
 
     interface BillingResult {
+      tenantId: string;
       email: string;
       status: 'success' | 'retry' | 'suspended';
       error?: string;
@@ -37,11 +39,12 @@ export async function GET(request: NextRequest) {
 
     for (const doc of subscriptionsSnapshot.docs) {
       const subscription = doc.data();
-      const email = doc.id;
+      const tenantId = doc.id; // document ID가 tenantId
+      const email = subscription.email;
 
       try {
         // 빌링키로 자동 결제
-        const orderId = `AUTO_${Date.now()}_${email.replace('@', '_at_')}`;
+        const orderId = `AUTO_${Date.now()}_${tenantId}`;
         const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 정기결제`;
 
         const response = await payWithBillingKey(
@@ -59,7 +62,7 @@ export async function GET(request: NextRequest) {
           nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
           // 구독 정보 업데이트
-          await db.collection('subscriptions').doc(email).update({
+          await db.collection('subscriptions').doc(tenantId).update({
             currentPeriodStart: subscription.currentPeriodEnd,
             currentPeriodEnd: nextBillingDate,
             nextBillingDate,
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest) {
 
           // 결제 내역 저장
           await db.collection('payments').add({
+            tenantId,
             email,
             orderId,
             paymentKey: response.paymentKey,
@@ -76,9 +80,13 @@ export async function GET(request: NextRequest) {
             plan: subscription.plan,
             status: 'done',
             method: response.method,
+            receiptUrl: response.receipt?.url || null,
             paidAt: new Date(),
             createdAt: new Date(),
           });
+
+          // tenants 컬렉션에 결제 성공 동기화
+          await syncPaymentSuccess(tenantId, nextBillingDate);
 
           // n8n 웹훅 (정기결제 성공 알림)
           if (process.env.N8N_WEBHOOK_URL) {
@@ -88,6 +96,7 @@ export async function GET(request: NextRequest) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   event: 'recurring_payment_success',
+                  tenantId,
                   email,
                   plan: subscription.plan,
                   amount: subscription.amount,
@@ -98,20 +107,23 @@ export async function GET(request: NextRequest) {
             }
           }
 
-          results.push({ email, status: 'success' });
+          results.push({ tenantId, email, status: 'success' });
         }
       } catch (error) {
         // 결제 실패 처리
-        console.error(`Payment failed for ${email}:`, error);
+        console.error(`Payment failed for tenantId ${tenantId}:`, error);
 
         const retryCount = subscription.retryCount || 0;
 
         if (retryCount >= 2) {
           // 3회 실패 시 구독 정지
-          await db.collection('subscriptions').doc(email).update({
+          await db.collection('subscriptions').doc(tenantId).update({
             status: 'past_due',
             updatedAt: new Date(),
           });
+
+          // tenants 컬렉션에 결제 실패 동기화
+          await syncPaymentFailure(tenantId);
 
           // 실패 알림
           if (process.env.N8N_WEBHOOK_URL) {
@@ -121,6 +133,7 @@ export async function GET(request: NextRequest) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   event: 'payment_failed',
+                  tenantId,
                   email,
                   plan: subscription.plan,
                   retryCount: retryCount + 1,
@@ -131,15 +144,15 @@ export async function GET(request: NextRequest) {
             }
           }
 
-          results.push({ email, status: 'suspended' });
+          results.push({ tenantId, email, status: 'suspended' });
         } else {
           // 재시도 카운트 증가
-          await db.collection('subscriptions').doc(email).update({
+          await db.collection('subscriptions').doc(tenantId).update({
             retryCount: retryCount + 1,
             updatedAt: new Date(),
           });
 
-          results.push({ email, status: 'retry' });
+          results.push({ tenantId, email, status: 'retry' });
         }
       }
     }

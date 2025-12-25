@@ -8,8 +8,11 @@ interface TossPaymentWidgetProps {
   plan: string;
   planName: string;
   amount: number;
+  tenantId?: string;
   isUpgrade?: boolean;
   fullAmount?: number;
+  isNewTenant?: boolean;
+  authParam?: string;
 }
 
 export default function TossPaymentWidget({
@@ -17,13 +20,19 @@ export default function TossPaymentWidget({
   plan,
   planName,
   amount,
+  tenantId,
   isUpgrade = false,
   fullAmount,
+  isNewTenant = false,
+  authParam = '',
 }: TossPaymentWidgetProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
+
+  // 신규 매장인 경우 tenantId를 'new'로 처리
+  const effectiveTenantId = tenantId || (isNewTenant ? 'new' : '');
   const [sdkReady, setSdkReady] = useState(false);
 
   useEffect(() => {
@@ -70,6 +79,7 @@ export default function TossPaymentWidget({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email,
+            tenantId: effectiveTenantId,
             newPlan: plan,
             newAmount: fullAmount,
             proratedAmount: amount,
@@ -79,7 +89,7 @@ export default function TossPaymentWidget({
         const data = await response.json();
 
         if (response.ok) {
-          window.location.href = `/checkout/success?plan=${plan}&orderId=${data.orderId}`;
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}`;
         } else {
           throw new Error(data.error || '업그레이드에 실패했습니다.');
         }
@@ -100,10 +110,11 @@ export default function TossPaymentWidget({
         const tossPayments = window.TossPayments(clientKey);
 
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
+        const authQuery = authParam ? `&${authParam}` : '';
         await tossPayments.requestBillingAuth('카드', {
           customerKey: email,
-          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}`,
-          failUrl: `${window.location.origin}/checkout?plan=${plan}&error=payment_failed`,
+          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}`,
+          failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,
         });
       }
@@ -155,7 +166,7 @@ export default function TossPaymentWidget({
         <p className="text-sm text-blue-700">
           {isUpgrade
             ? '등록된 카드로 차액이 즉시 결제됩니다. 다음 결제일부터 새 플랜 금액이 정기 결제됩니다.'
-            : '아래 버튼을 클릭하면 토스페이먼츠 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
+            : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
         </p>
       </div>
 
@@ -224,7 +235,7 @@ export default function TossPaymentWidget({
             <li>• 언제든지 구독을 해지할 수 있습니다.</li>
           </>
         )}
-        <li>• 결제 관련 문의: yamoo@soluto.co.kr</li>
+        <li>• 결제 관련 문의: <button type="button" onClick={() => window.ChannelIO?.('showMessenger')} className="text-yamoo-primary hover:underline">야무 YAMOO</button></li>
       </ul>
     </div>
   );

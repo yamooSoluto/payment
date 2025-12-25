@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       method: paymentResponse.method,
       cardCompany: card.company,
       cardNumber: card.number,
+      receiptUrl: paymentResponse.receipt?.url || null,
       paidAt: now,
       createdAt: now,
     });

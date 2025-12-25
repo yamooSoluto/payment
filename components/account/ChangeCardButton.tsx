@@ -7,9 +7,10 @@ interface ChangeCardButtonProps {
   email: string;
   authParam: string;
   currentAlias?: string;
+  tenantId?: string;
 }
 
-export default function ChangeCardButton({ email, authParam, currentAlias }: ChangeCardButtonProps) {
+export default function ChangeCardButton({ email, authParam, currentAlias, tenantId }: ChangeCardButtonProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,12 +61,13 @@ export default function ChangeCardButton({ email, authParam, currentAlias }: Cha
 
       // 별칭을 URL에 포함
       const aliasParam = cardAlias ? `&cardAlias=${encodeURIComponent(cardAlias)}` : '';
+      const tenantParam = tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '';
 
       // 빌링키 발급 요청 (새 카드 등록)
       await tossPayments.requestBillingAuth('카드', {
         customerKey: email,
-        successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}`,
-        failUrl: `${window.location.origin}/account/change-card?${authParam}&error=card_change_failed`,
+        successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}${tenantParam}`,
+        failUrl: `${window.location.origin}/account/change-card?${authParam}${tenantParam}&error=card_change_failed`,
         customerEmail: email,
       });
     } catch (err) {

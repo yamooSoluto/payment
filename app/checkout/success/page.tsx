@@ -20,6 +20,18 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get('plan') || '';
   const orderId = searchParams.get('orderId') || '';
+  const tenantId = searchParams.get('tenantId') || '';
+  const tenantName = searchParams.get('tenantName') || '';
+  const token = searchParams.get('token');
+  const email = searchParams.get('email');
+
+  // 인증 파라미터 생성
+  const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
+  const accountUrl = tenantId && authParam
+    ? `/account/${tenantId}?${authParam}`
+    : authParam
+    ? `/account?${authParam}`
+    : '/account';
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -31,6 +43,12 @@ function SuccessContent() {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           결제가 완료되었습니다!
         </h1>
+
+        {tenantName && (
+          <p className="text-lg font-semibold text-gray-800 mb-2">
+            {tenantName}
+          </p>
+        )}
 
         <p className="text-gray-600 mb-6">
           YAMOO {getPlanName(plan)} 플랜 구독이 시작되었습니다.
@@ -49,7 +67,7 @@ function SuccessContent() {
 
         <div className="space-y-3">
           <Link
-            href="/account"
+            href={accountUrl}
             className="btn-primary w-full block text-center"
           >
             내 계정으로 이동

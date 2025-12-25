@@ -15,6 +15,8 @@ interface ChangePlanButtonProps {
   authParam: string;
   nextBillingDate?: string;
   daysLeft?: number;
+  totalDaysInPeriod?: number;
+  tenantId?: string;
 }
 
 function formatPrice(price: number): string {
@@ -39,16 +41,18 @@ export default function ChangePlanButton({
   authParam,
   nextBillingDate,
   daysLeft = 0,
+  totalDaysInPeriod = 30,
+  tenantId,
 }: ChangePlanButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedMode, setSelectedMode] = useState<'immediate' | 'scheduled' | null>(null);
 
-  // 즉시 변경 시 일할 계산
+  // 즉시 변경 시 일할 계산 (실제 결제 기간 기준)
   // 남은 일수에 대한 현재 플랜 환불액
-  const refundAmount = Math.round((currentAmount / 30) * daysLeft);
+  const refundAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
   // 남은 일수에 대한 새 플랜 비용 (할인가)
-  const proratedNewAmount = Math.round((newAmount / 30) * daysLeft);
+  const proratedNewAmount = Math.round((newAmount / totalDaysInPeriod) * daysLeft);
   // 실제 결제/환불 금액
   const immediatePayment = proratedNewAmount - refundAmount;
 
@@ -71,6 +75,7 @@ export default function ChangePlanButton({
         body: JSON.stringify({
           token,
           email,
+          tenantId,
           newPlan,
           newAmount,
           mode,
@@ -80,10 +85,12 @@ export default function ChangePlanButton({
 
       const data = await response.json();
 
+      const tenantParam = tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '';
+
       if (response.ok) {
         if (mode === 'immediate' && data.requiresPayment) {
           // 업그레이드: 결제 페이지로 이동
-          window.location.href = `/checkout?plan=${newPlan}&${authParam}&mode=immediate&refund=${refundAmount}`;
+          window.location.href = `/checkout?plan=${newPlan}&${authParam}${tenantParam}&mode=immediate&refund=${refundAmount}`;
         } else {
           // 다운그레이드 또는 예약 변경: 완료 메시지
           let message = '';
@@ -95,7 +102,7 @@ export default function ChangePlanButton({
             message = `${newPlanName} 플랜으로 ${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 변경됩니다.`;
           }
           alert(message);
-          window.location.href = `/account?${authParam}`;
+          window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
         }
       } else {
         alert(data.error || '플랜 변경에 실패했습니다.');

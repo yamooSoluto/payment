@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName } from '@/lib/toss';
+import { syncPlanChange } from '@/lib/tenant-sync';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -10,19 +11,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, newPlan, newAmount, proratedAmount } = body;
+    const { email, tenantId, newPlan, newAmount, proratedAmount } = body;
 
-    if (!email || !newPlan || !newAmount || proratedAmount === undefined) {
+    if (!email || !tenantId || !newPlan || !newAmount || proratedAmount === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // 구독 정보 조회
-    const subscriptionDoc = await db.collection('subscriptions').doc(email).get();
+    // 구독 정보 조회 (tenantId로)
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
     if (!subscriptionDoc.exists) {
       return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
     }
 
     const subscription = subscriptionDoc.data();
+
+    // 해당 사용자의 구독인지 확인
+    if (subscription?.email !== email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
     if (!subscription?.billingKey) {
       return NextResponse.json({ error: 'Billing key not found' }, { status: 400 });
     }
@@ -36,13 +43,14 @@ export async function POST(request: NextRequest) {
 
     // 차액 결제 (proratedAmount가 0보다 클 때만)
     let paymentResponse = null;
-    const orderId = `UPGRADE_${Date.now()}_${email.replace('@', '_at_')}`;
+    const orderId = `UPGRADE_${Date.now()}_${tenantId}`;
 
     if (proratedAmount > 0) {
       const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 업그레이드`;
 
       console.log('Processing upgrade payment:', {
         orderId,
+        tenantId,
         amount: proratedAmount,
         previousPlan,
         newPlan,
@@ -61,6 +69,7 @@ export async function POST(request: NextRequest) {
 
       // 결제 내역 저장
       await db.collection('payments').add({
+        tenantId,
         email,
         orderId,
         paymentKey: paymentResponse.paymentKey,
@@ -71,13 +80,14 @@ export async function POST(request: NextRequest) {
         status: 'done',
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,
+        receiptUrl: paymentResponse.receipt?.url || null,
         paidAt: new Date(),
         createdAt: new Date(),
       });
     }
 
     // 구독 정보 업데이트 (플랜 변경, nextBillingDate는 유지)
-    await db.collection('subscriptions').doc(email).update({
+    await db.collection('subscriptions').doc(tenantId).update({
       plan: newPlan,
       amount: newAmount,
       previousPlan,
@@ -90,6 +100,9 @@ export async function POST(request: NextRequest) {
       pendingMode: null,
     });
 
+    // tenants 컬렉션에 플랜 변경 동기화
+    await syncPlanChange(tenantId, newPlan);
+
     // n8n 웹훅 호출
     if (process.env.N8N_WEBHOOK_URL) {
       try {
@@ -98,6 +111,7 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event: 'plan_upgraded',
+            tenantId,
             email,
             previousPlan,
             newPlan,

@@ -89,7 +89,7 @@ export function generateToken(email: string, purpose: 'checkout' | 'account'): s
   return token;
 }
 
-// 구독 정보 조회
+// 구독 정보 조회 (email 기준 - deprecated, tenantId 사용 권장)
 export async function getSubscription(email: string) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -111,7 +111,38 @@ export async function getSubscription(email: string) {
   }
 }
 
-// 결제 내역 조회
+// 구독 정보 조회 (tenantId 기준)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getSubscriptionByTenantId(tenantId: string, email?: string): Promise<Record<string, any> | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    console.error('Firebase Admin DB not initialized');
+    return null;
+  }
+
+  try {
+    const doc = await db.collection('subscriptions').doc(tenantId).get();
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    const subscription = doc.data();
+
+    // email이 제공된 경우 권한 확인
+    if (email && subscription?.email !== email) {
+      console.error('Unauthorized access to subscription');
+      return null;
+    }
+
+    return { ...subscription, tenantId };
+  } catch (error) {
+    console.error('Failed to get subscription:', error);
+    return null;
+  }
+}
+
+// 결제 내역 조회 (email 기준 - deprecated, tenantId 사용 권장)
 export async function getPaymentHistory(email: string, limit: number = 10) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -143,5 +174,132 @@ export async function getPaymentHistory(email: string, limit: number = 10) {
   } catch (error) {
     console.error('Failed to get payment history:', error);
     return [];
+  }
+}
+
+// 결제 내역 조회 (tenantId 기준)
+export async function getPaymentHistoryByTenantId(tenantId: string, limit: number = 10) {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    console.error('Firebase Admin DB not initialized');
+    return [];
+  }
+
+  try {
+    const snapshot = await db
+      .collection('payments')
+      .where('tenantId', '==', tenantId)
+      .get();
+
+    // 클라이언트에서 정렬 (인덱스 불필요)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payments: any[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    // createdAt 기준 내림차순 정렬
+    payments.sort((a, b) => {
+      const aTime = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+      const bTime = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+      return bTime.getTime() - aTime.getTime();
+    });
+
+    return payments.slice(0, limit);
+  } catch (error) {
+    console.error('Failed to get payment history:', error);
+    return [];
+  }
+}
+
+// 이메일로 매장 목록 조회
+export async function getTenantsByEmail(email: string): Promise<Array<{
+  id: string;
+  tenantId: string;
+  brandName: string;
+  subscription?: {
+    plan: string;
+    status: string;
+  } | null;
+}>> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    console.error('Firebase Admin DB not initialized');
+    return [];
+  }
+
+  try {
+    const tenantsSnapshot = await db
+      .collection('tenants')
+      .where('email', '==', email)
+      .get();
+
+    if (tenantsSnapshot.empty) {
+      return [];
+    }
+
+    // 각 매장에 대한 구독 정보 병렬 조회
+    const tenants = await Promise.all(
+      tenantsSnapshot.docs.map(async (doc) => {
+        const tenantData = doc.data();
+        const tenantId = tenantData.tenantId || doc.id;
+
+        const subscriptionDoc = await db
+          .collection('subscriptions')
+          .doc(tenantId)
+          .get();
+
+        const subscription = subscriptionDoc.exists
+          ? subscriptionDoc.data()
+          : null;
+
+        return {
+          id: doc.id,
+          tenantId,
+          brandName: tenantData.brandName || '이름 없음',
+          subscription: subscription
+            ? {
+                plan: subscription.plan,
+                status: subscription.status,
+              }
+            : null,
+        };
+      })
+    );
+
+    return tenants;
+  } catch (error) {
+    console.error('Failed to get tenants:', error);
+    return [];
+  }
+}
+
+// 매장 정보 조회 (tenantId 기준)
+export async function getTenantInfo(tenantId: string): Promise<{ tenantId: string; brandName: string } | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    console.error('Firebase Admin DB not initialized');
+    return null;
+  }
+
+  try {
+    const snapshot = await db
+      .collection('tenants')
+      .where('tenantId', '==', tenantId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const tenantData = snapshot.docs[0].data();
+    return {
+      tenantId,
+      brandName: tenantData.brandName || '이름 없음',
+    };
+  } catch (error) {
+    console.error('Failed to get tenant info:', error);
+    return null;
   }
 }

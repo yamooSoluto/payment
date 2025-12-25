@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscription } from '@/lib/auth';
+import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
 import Link from 'next/link';
 import { ArrowLeft, Check } from 'lucide-react';
 import { PLAN_PRICES, getPlanName } from '@/lib/toss';
 import ChangePlanButton from '@/components/account/ChangePlanButton';
 
 interface ChangePlanPageProps {
-  searchParams: Promise<{ token?: string; email?: string }>;
+  searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
 }
 
 const PLANS = [
@@ -58,7 +58,7 @@ function formatPrice(price: number): string {
 
 export default async function ChangePlanPage({ searchParams }: ChangePlanPageProps) {
   const params = await searchParams;
-  const { token, email: emailParam } = params;
+  const { token, email: emailParam, tenantId } = params;
 
   let email: string | null = null;
 
@@ -72,9 +72,18 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
     redirect('/login');
   }
 
-  const rawSubscription = await getSubscription(email);
+  if (!tenantId) {
+    redirect('/account');
+  }
+
+  const rawSubscription = await getSubscriptionByTenantId(tenantId, email);
   if (!rawSubscription) {
     redirect('/pricing');
+  }
+
+  // 해지된 구독은 플랜 변경 대신 요금제 페이지로 이동
+  if (rawSubscription.status === 'canceled') {
+    redirect(`/pricing?${token ? `token=${token}` : `email=${encodeURIComponent(email)}`}&tenantId=${tenantId}`);
   }
 
   const subscription = serializeData(rawSubscription);
@@ -82,6 +91,12 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   const currentPlan = subscription.plan;
   const currentAmount = PLAN_PRICES[currentPlan] || 0;
   const nextBillingDate = subscription.nextBillingDate;
+  const currentPeriodStart = subscription.currentPeriodStart;
+
+  // 결제 기간 총 일수 계산
+  const totalDaysInPeriod = (nextBillingDate && currentPeriodStart)
+    ? Math.ceil((new Date(nextBillingDate).getTime() - new Date(currentPeriodStart).getTime()) / (1000 * 60 * 60 * 24))
+    : 30;
 
   // 남은 일수 계산
   const daysLeft = nextBillingDate
@@ -93,11 +108,11 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
       {/* Header */}
       <div className="mb-8">
         <Link
-          href={`/account?${authParam}`}
+          href={`/account/${tenantId}?${authParam}`}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          마이페이지로 돌아가기
+          매장 구독 관리로 돌아가기
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">플랜 변경</h1>
         <p className="text-gray-600">
@@ -177,6 +192,8 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
                   authParam={authParam}
                   nextBillingDate={nextBillingDate}
                   daysLeft={daysLeft}
+                  totalDaysInPeriod={totalDaysInPeriod}
+                  tenantId={tenantId}
                 />
               )}
 

@@ -1,8 +1,6 @@
-import { verifyToken, getSubscription } from '@/lib/auth';
-import PricingCard from '@/components/pricing/PricingCard';
+import { verifyToken, getSubscription, getTenantsByEmail } from '@/lib/auth';
+import PricingClient from '@/components/pricing/PricingClient';
 import ComparisonTable from '@/components/pricing/ComparisonTable';
-import { Zap, Clock, Infinity } from 'lucide-react';
-import Link from 'next/link';
 
 const plans = [
   {
@@ -16,7 +14,7 @@ const plans = [
       '1개월 무료체험',
       'AI 자동 답변',
       '업무 처리 메세지 요약 전달',
-      '수동 답변 메세지 자동 보정',
+      '답변 메시지 AI 보정',
     ],
   },
   {
@@ -44,7 +42,7 @@ const plans = [
     features: [
       'Basic 기능 모두 포함',
       '문의 건수 제한 없음',
-      '수동 답변 메세지 자동 보정',
+      '답변 메시지 AI 보정',
       '미니맵 연동 및 활용',
       '예약 및 재고 연동',
     ],
@@ -66,12 +64,12 @@ const plans = [
 ];
 
 interface PricingPageProps {
-  searchParams: Promise<{ token?: string; email?: string }>;
+  searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
 }
 
 export default async function PricingPage({ searchParams }: PricingPageProps) {
   const params = await searchParams;
-  const { token, email: emailParam } = params;
+  const { token, email: emailParam, tenantId } = params;
 
   let email: string | null = null;
 
@@ -85,8 +83,12 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
   }
 
   // 비로그인 상태에서도 요금제 페이지는 볼 수 있음 (선택 시 로그인 유도)
-  const subscription = email ? await getSubscription(email) : null;
   const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
+
+  // 병렬로 구독 정보와 매장 목록 조회 (성능 최적화)
+  const [subscription, tenants] = email
+    ? await Promise.all([getSubscription(email), getTenantsByEmail(email)])
+    : [null, []];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -101,53 +103,15 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
       </div>
 
       {/* Pricing Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        {plans.map((plan) => (
-          <PricingCard
-            key={plan.id}
-            plan={plan}
-            currentPlan={subscription?.plan}
-            authParam={authParam}
-            isLoggedIn={!!email}
-          />
-        ))}
-      </div>
-
-      {/* Common Features */}
-      <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">
-          모든 플랜 공통 혜택
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Clock className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">24시간 AI 자동 응답</h3>
-              <p className="text-sm text-gray-500">언제든 고객 문의에 즉시 응답</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <Infinity className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">무제한 응대 건수</h3>
-              <p className="text-sm text-gray-500">응대 횟수 제한 없이 이용</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Zap className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">30일 무료체험</h3>
-              <p className="text-sm text-gray-500">부담 없이 먼저 체험해보세요</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PricingClient
+        plans={plans}
+        currentPlan={subscription?.status === 'active' || subscription?.status === 'trial' ? subscription?.plan : null}
+        subscriptionStatus={subscription?.status}
+        authParam={authParam}
+        isLoggedIn={!!email}
+        initialTenantId={tenantId}
+        initialTenants={tenants}
+      />
 
       {/* Comparison Table */}
       <ComparisonTable />
@@ -169,18 +133,6 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
             <h3 className="font-semibold text-gray-900 mb-2">해지하면 어떻게 되나요?</h3>
             <p className="text-gray-600 text-sm">
               해지 시 다음 결제일에 자동결제가 중단됩니다. 남은 기간 동안은 계속 이용 가능합니다.
-            </p>
-          </div>
-          <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
-            <h3 className="font-semibold text-gray-900 mb-2">환불 정책은 어떻게 되나요?</h3>
-            <p className="text-gray-600 text-sm">
-              결제 후 7일 이내 미이용 시 전액 환불, 이용 후에는 일할 계산하여 환불해 드립니다.
-            </p>
-          </div>
-          <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
-            <h3 className="font-semibold text-gray-900 mb-2">Enterprise 견적은 어떻게 받나요?</h3>
-            <p className="text-gray-600 text-sm">
-              yamoo@soluto.co.kr로 문의주시면 담당자가 맞춤 견적을 안내해 드립니다.
             </p>
           </div>
         </div>

@@ -16,11 +16,16 @@ interface PricingCardProps {
     popular?: boolean;
   };
   currentPlan?: string | null;
+  subscriptionStatus?: string | null;
   authParam: string;
   isLoggedIn: boolean;
+  tenantId?: string | null;
+  tenantCount?: number;
+  onSelectWithoutTenant?: (planId: string) => void;
+  onEnterpriseClick?: () => void;
 }
 
-export default function PricingCard({ plan, currentPlan, authParam, isLoggedIn }: PricingCardProps) {
+export default function PricingCard({ plan, currentPlan, subscriptionStatus, authParam, isLoggedIn, tenantId, tenantCount = 0, onSelectWithoutTenant, onEnterpriseClick }: PricingCardProps) {
   const { user } = useAuth();
   const isCurrentPlan = currentPlan === plan.id;
   const isEnterprise = plan.id === 'enterprise';
@@ -28,20 +33,26 @@ export default function PricingCard({ plan, currentPlan, authParam, isLoggedIn }
   // 서버에서 전달받은 isLoggedIn 또는 클라이언트 Firebase Auth 상태 확인
   const isAuthenticated = isLoggedIn || !!user;
 
+  const isTrial = plan.id === 'trial';
+
   const handleSelect = () => {
     if (isEnterprise) {
-      window.location.href = 'mailto:yamoo@soluto.co.kr?subject=Enterprise 플랜 문의';
+      onEnterpriseClick?.();
+    } else if (isTrial) {
+      // 무료체험은 about 페이지 신청폼으로 이동
+      window.location.href = '/about#free-trial-form';
     } else if (!isAuthenticated) {
       // 비로그인 상태면 로그인 페이지로
-      window.location.href = `/login?redirect=/checkout?plan=${plan.id}`;
+      window.location.href = `/login?redirect=/pricing`;
+    } else if (!tenantId || tenantCount > 1) {
+      // 매장이 없거나 여러 개면 모달 표시 (매장 선택)
+      onSelectWithoutTenant?.(plan.id);
     } else {
-      // 클라이언트 인증된 경우 이메일 파라미터 사용
+      // 매장이 1개면 결제 페이지로
       const finalAuthParam = authParam || (user?.email ? `email=${encodeURIComponent(user.email)}` : '');
-      window.location.href = `/checkout?plan=${plan.id}&${finalAuthParam}`;
+      window.location.href = `/checkout?plan=${plan.id}&${finalAuthParam}&tenantId=${tenantId}`;
     }
   };
-
-  const isTrial = plan.id === 'trial';
 
   return (
     <div className="flex flex-col">
