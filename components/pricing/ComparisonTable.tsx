@@ -73,20 +73,20 @@ export default function ComparisonTable() {
 
       {isOpen && (
         <div className="mt-8 overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="text-left p-4 font-semibold text-gray-900 border-b">기능</th>
-                <th className="text-center p-4 font-semibold text-gray-900 border-b min-w-[100px]">
+                <th className="text-left p-3 sm:p-4 font-semibold text-gray-900 border-b whitespace-nowrap min-w-[140px]">기능</th>
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
                   Trial
                 </th>
-                <th className="text-center p-4 font-semibold text-gray-900 border-b min-w-[100px]">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
                   Basic
                 </th>
-                <th className="text-center p-4 font-semibold text-gray-900 border-b min-w-[100px]">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
                   Business
                 </th>
-                <th className="text-center p-4 font-semibold text-gray-900 border-b min-w-[100px]">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
                   Enterprise
                 </th>
               </tr>
@@ -104,11 +104,11 @@ export default function ComparisonTable() {
                   </tr>
                   {category.items.map((item, index) => (
                     <tr key={`${category.category}-${index}`} className="border-b hover:bg-gray-50">
-                      <td className="p-4 text-gray-600">{item.name}</td>
-                      <td className="p-4 text-center">{renderCell(item.trial)}</td>
-                      <td className="p-4 text-center">{renderCell(item.basic)}</td>
-                      <td className="p-4 text-center">{renderCell(item.business)}</td>
-                      <td className="p-4 text-center">{renderCell(item.enterprise)}</td>
+                      <td className="p-3 sm:p-4 text-gray-600 text-sm sm:text-base whitespace-nowrap">{item.name}</td>
+                      <td className="p-2 sm:p-4 text-center">{renderCell(item.trial)}</td>
+                      <td className="p-2 sm:p-4 text-center">{renderCell(item.basic)}</td>
+                      <td className="p-2 sm:p-4 text-center">{renderCell(item.business)}</td>
+                      <td className="p-2 sm:p-4 text-center">{renderCell(item.enterprise)}</td>
                     </tr>
                   ))}
                 </React.Fragment>
