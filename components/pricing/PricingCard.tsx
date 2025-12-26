@@ -123,7 +123,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
             ? '문의하기'
             : isTrial
             ? '무료 체험하기'
-            : '선택하기'}
+            : '구독하기'}
         </button>
       </div>
     </div>

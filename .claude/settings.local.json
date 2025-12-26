@@ -14,7 +14,9 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(git commit:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(powershell -Command \"Get-Item ''c:\\\\Users\\\\catki\\\\yamoo-payment\\\\public\\\\dialog3.png''\")",
+      "Bash(powershell -Command:*)"
     ]
   }
 }

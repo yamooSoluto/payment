@@ -48,7 +48,15 @@ export default function AboutPage() {
     const handleScroll = () => {
       // 첫 번째 섹션 높이 (대략 화면 높이의 80% 정도)
       const heroSectionHeight = window.innerHeight * 0.6;
-      setShowFloatingButton(window.scrollY > heroSectionHeight);
+      // 무료체험 신청 섹션이 화면에 보이는지 확인
+      const freeTrialForm = document.getElementById('free-trial-form');
+      let isInFreeTrialSection = false;
+      if (freeTrialForm) {
+        const rect = freeTrialForm.getBoundingClientRect();
+        isInFreeTrialSection = rect.top < window.innerHeight && rect.bottom > 0;
+      }
+
+      setShowFloatingButton(window.scrollY > heroSectionHeight && !isInFreeTrialSection);
     };
 
     window.addEventListener('scroll', handleScroll);
@@ -366,28 +374,39 @@ export default function AboutPage() {
       <section className="bg-white py-10 sm:py-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* 야무지니 소개 */}
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-12">
+          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-20">
+            {/* 모바일: 로고 먼저 표시 */}
+            <div className="md:hidden text-center">
+              <Image
+                src="/yamoo_black_1.png"
+                alt="YAMOO"
+                width={120}
+                height={30}
+                className="mb-4 w-[100px] h-auto mx-auto"
+              />
+            </div>
             <div className="flex-shrink-0">
               <Image
                 src="/yamoogenie.gif"
                 alt="야무지니"
                 width={320}
                 height={320}
-                className="rounded-lg w-[160px] sm:w-[320px] h-auto"
+                className="rounded-lg w-[180px] sm:w-[320px] h-auto"
                 unoptimized
               />
             </div>
             <div className="space-y-2 text-center md:text-left">
+              {/* PC: 로고 표시 */}
               <Image
                 src="/yamoo_black_1.png"
                 alt="YAMOO"
                 width={120}
                 height={30}
-                className="mb-3 sm:mb-4 w-[80px] sm:w-[120px] h-auto mx-auto md:mx-0"
+                className="mb-3 sm:mb-4 w-[80px] sm:w-[120px] h-auto hidden md:block"
               />
-              <h2 className="text-2xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-                <span className="text-[#ffbf03] block mb-3 sm:mb-5">야무지니는</span>
-                <span className="text-gray-900 block pl-4 sm:pl-8">이렇게 처리해요</span>
+              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
+                <span className="text-[#ffbf03] block mb-2 sm:mb-5">야무지니는</span>
+                <span className="text-gray-900 block md:pl-8">이렇게 처리해요</span>
               </h2>
             </div>
           </div>
@@ -396,11 +415,11 @@ export default function AboutPage() {
 
       {/* 즉시 해결 가능한 문의 - 전체 너비 배경 1 */}
       <section
-        className="py-6 sm:py-10 bg-cover bg-center bg-no-repeat"
+        className="py-4 sm:py-6 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: 'url(/background1.png)' }}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-20">
+          <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-8">
             {/* 왼쪽: 캐릭터 + 텍스트 */}
             <div className="flex flex-col md:flex-row items-center gap-6 lg:w-1/2">
               <div className="flex-shrink-0">
@@ -409,13 +428,14 @@ export default function AboutPage() {
                   alt="야무지니 - 즉시 해결"
                   width={1914}
                   height={1914}
-                  className="w-[140px] h-auto"
+                  className="w-[200px] sm:w-[280px] h-auto"
                 />
               </div>
               <div className="space-y-6 text-center md:text-left">
                 <div className="inline-block border-2 border-gray-800 rounded-full px-5 py-2">
                   <span className="text-base font-bold text-gray-800">즉시 해결 가능한 문의</span>
-                  <span className="ml-2 text-gray-800">→</span>
+                  <span className="ml-2 text-gray-800 hidden md:inline">→</span>
+                  <span className="ml-2 text-gray-800 md:hidden">▼</span>
                 </div>
                 <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
                   정확한 답변<br />
@@ -444,13 +464,13 @@ export default function AboutPage() {
 
       {/* 해결 방법이 준비 된 문의 - 전체 너비 배경 3 */}
       <section
-        className="py-6 sm:py-10 bg-cover bg-center bg-no-repeat"
+        className="py-4 sm:py-6 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: 'url(/background3.png)' }}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-20">
-            {/* 왼쪽: 대화 이미지 */}
-            <div className="lg:w-1/2">
+          <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-8">
+            {/* 왼쪽: 대화 이미지 - 모바일에서 아래, PC에서 왼쪽 */}
+            <div className="lg:w-1/2 order-2 lg:order-1">
               <Image
                 src="/dialog2.png"
                 alt="야무지니 대화 예시"
@@ -459,32 +479,32 @@ export default function AboutPage() {
                 className="w-full h-auto"
               />
             </div>
-            {/* 오른쪽: 텍스트 + 캐릭터 */}
-            <div className="flex flex-col md:flex-row items-center gap-6 lg:w-1/2">
-              <div className="space-y-6 text-center md:text-left">
+            {/* 오른쪽: 캐릭터 + 텍스트 - 모바일에서 위, PC에서 오른쪽 */}
+            <div className="flex flex-col md:flex-row items-center gap-6 lg:w-1/2 order-1 lg:order-2">
+              <div className="flex-shrink-0 order-1 md:order-2">
+                <Image
+                  src="/genie2.png"
+                  alt="야무지니 - 맞춤 해결"
+                  width={1914}
+                  height={1914}
+                  className="w-[200px] sm:w-[280px] h-auto"
+                />
+              </div>
+              <div className="space-y-6 text-center md:text-left order-2 md:order-1">
                 <div className="inline-block border-2 border-gray-800 rounded-full px-5 py-2">
-                  <span className="mr-2 text-gray-800">←</span>
+                  <span className="mr-2 text-gray-800 hidden md:inline">←</span>
                   <span className="text-base font-bold text-gray-800">해결 방법이 준비 된 문의</span>
+                  <span className="ml-2 text-gray-800 md:hidden">▼</span>
                 </div>
-                <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
+                <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight whitespace-nowrap">
                   데이터 기반,<br />
-                  맞춤 해결 방안<br />
-                  제시
+                  맞춤 해결 방안 제시
                 </h3>
                 <ul className="text-gray-700 space-y-2 text-sm">
                   <li>- 규정 및 시스템 기반 유연한 답변</li>
                   <li>- 단순 매뉴얼이 아닌 상황별 맞춤 응답</li>
                   <li>- 감정까지 읽고 공감하며 응답</li>
                 </ul>
-              </div>
-              <div className="flex-shrink-0">
-                <Image
-                  src="/genie2.png"
-                  alt="야무지니 - 맞춤 해결"
-                  width={1914}
-                  height={1914}
-                  className="w-[140px] h-auto"
-                />
               </div>
             </div>
           </div>
@@ -493,32 +513,33 @@ export default function AboutPage() {
 
       {/* 처리/검토가 필요한 문의 - 전체 너비 배경 4 */}
       <section
-        className="py-6 sm:py-10 bg-cover bg-center bg-no-repeat"
+        className="py-4 sm:py-6 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: 'url(/background4.png)' }}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-20">
+          <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-40">
             {/* 왼쪽: 캐릭터 + 텍스트 */}
-            <div className="flex flex-col md:flex-row items-center gap-6 lg:w-1/2">
+            <div className="flex flex-col md:flex-row items-center gap-6 lg:w-[45%]">
               <div className="flex-shrink-0">
                 <Image
                   src="/genie3.png"
                   alt="야무지니 - 의견 접수"
                   width={1914}
                   height={1914}
-                  className="w-[140px] h-auto"
+                  className="w-[200px] sm:w-[280px] h-auto"
                 />
               </div>
-              <div className="space-y-6 text-center md:text-left">
+              <div className="space-y-4 text-center md:text-left">
                 <div className="inline-block border-2 border-gray-800 rounded-full px-5 py-2">
                   <span className="text-base font-bold text-gray-800">처리 / 검토가 필요한 문의</span>
-                  <span className="ml-2 text-gray-800">→</span>
+                  <span className="ml-2 text-gray-800 hidden md:inline">→</span>
+                  <span className="ml-2 text-gray-800 md:hidden">▼</span>
                 </div>
-                <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
+                <h3 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight whitespace-nowrap">
                   회원 의견 접수,<br />
                   담당자 전달 약속
                 </h3>
-                <ul className="text-gray-700 space-y-2 text-sm">
+                <ul className="text-gray-700 space-y-2 text-sm whitespace-nowrap">
                   <li>- &ldquo;담당자분께 전달드리겠습니다&rdquo; 라는 약속</li>
                   <li>- 의견이 묻히지 않을 거라는 믿음</li>
                   <li>- 후속 조치에 대한 기대감</li>
@@ -526,7 +547,7 @@ export default function AboutPage() {
               </div>
             </div>
             {/* 오른쪽: 대화 이미지 */}
-            <div className="lg:w-1/2">
+            <div className="lg:w-[55%]">
               <Image
                 src="/dialog3.png"
                 alt="야무지니 대화 예시"
@@ -542,8 +563,8 @@ export default function AboutPage() {
       {/* CTA 섹션 */}
       <section className="bg-white py-10 sm:py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-lg sm:text-3xl text-gray-700 mb-1 sm:mb-2">자, 이제</p>
-          <h2 className="text-lg sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">
+          <p className="text-xl sm:text-3xl text-gray-700 mb-1 sm:mb-2">자, 이제</p>
+          <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">
             약속한대로 처리만 해주시면 됩니다.
           </h2>
           <div className="border-t border-gray-300 pt-8"></div>
@@ -1156,7 +1177,7 @@ export default function AboutPage() {
               </div>
               <div className="bg-gray-100 rounded-2xl p-5 sm:p-8 text-center">
                 <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😟</p>
-                <div className="text-gray-600 space-y-1 sm:space-y-2 text-left text-xs sm:text-base">
+                <div className="text-gray-600 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
                   <p>💭 &quot;또 문의 왔나? 확인하기 싫다...&quot;</p>
                   <p>💭 &quot;뭐라고 답해야 할지 모르겠네...&quot;</p>
                   <p>💭 &quot;이 고객 또 까탈스럽게 구네...&quot;</p>
@@ -1172,7 +1193,7 @@ export default function AboutPage() {
               </div>
               <div className="bg-[#fff9e0] rounded-2xl p-5 sm:p-8 text-center">
                 <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😊</p>
-                <div className="text-gray-700 space-y-1 sm:space-y-2 text-left text-xs sm:text-base">
+                <div className="text-gray-700 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
                   <p>✨ <strong>아침에 커피 한 잔 여유롭게 마시며</strong> 처리 내역 확인</p>
                   <p>✨ <strong>가족과 저녁 식사 중에도</strong> 걱정 없이 폰 꺼두기</p>
                   <p>✨ <strong>주말에 여행 가서도</strong> 매장 걱정 없이 힐링</p>
@@ -1194,18 +1215,18 @@ export default function AboutPage() {
           {/* 상단 타이틀 */}
           <div className="text-center mb-6 sm:mb-12">
             <div className="bg-gray-900 rounded-full py-2 px-3 sm:py-4 sm:px-8 inline-block">
-              <p className="text-white text-xs sm:text-lg md:text-xl">
+              <p className="text-white text-sm sm:text-lg md:text-xl">
                 본격, <strong>아르바이트생 하루 급여</strong>로<br className="sm:hidden" /> 24시간 전담 CS직원 고용하기
               </p>
             </div>
           </div>
 
           {/* 캐릭터 4개 */}
-          <div className="flex justify-center items-end gap-2 sm:gap-8 mb-6 sm:mb-12">
-            <Image src="/genie1.png" alt="야무지니1" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
-            <Image src="/genie2.png" alt="야무지니2" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
-            <Image src="/genie3.png" alt="야무지니3" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
-            <Image src="/genie4.png" alt="야무지니4" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
+          <div className="flex justify-center items-end mb-6 sm:mb-12">
+            <Image src="/genie1.png" alt="야무지니1" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie2.png" alt="야무지니2" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie3.png" alt="야무지니3" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie4.png" alt="야무지니4" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto" />
           </div>
 
           {/* 비교 박스 */}
@@ -1234,7 +1255,7 @@ export default function AboutPage() {
           </div>
 
           {/* 하단 리스트 */}
-          <div className="text-center space-y-1 sm:space-y-2 text-gray-700 text-xs sm:text-base">
+          <div className="text-center space-y-1 sm:space-y-2 text-gray-700 text-sm sm:text-base">
             <p>✨ 이제 직원 출근 확인하러 새벽에 깨지 마세요</p>
             <p>✨ 직원 교육시키려고 주말 반납하지 마세요</p>
             <p>✨ 직원 아프다고 연락와도 당황하지 마세요</p>

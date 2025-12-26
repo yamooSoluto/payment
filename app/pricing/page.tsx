@@ -98,7 +98,7 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
           요금제 선택
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          비즈니스에 맞는 플랜을 선택하세요. 모든 플랜은 30일 무료체험이 가능합니다.
+          비즈니스에 맞는 플랜을 선택하세요. 모든 플랜은 1달 무료체험이 가능합니다.
         </p>
       </div>
 

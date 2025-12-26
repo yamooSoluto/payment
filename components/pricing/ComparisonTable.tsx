@@ -10,14 +10,14 @@ const features = [
     items: [
       { name: 'AI 자동 답변', trial: true, basic: true, business: true, enterprise: true },
       { name: '업무 처리 메세지 요약 전달', trial: true, basic: true, business: true, enterprise: true },
-      { name: '수동 답변 메세지 자동 보정', trial: true, basic: false, business: true, enterprise: true },
+      { name: '답변 메시지 AI 보정', trial: true, basic: false, business: true, enterprise: true },
     ],
   },
   {
     category: '문의 처리',
     items: [
       { name: '월 문의 건수', trial: '제한 없음', basic: '300건', business: '무제한', enterprise: '무제한' },
-      { name: '데이터 추가', trial: '제한적', basic: '무제한', business: '무제한', enterprise: '무제한' },
+      { name: '데이터 추가', trial: '무제한', basic: '무제한', business: '무제한', enterprise: '무제한' },
     ],
   },
   {
