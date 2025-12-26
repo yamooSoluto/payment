@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
-import { ChevronDown, ChevronUp, Receipt, CheckCircle, XCircle, FileText, MinusCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Receipt, CheckCircle, XCircle, FileText, MinusCircle, Filter, Download, FileDown, Loader2 } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -25,10 +25,117 @@ interface PaymentHistoryProps {
   payments: Payment[];
 }
 
+type FilterPeriod = 'all' | 'month' | '3months';
+type FilterStatus = 'all' | 'done' | 'refund' | 'canceled';
+
 export default function PaymentHistory({ payments }: PaymentHistoryProps) {
   const [showAll, setShowAll] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [periodFilter, setPeriodFilter] = useState<FilterPeriod>('all');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
 
-  const displayPayments = showAll ? payments : payments.slice(0, 5);
+  // 필터링된 결제 내역
+  const filteredPayments = useMemo(() => {
+    let result = [...payments];
+
+    // 기간 필터
+    if (periodFilter !== 'all') {
+      const now = new Date();
+      const filterDate = new Date();
+
+      if (periodFilter === 'month') {
+        filterDate.setMonth(now.getMonth() - 1);
+      } else if (periodFilter === '3months') {
+        filterDate.setMonth(now.getMonth() - 3);
+      }
+
+      result = result.filter((p) => {
+        const paymentDate = new Date(p.paidAt || p.createdAt);
+        return paymentDate >= filterDate;
+      });
+    }
+
+    // 상태 필터
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'refund') {
+        result = result.filter((p) => p.type === 'refund');
+      } else {
+        result = result.filter((p) => p.status === statusFilter && p.type !== 'refund');
+      }
+    }
+
+    return result;
+  }, [payments, periodFilter, statusFilter]);
+
+  const hasActiveFilters = periodFilter !== 'all' || statusFilter !== 'all';
+
+  const displayPayments = showAll ? filteredPayments : filteredPayments.slice(0, 5);
+
+  // CSV 다운로드 함수
+  const downloadCSV = () => {
+    // CSV 헤더
+    const headers = ['결제일', '플랜', '금액', '상태', '결제유형', '카드정보'];
+
+    // CSV 데이터
+    const rows = filteredPayments.map((p) => {
+      const date = p.paidAt || p.createdAt;
+      const formattedDate = new Date(date).toLocaleDateString('ko-KR');
+      const planName = getPlanName(p.plan);
+      const amount = p.type === 'refund' ? `-${Math.abs(p.amount)}` : String(p.amount);
+      const status = p.type === 'refund' ? '환불' : p.status === 'done' ? '완료' : p.status === 'canceled' ? '취소' : '실패';
+      const type = p.type === 'upgrade' ? '업그레이드' : p.type === 'downgrade' ? '다운그레이드' : p.type === 'refund' ? '환불' : '정기결제';
+      const card = p.cardCompany ? `${p.cardCompany}카드 ${p.cardNumber || ''}` : '';
+
+      return [formattedDate, planName, amount, status, type, card];
+    });
+
+    // CSV 문자열 생성
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+    ].join('\n');
+
+    // BOM 추가 (Excel에서 한글 인코딩 문제 해결)
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    // 다운로드
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `결제내역_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // 인보이스 PDF 다운로드 함수
+  const downloadInvoice = async (paymentId: string) => {
+    setDownloadingInvoice(paymentId);
+    try {
+      const response = await fetch(`/api/invoices/${paymentId}`);
+      if (!response.ok) {
+        throw new Error('Failed to download invoice');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `invoice_${paymentId.substring(0, 15)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Invoice download failed:', error);
+      alert('인보이스 다운로드에 실패했습니다.');
+    } finally {
+      setDownloadingInvoice(null);
+    }
+  };
 
   const getStatusIcon = (status: string, type?: string) => {
     if (type === 'refund') {
@@ -73,7 +180,106 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">결제 내역</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-900">결제 내역</h2>
+        <div className="flex items-center gap-2">
+          {filteredPayments.length > 0 && (
+            <button
+              onClick={downloadCSV}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="CSV 다운로드"
+            >
+              <Download className="w-4 h-4" />
+              내보내기
+            </button>
+          )}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              hasActiveFilters
+                ? 'bg-yamoo-primary text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            필터
+            {hasActiveFilters && (
+              <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                {(periodFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* 필터 패널 */}
+      {showFilters && (
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1.5 block">기간</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'all' as const, label: '전체' },
+                { value: 'month' as const, label: '최근 1개월' },
+                { value: '3months' as const, label: '최근 3개월' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setPeriodFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    periodFilter === option.value
+                      ? 'bg-yamoo-primary text-white'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-yamoo-primary'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1.5 block">상태</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'all' as const, label: '전체' },
+                { value: 'done' as const, label: '완료' },
+                { value: 'refund' as const, label: '환불' },
+                { value: 'canceled' as const, label: '취소' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setStatusFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    statusFilter === option.value
+                      ? 'bg-yamoo-primary text-white'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-yamoo-primary'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setPeriodFilter('all');
+                setStatusFilter('all');
+              }}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              필터 초기화
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 필터 결과 요약 */}
+      {hasActiveFilters && (
+        <div className="mb-3 text-sm text-gray-500">
+          총 {filteredPayments.length}건의 결제 내역
+        </div>
+      )}
 
       <div className="divide-y">
         {displayPayments.map((payment) => (
@@ -93,6 +299,11 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
                     {payment.cardCompany && ` · ${payment.cardCompany}카드`}
                   </p>
+                  {payment.type === 'refund' && payment.refundReason && (
+                    <p className="text-xs text-red-500 mt-1">
+                      환불 사유: {payment.refundReason}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -111,16 +322,32 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                 }`}>
                   {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
                 </span>
-                {payment.status === 'done' && payment.receiptUrl && (
-                  <a
-                    href={payment.receiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                    title="영수증 보기"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                  </a>
+                {payment.status === 'done' && (
+                  <>
+                    {payment.receiptUrl && (
+                      <a
+                        href={payment.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                        title="영수증 보기"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => downloadInvoice(payment.id)}
+                      disabled={downloadingInvoice === payment.id}
+                      className="text-gray-400 hover:text-yamoo-primary transition-colors disabled:opacity-50"
+                      title="인보이스 다운로드"
+                    >
+                      {downloadingInvoice === payment.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -128,7 +355,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
         ))}
       </div>
 
-      {payments.length > 5 && (
+      {filteredPayments.length > 5 && (
         <button
           onClick={() => setShowAll(!showAll)}
           className="mt-4 w-full py-2 text-sm text-yamoo-primary font-medium hover:bg-gray-50 rounded-lg transition-colors flex items-center justify-center gap-1"
@@ -139,7 +366,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
             </>
           ) : (
             <>
-              더 보기 ({payments.length - 5}건) <ChevronDown className="w-4 h-4" />
+              더 보기 ({filteredPayments.length - 5}건) <ChevronDown className="w-4 h-4" />
             </>
           )}
         </button>

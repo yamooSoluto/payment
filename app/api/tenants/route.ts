@@ -36,55 +36,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ tenants: [] });
     }
 
-    // 각 매장에 대한 구독 정보 조회
-    const tenants = await Promise.all(
-      tenantsSnapshot.docs.map(async (doc) => {
-        const tenantData = doc.data();
-        const tenantId = tenantData.tenantId || doc.id;
+    // Timestamp를 ISO string으로 변환
+    const serializeTimestamp = (val: unknown): unknown => {
+      if (!val) return null;
+      if (typeof val === 'object' && val !== null) {
+        if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+          return (val as { toDate: () => Date }).toDate().toISOString();
+        }
+        if ('_seconds' in val) {
+          return new Date((val as { _seconds: number })._seconds * 1000).toISOString();
+        }
+      }
+      return val;
+    };
 
-        // 해당 매장의 구독 정보 조회
-        const subscriptionDoc = await db
-          .collection('subscriptions')
-          .doc(tenantId)
-          .get();
+    // 모든 tenant 데이터 수집
+    const tenantDataList = tenantsSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        tenantId: data.tenantId || doc.id,
+        brandName: data.brandName || '이름 없음',
+        email: data.email,
+        createdAt: serializeTimestamp(data.createdAt),
+      };
+    });
 
-        const subscription = subscriptionDoc.exists
-          ? subscriptionDoc.data()
-          : null;
-
-        // Timestamp를 ISO string으로 변환
-        const serializeTimestamp = (val: unknown): unknown => {
-          if (!val) return null;
-          if (typeof val === 'object' && val !== null) {
-            if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
-              return (val as { toDate: () => Date }).toDate().toISOString();
-            }
-            if ('_seconds' in val) {
-              return new Date((val as { _seconds: number })._seconds * 1000).toISOString();
-            }
-          }
-          return val;
-        };
-
-        return {
-          id: doc.id,
-          tenantId,
-          brandName: tenantData.brandName || '이름 없음',
-          email: tenantData.email,
-          createdAt: serializeTimestamp(tenantData.createdAt),
-          subscription: subscription
-            ? {
-                plan: subscription.plan,
-                status: subscription.status,
-                amount: subscription.amount,
-                nextBillingDate: serializeTimestamp(subscription.nextBillingDate),
-                currentPeriodEnd: serializeTimestamp(subscription.currentPeriodEnd),
-                canceledAt: serializeTimestamp(subscription.canceledAt),
-              }
-            : null,
-        };
-      })
+    // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
+    const subscriptionRefs = tenantDataList.map((t) =>
+      db.collection('subscriptions').doc(t.tenantId)
     );
+    const subscriptionDocs = await db.getAll(...subscriptionRefs);
+
+    // 구독 정보를 Map으로 변환
+    const subscriptionMap = new Map<string, Record<string, unknown>>();
+    subscriptionDocs.forEach((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        subscriptionMap.set(doc.id, {
+          plan: data?.plan,
+          status: data?.status,
+          amount: data?.amount,
+          nextBillingDate: serializeTimestamp(data?.nextBillingDate),
+          currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
+          canceledAt: serializeTimestamp(data?.canceledAt),
+        });
+      }
+    });
+
+    // 최종 결과 조합
+    const tenants = tenantDataList.map((tenant) => ({
+      ...tenant,
+      subscription: subscriptionMap.get(tenant.tenantId) || null,
+    }));
 
     return NextResponse.json({ tenants });
   } catch (error) {

@@ -8,20 +8,21 @@ interface EnterpriseModalProps {
   onClose: () => void;
 }
 
-// n8n 웹훅 URL (Enterprise 문의용)
-const N8N_WEBHOOK_URL = 'https://soluto.app.n8n.cloud/webhook/enterprise-inquiry';
-
 export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProps) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     companyName: '',
+    storeCount: '',
+    monthlyInquiries: '',
     message: '',
   });
   const [errors, setErrors] = useState({
     name: false,
     phone: false,
     companyName: false,
+    storeCount: false,
+    monthlyInquiries: false,
     message: false,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,6 +41,8 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
       name: formData.name.trim().length < 2,
       phone: !validatePhone(formData.phone.trim()),
       companyName: formData.companyName.trim().length < 2,
+      storeCount: formData.storeCount.trim() === '',
+      monthlyInquiries: formData.monthlyInquiries === '',
       message: formData.message.trim().length < 10,
     };
     setErrors(newErrors);
@@ -47,7 +50,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -69,20 +72,22 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
       name: formData.name.trim(),
       phone: formData.phone.trim(),
       companyName: formData.companyName.trim(),
+      storeCount: formData.storeCount.trim(),
+      monthlyInquiries: formData.monthlyInquiries,
       message: formData.message.trim(),
-      timestamp: new Date().toISOString(),
-      source: 'website_enterprise_inquiry',
     };
 
     try {
-      const response = await fetch(N8N_WEBHOOK_URL, {
+      const response = await fetch('/api/enterprise-inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error(result.error || 'Network response was not ok');
       }
 
       setIsSuccess(true);
@@ -95,8 +100,8 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
   };
 
   const handleClose = () => {
-    setFormData({ name: '', phone: '', companyName: '', message: '' });
-    setErrors({ name: false, phone: false, companyName: false, message: false });
+    setFormData({ name: '', phone: '', companyName: '', storeCount: '', monthlyInquiries: '', message: '' });
+    setErrors({ name: false, phone: false, companyName: false, storeCount: false, monthlyInquiries: false, message: false });
     setIsSuccess(false);
     setSubmitError('');
     onClose();
@@ -208,6 +213,53 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
                 {errors.companyName && (
                   <p className="text-red-500 text-xs mt-1">회사명을 2자 이상 입력해주세요</p>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    매장 수 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="storeCount"
+                    value={formData.storeCount}
+                    onChange={handleInputChange}
+                    placeholder="예: 5개"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none ${
+                      errors.storeCount ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.storeCount && (
+                    <p className="text-red-500 text-xs mt-1">매장 수를 입력해주세요</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    월 문의 건수 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="monthlyInquiries"
+                    value={formData.monthlyInquiries}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none ${
+                      errors.monthlyInquiries ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">선택</option>
+                    <option value="0-100">0 ~ 100건</option>
+                    <option value="101-200">101 ~ 200건</option>
+                    <option value="201-300">201 ~ 300건</option>
+                    <option value="301-400">301 ~ 400건</option>
+                    <option value="401-500">401 ~ 500건</option>
+                    <option value="501-1000">501 ~ 1,000건</option>
+                    <option value="1000+">1,000건 이상</option>
+                  </select>
+                  {errors.monthlyInquiries && (
+                    <p className="text-red-500 text-xs mt-1">월 문의 건수를 선택해주세요</p>
+                  )}
+                </div>
               </div>
 
               <div>

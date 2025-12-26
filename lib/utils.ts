@@ -45,6 +45,7 @@ export function getStatusText(status: string): string {
     active: '구독 중',
     canceled: '해지됨',
     past_due: '결제 실패',
+    expired: '만료됨',
   };
   return statusMap[status] || status;
 }
@@ -55,6 +56,7 @@ export function getStatusColor(status: string): string {
     active: 'text-green-600 bg-green-100',
     canceled: 'text-gray-600 bg-gray-100',
     past_due: 'text-red-600 bg-red-100',
+    expired: 'text-orange-600 bg-orange-100',
   };
   return colorMap[status] || 'text-gray-600 bg-gray-100';
 }

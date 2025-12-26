@@ -7,7 +7,7 @@ export interface TenantSubscription {
   plan: string;        // 'trial' | 'basic' | 'business'
   renewsAt: Date;      // 다음 결제일
   startedAt: Date;     // 구독 시작일
-  status: string;      // 'active' | 'canceled' | 'past_due' | 'trial'
+  status: string;      // 'active' | 'canceled' | 'past_due' | 'trial' | 'expired'
 }
 
 /**
@@ -154,5 +154,31 @@ export async function syncPaymentFailure(
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'past_due',
+  });
+}
+
+/**
+ * Trial 만료 시 tenants에 반영
+ */
+export async function syncTrialExpired(
+  tenantId: string
+): Promise<boolean> {
+  if (!tenantId) return false;
+
+  return syncSubscriptionToTenant(tenantId, {
+    status: 'expired',
+  });
+}
+
+/**
+ * 구독 즉시 만료 시 tenants에 반영 (즉시 취소 등)
+ */
+export async function syncSubscriptionExpired(
+  tenantId: string
+): Promise<boolean> {
+  if (!tenantId) return false;
+
+  return syncSubscriptionToTenant(tenantId, {
+    status: 'expired',
   });
 }

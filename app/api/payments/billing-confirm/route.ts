@@ -81,35 +81,43 @@ export async function GET(request: NextRequest) {
       // 무시
     }
 
-    await db.collection('subscriptions').doc(tenantId).set({
-      tenantId,
-      email,
-      plan,
-      billingKey,
-      status: 'active',
-      amount: paymentAmount,
-      currentPeriodStart: now,
-      currentPeriodEnd: nextBillingDate,
-      nextBillingDate,
-      cardInfo: billingResponse.card || null,
-      createdAt: now,
-      updatedAt: now,
-    });
+    // 4-5. 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
+    const paymentDocId = `${orderId}_${Date.now()}`;
 
-    // 5. 결제 내역 저장
-    await db.collection('payments').add({
-      tenantId,
-      email,
-      orderId,
-      paymentKey: paymentResponse.paymentKey,
-      amount: paymentAmount,
-      plan,
-      status: 'done',
-      method: paymentResponse.method,
-      cardInfo: paymentResponse.card || null,
-      receiptUrl: paymentResponse.receipt?.url || null,
-      paidAt: now,
-      createdAt: now,
+    await db.runTransaction(async (transaction) => {
+      // 구독 정보 저장
+      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      transaction.set(subscriptionRef, {
+        tenantId,
+        email,
+        plan,
+        billingKey,
+        status: 'active',
+        amount: paymentAmount,
+        currentPeriodStart: now,
+        currentPeriodEnd: nextBillingDate,
+        nextBillingDate,
+        cardInfo: billingResponse.card || null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // 결제 내역 저장
+      const paymentRef = db.collection('payments').doc(paymentDocId);
+      transaction.set(paymentRef, {
+        tenantId,
+        email,
+        orderId,
+        paymentKey: paymentResponse.paymentKey,
+        amount: paymentAmount,
+        plan,
+        status: 'done',
+        method: paymentResponse.method,
+        cardInfo: paymentResponse.card || null,
+        receiptUrl: paymentResponse.receipt?.url || null,
+        paidAt: now,
+        createdAt: now,
+      });
     });
 
     // 6. tenants 컬렉션에 구독 정보 동기화

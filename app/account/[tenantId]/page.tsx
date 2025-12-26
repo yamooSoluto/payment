@@ -3,8 +3,9 @@ import { verifyToken } from '@/lib/auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
+import CardList from '@/components/account/CardList';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Store } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Sofa } from 'lucide-react';
 
 interface TenantPageProps {
   params: Promise<{ tenantId: string }>;
@@ -122,8 +123,8 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center">
-            <Store className="w-5 h-5 text-yamoo-primary" />
+          <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
+            <Sofa className="w-5 h-5 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">{tenantData.brandName || '매장'}</h1>
         </div>
@@ -139,6 +140,11 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
               authParam={authParam}
               tenantId={tenantId}
             />
+            <CardList
+              tenantId={tenantId}
+              email={email}
+              authParam={authParam}
+            />
             <PaymentHistory
               payments={payments as Parameters<typeof PaymentHistory>[0]['payments']}
             />
@@ -147,7 +153,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
           /* 구독이 없을 때 */
           <div className="bg-white rounded-xl shadow-lg p-8 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Store className="w-8 h-8 text-gray-400" />
+              <Sofa className="w-8 h-8 text-gray-400" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-6">
               이 매장에 구독 중인 플랜이 없습니다

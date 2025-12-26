@@ -1,67 +1,6 @@
-import { verifyToken, getSubscription, getTenantsByEmail } from '@/lib/auth';
+import { verifyToken, getSubscription, getTenantsByEmail, getPlans } from '@/lib/auth';
 import PricingClient from '@/components/pricing/PricingClient';
 import ComparisonTable from '@/components/pricing/ComparisonTable';
-
-const plans = [
-  {
-    id: 'trial',
-    name: 'Trial',
-    price: 'Free',
-    priceNumber: 0,
-    tagline: '백문이 불여일견',
-    description: '1개월 무료체험',
-    features: [
-      '1개월 무료체험',
-      'AI 자동 답변',
-      '업무 처리 메세지 요약 전달',
-      '답변 메시지 AI 보정',
-    ],
-  },
-  {
-    id: 'basic',
-    name: 'Basic',
-    price: '₩39,000',
-    priceNumber: 39000,
-    tagline: 'CS 마스터 고용하기',
-    description: '월 300건 이내',
-    popular: true,
-    features: [
-      '월 300건 이내',
-      '데이터 무제한 추가',
-      'AI 자동 답변',
-      '업무 처리 메세지 요약 전달',
-    ],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: '₩99,000',
-    priceNumber: 99000,
-    tagline: '풀타임 전담 비서 고용하기',
-    description: '문의 건수 제한 없음',
-    features: [
-      'Basic 기능 모두 포함',
-      '문의 건수 제한 없음',
-      '답변 메시지 AI 보정',
-      '미니맵 연동 및 활용',
-      '예약 및 재고 연동',
-    ],
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: '협의',
-    tagline: '비즈니스 확장의 든든한 동반자',
-    description: '맞춤형 솔루션 제공',
-    features: [
-      'Business 기능 모두 포함',
-      '데이터 초기 세팅 및 관리',
-      '다지점/브랜드 지원',
-      '맞춤형 자동화 컨설팅',
-      '데이터 리포트 & 통계',
-    ],
-  },
-];
 
 interface PricingPageProps {
   searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
@@ -85,10 +24,12 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
   // 비로그인 상태에서도 요금제 페이지는 볼 수 있음 (선택 시 로그인 유도)
   const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
 
-  // 병렬로 구독 정보와 매장 목록 조회 (성능 최적화)
-  const [subscription, tenants] = email
-    ? await Promise.all([getSubscription(email), getTenantsByEmail(email)])
-    : [null, []];
+  // 병렬로 플랜, 구독 정보, 매장 목록 조회 (성능 최적화)
+  const [plans, subscription, tenants] = await Promise.all([
+    getPlans(),
+    email ? getSubscription(email) : Promise.resolve(null),
+    email ? getTenantsByEmail(email) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

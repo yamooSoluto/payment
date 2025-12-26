@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { MessageCircle, Mail, Copy, Check, Building2, MapPin } from 'lucide-react';
-import TermsModal from './modals/TermsModal';
-import PrivacyModal from './modals/PrivacyModal';
+import DynamicTermsModal from './modals/DynamicTermsModal';
 
 export default function Footer() {
   const [modalType, setModalType] = useState<'terms' | 'privacy' | null>(null);
@@ -123,11 +122,11 @@ export default function Footer() {
         </div>
       </footer>
 
-      {modalType === 'terms' && (
-        <TermsModal onClose={() => setModalType(null)} />
-      )}
-      {modalType === 'privacy' && (
-        <PrivacyModal onClose={() => setModalType(null)} />
+      {modalType && (
+        <DynamicTermsModal
+          type={modalType}
+          onClose={() => setModalType(null)}
+        />
       )}
     </>
   );

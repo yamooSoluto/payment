@@ -16,7 +16,12 @@
       "Bash(git commit:*)",
       "Bash(npm run build:*)",
       "Bash(powershell -Command \"Get-Item ''c:\\\\Users\\\\catki\\\\yamoo-payment\\\\public\\\\dialog3.png''\")",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(xargs ls:*)",
+      "Bash(taskkill:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(curl:*)"
     ]
   }
 }

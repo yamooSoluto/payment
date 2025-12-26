@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import crypto from 'crypto';
+
+// HMAC 서명 검증 함수
+function verifyWebhookSignature(
+  rawBody: string,
+  signature: string | null,
+  secretKey: string
+): boolean {
+  if (!signature) {
+    console.warn('Webhook signature missing');
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', secretKey)
+    .update(rawBody)
+    .digest('base64');
+
+  // 타이밍 공격 방지를 위한 안전한 비교
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
+}
 
 // 토스페이먼츠 웹훅 처리
 // 결제 취소, 환불 등의 이벤트를 수신
@@ -10,7 +38,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    // Raw body를 먼저 읽어서 서명 검증에 사용
+    const rawBody = await request.text();
+    const body = JSON.parse(rawBody);
+
+    // HMAC 서명 검증 (프로덕션 환경에서만)
+    const webhookSecret = process.env.TOSS_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const signature = request.headers.get('X-Tosspayments-Signature');
+
+      if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+        console.error('Webhook signature verification failed');
+        return NextResponse.json(
+          { error: 'Invalid webhook signature' },
+          { status: 401 }
+        );
+      }
+      console.log('Webhook signature verified successfully');
+    } else {
+      console.warn('TOSS_WEBHOOK_SECRET not set - skipping signature verification');
+    }
+
     console.log('Toss webhook received:', JSON.stringify(body, null, 2));
 
     const { eventType, data } = body;
@@ -132,6 +180,37 @@ export async function POST(request: NextRequest) {
               updatedAt: new Date(),
             });
             console.log('Billing key removed from subscription:', customerKey);
+          }
+        }
+        break;
+      }
+
+      case 'BILLING_SUSPENDED': {
+        // 빌링 정지 (결제 실패 등)
+        const customerKey = data?.customerKey;
+        console.log('Billing suspended for:', customerKey);
+
+        if (customerKey) {
+          await db.collection('subscriptions').doc(customerKey).update({
+            status: 'past_due',
+            updatedAt: new Date(),
+          });
+
+          // N8N 웹훅 호출 (결제 실패 알림)
+          if (process.env.N8N_WEBHOOK_URL) {
+            try {
+              await fetch(process.env.N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event: 'billing_suspended',
+                  email: customerKey,
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+            } catch (webhookError) {
+              console.error('N8N webhook call failed:', webhookError);
+            }
           }
         }
         break;

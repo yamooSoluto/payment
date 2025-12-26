@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CreditCard } from 'lucide-react';
+import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 
 interface ChangeCardButtonProps {
   email: string;
@@ -11,39 +12,13 @@ interface ChangeCardButtonProps {
 }
 
 export default function ChangeCardButton({ email, authParam, currentAlias, tenantId }: ChangeCardButtonProps) {
-  const [isLoading, setIsLoading] = useState(true);
+  const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sdkReady, setSdkReady] = useState(false);
+  const [error, setError] = useState<string | null>(sdkError);
   const [cardAlias, setCardAlias] = useState(currentAlias || '');
 
-  useEffect(() => {
-    const loadTossPaymentsSDK = () => {
-      if (window.TossPayments) {
-        setSdkReady(true);
-        setIsLoading(false);
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://js.tosspayments.com/v1/payment';
-      script.async = true;
-      script.onload = () => {
-        setSdkReady(true);
-        setIsLoading(false);
-      };
-      script.onerror = () => {
-        setError('결제 SDK를 불러오는데 실패했습니다.');
-        setIsLoading(false);
-      };
-      document.head.appendChild(script);
-    };
-
-    loadTossPaymentsSDK();
-  }, []);
-
   const handleChangeCard = async () => {
-    if (!sdkReady || !window.TossPayments) {
+    if (!sdkReady) {
       setError('결제 SDK가 준비되지 않았습니다.');
       return;
     }
@@ -52,12 +27,7 @@ export default function ChangeCardButton({ email, authParam, currentAlias, tenan
     setError(null);
 
     try {
-      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
-      if (!clientKey) {
-        throw new Error('토스 클라이언트 키가 설정되지 않았습니다.');
-      }
-
-      const tossPayments = window.TossPayments(clientKey);
+      const tossPayments = getTossPayments();
 
       // 별칭을 URL에 포함
       const aliasParam = cardAlias ? `&cardAlias=${encodeURIComponent(cardAlias)}` : '';

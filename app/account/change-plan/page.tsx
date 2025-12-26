@@ -14,15 +14,15 @@ const PLANS = [
     id: 'basic',
     name: 'Basic',
     price: 39000,
-    description: '소규모 비즈니스에 적합',
-    features: ['월 500건 문의 처리', '이메일 지원', '기본 분석'],
+    description: 'CS 마스터 고용하기',
+    features: ['월 300건 이내', '데이터 무제한 추가', 'AI 자동 답변', '업무 처리 메세지 요약 전달'],
   },
   {
     id: 'business',
     name: 'Business',
     price: 99000,
-    description: '성장하는 비즈니스에 적합',
-    features: ['월 2,000건 문의 처리', '우선 지원', '고급 분석', 'API 연동'],
+    description: '풀타임 전담 비서 고용하기',
+    features: ['Basic 기능 모두 포함', '문의 건수 제한 없음', '답변 메시지 AI 보정', '미니맵 연동 및 활용', '예약 및 재고 연동'],
     popular: true,
   },
 ];
@@ -134,7 +134,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
           return (
             <div
               key={plan.id}
-              className={`bg-white rounded-xl p-6 border-2 transition-all ${
+              className={`bg-white rounded-xl p-6 border-2 transition-all flex flex-col ${
                 isCurrentPlan
                   ? 'border-green-500 bg-green-50'
                   : plan.popular
@@ -163,7 +163,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
                 <span className="text-gray-500">/월</span>
               </div>
 
-              <ul className="space-y-3 mb-6">
+              <ul className="space-y-3 mb-6 flex-grow">
                 {plan.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-2">
                     <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
@@ -197,19 +197,6 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
                 />
               )}
 
-              {!isCurrentPlan && (
-                <p className="text-center text-sm text-gray-500 mt-3">
-                  {isUpgrade ? (
-                    <span className="text-blue-600">
-                      월 {formatPrice(priceDiff)}원 추가
-                    </span>
-                  ) : (
-                    <span className="text-green-600">
-                      월 {formatPrice(Math.abs(priceDiff))}원 절약
-                    </span>
-                  )}
-                </p>
-              )}
             </div>
           );
         })}

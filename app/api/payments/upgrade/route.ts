@@ -66,38 +66,47 @@ export async function POST(request: NextRequest) {
       );
 
       console.log('Upgrade payment completed:', paymentResponse.status);
-
-      // 결제 내역 저장
-      await db.collection('payments').add({
-        tenantId,
-        email,
-        orderId,
-        paymentKey: paymentResponse.paymentKey,
-        amount: proratedAmount,
-        plan: newPlan,
-        type: 'upgrade',
-        previousPlan,
-        status: 'done',
-        method: paymentResponse.method,
-        cardInfo: paymentResponse.card || null,
-        receiptUrl: paymentResponse.receipt?.url || null,
-        paidAt: new Date(),
-        createdAt: new Date(),
-      });
     }
 
-    // 구독 정보 업데이트 (플랜 변경, nextBillingDate는 유지)
-    await db.collection('subscriptions').doc(tenantId).update({
-      plan: newPlan,
-      amount: newAmount,
-      previousPlan,
-      previousAmount,
-      planChangedAt: new Date(),
-      updatedAt: new Date(),
-      // pendingPlan 관련 필드 제거
-      pendingPlan: null,
-      pendingAmount: null,
-      pendingMode: null,
+    // 트랜잭션으로 결제 내역 및 구독 정보 업데이트 (원자성 보장)
+    const now = new Date();
+    await db.runTransaction(async (transaction) => {
+      // 결제 내역 저장 (proratedAmount > 0인 경우에만)
+      if (proratedAmount > 0 && paymentResponse) {
+        const paymentDocId = `${orderId}_${Date.now()}`;
+        const paymentRef = db.collection('payments').doc(paymentDocId);
+        transaction.set(paymentRef, {
+          tenantId,
+          email,
+          orderId,
+          paymentKey: paymentResponse.paymentKey,
+          amount: proratedAmount,
+          plan: newPlan,
+          type: 'upgrade',
+          previousPlan,
+          status: 'done',
+          method: paymentResponse.method,
+          cardInfo: paymentResponse.card || null,
+          receiptUrl: paymentResponse.receipt?.url || null,
+          paidAt: now,
+          createdAt: now,
+        });
+      }
+
+      // 구독 정보 업데이트
+      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      transaction.update(subscriptionRef, {
+        plan: newPlan,
+        amount: newAmount,
+        previousPlan,
+        previousAmount,
+        planChangedAt: now,
+        updatedAt: now,
+        // pendingPlan 관련 필드 제거
+        pendingPlan: null,
+        pendingAmount: null,
+        pendingMode: null,
+      });
     });
 
     // tenants 컬렉션에 플랜 변경 동기화

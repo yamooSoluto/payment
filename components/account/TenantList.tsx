@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Shop, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight } from 'iconoir-react';
 import { formatPrice } from '@/lib/utils';
 
 interface Subscription {
@@ -128,7 +128,7 @@ export default function TenantList({ authParam, email }: TenantListProps) {
         {tenants.map((tenant) => {
           const status = tenant.subscription?.status || 'none';
           const statusConfig = STATUS_CONFIG[status];
-          const StatusIcon = statusConfig?.icon || Shop;
+          const StatusIcon = statusConfig?.icon || Sofa;
 
           return (
             <Link
@@ -138,8 +138,8 @@ export default function TenantList({ authParam, email }: TenantListProps) {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-yamoo-primary/10 rounded-xl flex items-center justify-center">
-                    <Shop width={24} height={24} strokeWidth={1.5} className="text-yamoo-primary" />
+                  <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center">
+                    <Sofa width={24} height={24} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">

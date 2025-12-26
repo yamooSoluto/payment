@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
-import { syncSubscriptionCancellation } from '@/lib/tenant-sync';
+import { cancelPayment } from '@/lib/toss';
+import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId, reason } = body;
+    const { token, email: emailParam, tenantId, reason, mode, refundAmount } = body;
 
     let email: string | null = null;
 
@@ -49,38 +50,176 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription' }, { status: 400 });
     }
 
-    // 구독 상태를 canceled로 변경
-    // (다음 결제일까지는 서비스 이용 가능)
-    await db.collection('subscriptions').doc(tenantId).update({
-      status: 'canceled',
-      canceledAt: new Date(),
-      cancelReason: reason || 'User requested',
-      updatedAt: new Date(),
-    });
+    const now = new Date();
+    const isImmediate = mode === 'immediate';
 
-    // tenants 컬렉션에 취소 상태 동기화
-    await syncSubscriptionCancellation(tenantId);
+    if (isImmediate) {
+      // 즉시 취소: 환불 처리 후 즉시 만료
+      let refundResult = null;
 
-    // n8n 웹훅 호출 (해지 알림)
-    if (process.env.N8N_WEBHOOK_URL) {
-      try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'subscription_canceled',
+      // 환불 금액이 있으면 부분 취소 시도
+      if (refundAmount && refundAmount > 0) {
+        // 최근 결제 내역에서 paymentKey 조회
+        const paymentsSnapshot = await db
+          .collection('payments')
+          .where('tenantId', '==', tenantId)
+          .where('status', '==', 'done')
+          .limit(10)
+          .get();
+
+        // 가장 최근 결제 찾기
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let latestPayment: any = null;
+        let latestDate = new Date(0);
+
+        paymentsSnapshot.docs.forEach((doc) => {
+          const payment = doc.data();
+          const createdAt = payment.createdAt?.toDate?.() || new Date(payment.createdAt);
+          if (createdAt > latestDate) {
+            latestDate = createdAt;
+            latestPayment = payment;
+          }
+        });
+
+        if (latestPayment?.paymentKey) {
+          try {
+            console.log('Processing immediate cancel refund:', {
+              paymentKey: latestPayment.paymentKey,
+              refundAmount,
+            });
+
+            refundResult = await cancelPayment(
+              latestPayment.paymentKey,
+              `구독 즉시 해지 환불 (${reason || 'User requested'})`,
+              refundAmount
+            );
+
+            console.log('Immediate cancel refund result:', refundResult);
+          } catch (refundError) {
+            console.error('Immediate cancel refund failed:', refundError);
+            // 환불 실패해도 취소는 진행
+          }
+        }
+      }
+
+      // 트랜잭션으로 구독 상태 및 환불 내역 저장
+      await db.runTransaction(async (transaction) => {
+        // 환불 내역 저장 (성공한 경우에만)
+        if (refundResult && refundAmount && refundAmount > 0) {
+          const refundDocId = `CANCEL_REFUND_${Date.now()}_${tenantId}`;
+          const refundRef = db.collection('refunds').doc(refundDocId);
+          transaction.set(refundRef, {
             tenantId,
             email,
-            plan: subscription.plan,
-            reason: reason || 'User requested',
-          }),
-        });
-      } catch (webhookError) {
-        console.error('Webhook call failed:', webhookError);
-      }
-    }
+            refundAmount,
+            cancelReason: reason || 'User requested',
+            refundedAt: now,
+            tossResponse: refundResult,
+          });
 
-    return NextResponse.json({ success: true });
+          // 결제 내역에도 환불 기록 추가
+          const paymentDocId = `REFUND_${Date.now()}_${tenantId}`;
+          const paymentRef = db.collection('payments').doc(paymentDocId);
+          transaction.set(paymentRef, {
+            tenantId,
+            email,
+            orderId: `CANCEL_REFUND_${Date.now()}_${tenantId}`,
+            amount: -refundAmount,
+            plan: subscription.plan,
+            type: 'refund',
+            status: 'done',
+            refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,
+            paidAt: now,
+            createdAt: now,
+          });
+        }
+
+        // 구독 상태를 expired로 변경 (즉시 종료)
+        const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+        transaction.update(subscriptionRef, {
+          status: 'expired',
+          canceledAt: now,
+          expiredAt: now,
+          cancelReason: reason || 'User requested',
+          cancelMode: 'immediate',
+          refundAmount: refundAmount || 0,
+          refundProcessed: !!refundResult,
+          updatedAt: now,
+        });
+      });
+
+      // tenants 컬렉션에 만료 상태 동기화
+      if (typeof syncSubscriptionExpired === 'function') {
+        await syncSubscriptionExpired(tenantId);
+      } else {
+        await syncSubscriptionCancellation(tenantId);
+      }
+
+      // n8n 웹훅 호출 (즉시 해지 알림)
+      if (process.env.N8N_WEBHOOK_URL) {
+        try {
+          await fetch(process.env.N8N_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'subscription_canceled_immediate',
+              tenantId,
+              email,
+              plan: subscription.plan,
+              reason: reason || 'User requested',
+              refundAmount: refundAmount || 0,
+              refundProcessed: !!refundResult,
+            }),
+          });
+        } catch (webhookError) {
+          console.error('Webhook call failed:', webhookError);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        mode: 'immediate',
+        refundAmount: refundResult ? refundAmount : 0,
+        refundProcessed: !!refundResult,
+      });
+    } else {
+      // 예약 취소: 기간 종료 후 취소
+      await db.collection('subscriptions').doc(tenantId).update({
+        status: 'canceled',
+        canceledAt: now,
+        cancelReason: reason || 'User requested',
+        cancelMode: 'scheduled',
+        updatedAt: now,
+      });
+
+      // tenants 컬렉션에 취소 상태 동기화
+      await syncSubscriptionCancellation(tenantId);
+
+      // n8n 웹훅 호출 (해지 예약 알림)
+      if (process.env.N8N_WEBHOOK_URL) {
+        try {
+          await fetch(process.env.N8N_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'subscription_canceled_scheduled',
+              tenantId,
+              email,
+              plan: subscription.plan,
+              reason: reason || 'User requested',
+              effectiveDate: subscription.currentPeriodEnd,
+            }),
+          });
+        } catch (webhookError) {
+          console.error('Webhook call failed:', webhookError);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        mode: 'scheduled',
+      });
+    }
   } catch (error) {
     console.error('Subscription cancel failed:', error);
     return NextResponse.json(

@@ -3,7 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey } from '@/lib/toss';
 import { verifyToken } from '@/lib/auth';
 
-// 카드 변경 처리 (새 빌링키 발급 후 구독 정보 업데이트)
+// 카드 추가/변경 처리 (새 빌링키 발급 후 카드 컬렉션에 저장)
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const authKey = searchParams.get('authKey');
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const emailParam = searchParams.get('email');
   const cardAlias = searchParams.get('cardAlias');
   const tenantId = searchParams.get('tenantId');
+  const setAsPrimary = searchParams.get('setAsPrimary') !== 'false'; // 기본값 true
 
   // email 결정
   let email = customerKey || emailParam;
@@ -60,38 +61,100 @@ export async function GET(request: NextRequest) {
     console.log('Issuing new billing key for:', email);
     const billingResponse = await issueBillingKey(authKey, email);
     const newBillingKey = billingResponse.billingKey;
+    const cardInfo = billingResponse.card || null;
 
     console.log('New billing key issued:', newBillingKey?.slice(0, 10) + '...');
 
-    // 구독 정보 업데이트 (새 빌링키와 카드 정보) - tenantId로 조회
-    await db.collection('subscriptions').doc(tenantId).update({
-      billingKey: newBillingKey,
-      cardInfo: billingResponse.card || null,
-      cardAlias: cardAlias || null,
-      cardUpdatedAt: new Date(),
-      updatedAt: new Date(),
+    // 같은 카드번호로 이미 등록된 카드가 있는지 확인
+    const existingCardSnapshot = await db
+      .collection('cards')
+      .where('tenantId', '==', tenantId)
+      .where('cardInfo.number', '==', cardInfo?.number)
+      .get();
+
+    if (!existingCardSnapshot.empty) {
+      return NextResponse.redirect(
+        new URL(`/account/${tenantId}?${authParam}&error=card_already_exists`, request.url)
+      );
+    }
+
+    // 카드 개수 확인 (최대 5개)
+    const cardCountSnapshot = await db
+      .collection('cards')
+      .where('tenantId', '==', tenantId)
+      .get();
+
+    if (cardCountSnapshot.size >= 5) {
+      return NextResponse.redirect(
+        new URL(`/account/${tenantId}?${authParam}&error=max_cards_exceeded`, request.url)
+      );
+    }
+
+    const now = new Date();
+    const isFirstCard = cardCountSnapshot.empty;
+    const shouldSetPrimary = setAsPrimary || isFirstCard;
+
+    // 트랜잭션으로 카드 추가 및 관련 업데이트
+    await db.runTransaction(async (transaction) => {
+      // 새 카드가 primary로 설정되면 기존 primary 해제
+      if (shouldSetPrimary && !isFirstCard) {
+        const primaryCards = cardCountSnapshot.docs.filter(
+          (doc) => doc.data().isPrimary === true
+        );
+        for (const doc of primaryCards) {
+          transaction.update(doc.ref, { isPrimary: false });
+        }
+      }
+
+      // 새 카드를 cards 컬렉션에 추가
+      const cardRef = db.collection('cards').doc();
+      transaction.set(cardRef, {
+        tenantId,
+        email,
+        billingKey: newBillingKey,
+        cardInfo,
+        alias: cardAlias || null,
+        isPrimary: shouldSetPrimary,
+        createdAt: now,
+      });
+
+      // 구독의 primary 카드 정보 업데이트
+      if (shouldSetPrimary) {
+        const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+        transaction.update(subscriptionRef, {
+          billingKey: newBillingKey,
+          cardInfo,
+          cardAlias: cardAlias || null,
+          primaryCardId: cardRef.id,
+          cardUpdatedAt: now,
+          updatedAt: now,
+        });
+      }
+
+      // 카드 변경 내역 저장
+      const changeRef = db.collection('card_changes').doc();
+      transaction.set(changeRef, {
+        tenantId,
+        email,
+        newCardInfo: cardInfo,
+        cardAlias: cardAlias || null,
+        action: isFirstCard ? 'added' : shouldSetPrimary ? 'added_as_primary' : 'added',
+        changedAt: now,
+      });
     });
 
-    // 카드 변경 내역 저장
-    await db.collection('card_changes').add({
-      tenantId,
-      email,
-      newCardInfo: billingResponse.card || null,
-      cardAlias: cardAlias || null,
-      changedAt: new Date(),
-    });
-
-    // n8n 웹훅 호출 (카드 변경 알림)
+    // n8n 웹훅 호출 (카드 추가 알림)
     if (process.env.N8N_WEBHOOK_URL) {
       try {
         await fetch(process.env.N8N_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            event: 'card_updated',
+            event: isFirstCard ? 'card_added' : 'card_updated',
             tenantId,
             email,
-            cardCompany: billingResponse.card?.company || null,
+            cardCompany: cardInfo?.company || null,
+            isPrimary: shouldSetPrimary,
           }),
         });
       } catch {
@@ -101,7 +164,7 @@ export async function GET(request: NextRequest) {
 
     // 성공 시 매장 구독 관리 페이지로 리다이렉트
     return NextResponse.redirect(
-      new URL(`/account/${tenantId}?${authParam}&success=card_updated`, request.url)
+      new URL(`/account/${tenantId}?${authParam}&success=card_added`, request.url)
     );
   } catch (error) {
     console.error('Card update failed:', error);

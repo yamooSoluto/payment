@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
       } else {
         // 다운그레이드 즉시 변경: 부분 환불 처리 후 새 플랜 적용
         let refundResult = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let latestPayment: any = null;
 
         // 환불 금액이 있으면 부분 취소 시도
         if (refundAmount && refundAmount > 0) {
@@ -94,8 +96,6 @@ export async function POST(request: NextRequest) {
             .get();
 
           // 가장 최근 결제 찾기 (createdAt 기준)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          let latestPayment: any = null;
           let latestDate = new Date(0);
 
           paymentsSnapshot.docs.forEach((doc) => {
@@ -121,35 +121,6 @@ export async function POST(request: NextRequest) {
               );
 
               console.log('Partial refund result:', refundResult);
-
-              // 환불 내역 저장 (refunds 컬렉션)
-              await db.collection('refunds').add({
-                tenantId,
-                email,
-                paymentKey: latestPayment.paymentKey,
-                refundAmount,
-                cancelReason: `플랜 다운그레이드 (${subscription.plan} → ${newPlan})`,
-                previousPlan: subscription.plan,
-                newPlan,
-                refundedAt: new Date(),
-                tossResponse: refundResult,
-              });
-
-              // 결제 내역에도 환불 기록 추가 (PaymentHistory에 표시)
-              await db.collection('payments').add({
-                tenantId,
-                email,
-                orderId: `REFUND_${Date.now()}_${tenantId}`,
-                paymentKey: latestPayment.paymentKey,
-                amount: -refundAmount, // 음수로 표시
-                plan: newPlan,
-                previousPlan: subscription.plan,
-                type: 'refund',
-                status: 'done',
-                refundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
-                paidAt: new Date(),
-                createdAt: new Date(),
-              });
             } catch (refundError) {
               console.error('Partial refund failed:', refundError);
               // 환불 실패해도 플랜 변경은 진행 (관리자가 수동 처리)
@@ -159,16 +130,56 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 플랜 변경
-        await db.collection('subscriptions').doc(tenantId).update({
-          plan: newPlan,
-          amount: newAmount,
-          planChangedAt: new Date(),
-          previousPlan: subscription.plan,
-          previousAmount: currentAmount,
-          refundAmount: refundAmount || 0,
-          refundProcessed: !!refundResult,
-          updatedAt: new Date(),
+        // 트랜잭션으로 환불 내역, 결제 내역, 구독 정보 업데이트 (원자성 보장)
+        const now = new Date();
+        await db.runTransaction(async (transaction) => {
+          // 환불 내역 저장 (refunds 컬렉션) - 환불 성공한 경우에만
+          if (refundResult && refundAmount && refundAmount > 0) {
+            const refundDocId = `REFUND_${Date.now()}_${tenantId}`;
+            const refundRef = db.collection('refunds').doc(refundDocId);
+            transaction.set(refundRef, {
+              tenantId,
+              email,
+              paymentKey: latestPayment?.paymentKey || '',
+              refundAmount,
+              cancelReason: `플랜 다운그레이드 (${subscription.plan} → ${newPlan})`,
+              previousPlan: subscription.plan,
+              newPlan,
+              refundedAt: now,
+              tossResponse: refundResult,
+            });
+
+            // 결제 내역에도 환불 기록 추가 (PaymentHistory에 표시)
+            const paymentDocId = `REFUND_PAY_${Date.now()}_${tenantId}`;
+            const paymentRef = db.collection('payments').doc(paymentDocId);
+            transaction.set(paymentRef, {
+              tenantId,
+              email,
+              orderId: `REFUND_${Date.now()}_${tenantId}`,
+              paymentKey: latestPayment?.paymentKey || '',
+              amount: -refundAmount, // 음수로 표시
+              plan: newPlan,
+              previousPlan: subscription.plan,
+              type: 'refund',
+              status: 'done',
+              refundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
+              paidAt: now,
+              createdAt: now,
+            });
+          }
+
+          // 구독 정보 업데이트
+          const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+          transaction.update(subscriptionRef, {
+            plan: newPlan,
+            amount: newAmount,
+            planChangedAt: now,
+            previousPlan: subscription.plan,
+            previousAmount: currentAmount,
+            refundAmount: refundAmount || 0,
+            refundProcessed: !!refundResult,
+            updatedAt: now,
+          });
         });
 
         // tenants 컬렉션에 플랜 변경 동기화

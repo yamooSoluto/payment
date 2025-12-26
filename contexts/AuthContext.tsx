@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -25,39 +25,77 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// 캐시된 auth 상태 키
+const AUTH_CACHE_KEY = 'yamoo_auth_cache';
+
+interface CachedAuthState {
+  isLoggedIn: boolean;
+  email: string | null;
+  timestamp: number;
+}
+
+function setCachedAuthState(user: User | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    const state: CachedAuthState = {
+      isLoggedIn: !!user,
+      email: user?.email || null,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(state));
+  } catch {
+    // localStorage 사용 불가 시 무시
+  }
+}
+
+function clearCachedAuthState() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(AUTH_CACHE_KEY);
+  } catch {
+    // 무시
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // 항상 true로 시작 (hydration mismatch 방지)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
       setLoading(false);
+      // 캐시 업데이트
+      setCachedAuthState(firebaseUser);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
+  const signIn = useCallback(async (email: string, password: string) => {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    setCachedAuthState(result.user);
+  }, []);
 
-  const signUp = async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
-  };
+  const signUp = useCallback(async (email: string, password: string) => {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    setCachedAuthState(result.user);
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
+    const result = await signInWithPopup(auth, provider);
+    setCachedAuthState(result.user);
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
+    clearCachedAuthState();
     await firebaseSignOut(auth);
-  };
+  }, []);
 
-  const resetPassword = async (email: string) => {
+  const resetPassword = useCallback(async (email: string) => {
     await sendPasswordResetEmail(auth, email);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogle, signOut, resetPassword }}>

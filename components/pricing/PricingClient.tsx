@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import PricingCard from './PricingCard';
 import TenantSelectModal from './TenantSelectModal';
 import EnterpriseModal from './EnterpriseModal';
@@ -59,23 +59,28 @@ export default function PricingClient({
   const [isEnterpriseModalOpen, setIsEnterpriseModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
 
+  // 중복 fetch 방지용 ref
+  const hasFetchedRef = useRef(initialTenants.length > 0 || isLoggedIn);
+
   // 서버 또는 클라이언트 인증 상태 확인
   const isAuthenticated = isLoggedIn || !!user;
   const userEmail = user?.email;
 
   // 클라이언트 Firebase Auth로 로그인한 경우에만 매장 조회
   useEffect(() => {
+    // 이미 fetch 했으면 스킵
+    if (hasFetchedRef.current) {
+      return;
+    }
+
+    // 클라이언트에서 로그인한 경우에만 조회
+    if (!userEmail) {
+      return;
+    }
+
+    hasFetchedRef.current = true;
+
     const fetchTenants = async () => {
-      // 서버에서 이미 매장 목록을 받았으면 스킵
-      if (initialTenants.length > 0 || isLoggedIn) {
-        return;
-      }
-
-      // 클라이언트에서 로그인한 경우에만 조회
-      if (!userEmail) {
-        return;
-      }
-
       try {
         const response = await fetch(`/api/tenants?email=${encodeURIComponent(userEmail)}`);
         if (response.ok) {
@@ -93,7 +98,7 @@ export default function PricingClient({
     };
 
     fetchTenants();
-  }, [userEmail, isLoggedIn, initialTenants.length]);
+  }, [userEmail]);
 
   const handleSelectWithoutTenant = (planId: string) => {
     setSelectedPlan(planId);

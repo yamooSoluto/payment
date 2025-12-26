@@ -1,9 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { AuthProvider } from '@/contexts/AuthContext'
-import Header from '@/components/Header'
-import Footer from '@/components/Footer'
-import ChannelTalk from '@/components/ChannelTalk'
+import LayoutWrapper from '@/components/LayoutWrapper'
 
 export const metadata: Metadata = {
   title: 'YAMOO - 결제 및 구독 관리',
@@ -37,14 +34,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col" style={{ fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif' }}>
-        <AuthProvider>
-          <Header />
-          <main className="flex-1 bg-gray-50">
-            {children}
-          </main>
-          <Footer />
-          <ChannelTalk />
-        </AuthProvider>
+        <LayoutWrapper>
+          {children}
+        </LayoutWrapper>
       </body>
     </html>
   )

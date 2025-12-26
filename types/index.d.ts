@@ -22,7 +22,7 @@ declare global {
 export interface Subscription {
   email: string;
   userId?: string;
-  status: 'trial' | 'active' | 'canceled' | 'past_due';
+  status: 'trial' | 'active' | 'canceled' | 'past_due' | 'expired';
   plan: 'starter' | 'pro' | 'business' | null;
   amount?: number;
   billingKey?: string;

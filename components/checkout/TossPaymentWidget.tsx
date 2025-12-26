@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { formatPrice } from '@/lib/utils';
+import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 
 interface TossPaymentWidgetProps {
   email: string;
@@ -26,41 +27,13 @@ export default function TossPaymentWidget({
   isNewTenant = false,
   authParam = '',
 }: TossPaymentWidgetProps) {
-  const [isLoading, setIsLoading] = useState(true);
+  const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(sdkError);
   const [agreed, setAgreed] = useState(false);
 
   // 신규 매장인 경우 tenantId를 'new'로 처리
   const effectiveTenantId = tenantId || (isNewTenant ? 'new' : '');
-  const [sdkReady, setSdkReady] = useState(false);
-
-  useEffect(() => {
-    // TossPayments v1 SDK 스크립트 로드 (API 개별 연동용)
-    const loadTossPaymentsSDK = () => {
-      if (window.TossPayments) {
-        setSdkReady(true);
-        setIsLoading(false);
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://js.tosspayments.com/v1/payment';
-      script.async = true;
-      script.onload = () => {
-        console.log('TossPayments v1 SDK loaded');
-        setSdkReady(true);
-        setIsLoading(false);
-      };
-      script.onerror = () => {
-        setError('토스페이먼츠 SDK를 불러오는데 실패했습니다.');
-        setIsLoading(false);
-      };
-      document.head.appendChild(script);
-    };
-
-    loadTossPaymentsSDK();
-  }, []);
 
   const handlePayment = async () => {
     if (!agreed) {
@@ -95,19 +68,12 @@ export default function TossPaymentWidget({
         }
       } else {
         // 신규 결제: 빌링키 발급
-        if (!sdkReady || !window.TossPayments) {
+        if (!sdkReady) {
           setError('결제 SDK가 준비되지 않았습니다.');
           return;
         }
 
-        const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
-        if (!clientKey) {
-          throw new Error('토스 클라이언트 키가 설정되지 않았습니다.');
-        }
-
-        console.log('Requesting billing auth with clientKey:', clientKey.slice(0, 15) + '...');
-
-        const tossPayments = window.TossPayments(clientKey);
+        const tossPayments = getTossPayments();
 
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
         const authQuery = authParam ? `&${authParam}` : '';

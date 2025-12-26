@@ -212,7 +212,7 @@ export async function getPaymentHistoryByTenantId(tenantId: string, limit: numbe
   }
 }
 
-// 이메일로 매장 목록 조회
+// 이메일로 매장 목록 조회 (배치 쿼리로 최적화)
 export async function getTenantsByEmail(email: string): Promise<Array<{
   id: string;
   tenantId: string;
@@ -238,36 +238,39 @@ export async function getTenantsByEmail(email: string): Promise<Array<{
       return [];
     }
 
-    // 각 매장에 대한 구독 정보 병렬 조회
-    const tenants = await Promise.all(
-      tenantsSnapshot.docs.map(async (doc) => {
-        const tenantData = doc.data();
-        const tenantId = tenantData.tenantId || doc.id;
+    // 모든 tenantId 수집
+    const tenantDataList = tenantsSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        tenantId: data.tenantId || doc.id,
+        brandName: data.brandName || '이름 없음',
+      };
+    });
 
-        const subscriptionDoc = await db
-          .collection('subscriptions')
-          .doc(tenantId)
-          .get();
-
-        const subscription = subscriptionDoc.exists
-          ? subscriptionDoc.data()
-          : null;
-
-        return {
-          id: doc.id,
-          tenantId,
-          brandName: tenantData.brandName || '이름 없음',
-          subscription: subscription
-            ? {
-                plan: subscription.plan,
-                status: subscription.status,
-              }
-            : null,
-        };
-      })
+    // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
+    const subscriptionRefs = tenantDataList.map((t) =>
+      db.collection('subscriptions').doc(t.tenantId)
     );
+    const subscriptionDocs = await db.getAll(...subscriptionRefs);
 
-    return tenants;
+    // 구독 정보를 Map으로 변환
+    const subscriptionMap = new Map<string, { plan: string; status: string }>();
+    subscriptionDocs.forEach((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        subscriptionMap.set(doc.id, {
+          plan: data?.plan,
+          status: data?.status,
+        });
+      }
+    });
+
+    // 최종 결과 조합
+    return tenantDataList.map((tenant) => ({
+      ...tenant,
+      subscription: subscriptionMap.get(tenant.tenantId) || null,
+    }));
   } catch (error) {
     console.error('Failed to get tenants:', error);
     return [];
@@ -301,5 +304,124 @@ export async function getTenantInfo(tenantId: string): Promise<{ tenantId: strin
   } catch (error) {
     console.error('Failed to get tenant info:', error);
     return null;
+  }
+}
+
+// 기본 플랜 데이터 (Firestore가 비어있을 때 사용)
+const DEFAULT_PLANS = [
+  {
+    id: 'trial',
+    name: 'Trial',
+    price: 'Free',
+    priceNumber: 0,
+    tagline: '백문이 불여일견',
+    description: '1개월 무료체험',
+    features: [
+      '1개월 무료체험',
+      'AI 자동 답변',
+      '업무 처리 메세지 요약 전달',
+      '답변 메시지 AI 보정',
+    ],
+  },
+  {
+    id: 'basic',
+    name: 'Basic',
+    price: '₩39,000',
+    priceNumber: 39000,
+    tagline: 'CS 마스터 고용하기',
+    description: '월 300건 이내',
+    popular: true,
+    features: [
+      '월 300건 이내',
+      '데이터 무제한 추가',
+      'AI 자동 답변',
+      '업무 처리 메세지 요약 전달',
+    ],
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    price: '₩99,000',
+    priceNumber: 99000,
+    tagline: '풀타임 전담 비서 고용하기',
+    description: '문의 건수 제한 없음',
+    features: [
+      'Basic 기능 모두 포함',
+      '문의 건수 제한 없음',
+      '답변 메시지 AI 보정',
+      '미니맵 연동 및 활용',
+      '예약 및 재고 연동',
+    ],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: '협의',
+    priceNumber: 0,
+    tagline: '비즈니스 확장의 든든한 동반자',
+    description: '맞춤형 솔루션 제공',
+    features: [
+      'Business 기능 모두 포함',
+      '데이터 초기 세팅 및 관리',
+      '다지점/브랜드 지원',
+      '맞춤형 자동화 컨설팅',
+      '데이터 리포트 & 통계',
+    ],
+  },
+];
+
+// 플랜 목록 조회 (public - 요금제 페이지용)
+export async function getPlans(): Promise<Array<{
+  id: string;
+  name: string;
+  price: string;
+  priceNumber?: number;
+  tagline?: string;
+  description: string;
+  features: string[];
+  popular?: boolean;
+}>> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    console.error('Firebase Admin DB not initialized');
+    return DEFAULT_PLANS;
+  }
+
+  try {
+    const snapshot = await db.collection('plans')
+      .where('isActive', '==', true)
+      .orderBy('order', 'asc')
+      .get();
+
+    if (snapshot.empty) {
+      return DEFAULT_PLANS;
+    }
+
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const priceNumber = data.price || 0;
+
+      // 가격 포맷팅
+      let priceStr = 'Free';
+      if (doc.id === 'enterprise') {
+        priceStr = '협의';
+      } else if (priceNumber > 0) {
+        priceStr = `₩${priceNumber.toLocaleString()}`;
+      }
+
+      return {
+        id: doc.id,
+        name: data.name,
+        price: priceStr,
+        priceNumber,
+        tagline: data.tagline || '',
+        description: data.description,
+        features: data.features || [],
+        popular: data.popular || doc.id === 'basic',
+      };
+    });
+  } catch (error) {
+    console.error('Failed to get plans:', error);
+    return DEFAULT_PLANS;
   }
 }
