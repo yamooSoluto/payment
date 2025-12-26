@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, Shop } from 'iconoir-react';
 import { formatPrice } from '@/lib/utils';
 
 interface Subscription {
