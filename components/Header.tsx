@@ -80,17 +80,27 @@ export default function Header() {
             )}
           </nav>
 
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="w-6 h-6 text-gray-600" />
-            ) : (
-              <Menu className="w-6 h-6 text-gray-600" />
+          {/* Mobile: Login + Menu button */}
+          <div className="md:hidden flex items-center gap-2">
+            {!loading && !user && (
+              <Link
+                href="/login"
+                className="bg-yamoo-primary text-gray-900 text-xs font-medium py-1.5 px-3 rounded-full"
+              >
+                로그인
+              </Link>
             )}
-          </button>
+            <button
+              className="p-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? (
+                <X className="w-6 h-6 text-gray-600" />
+              ) : (
+                <Menu className="w-6 h-6 text-gray-600" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
@@ -111,40 +121,28 @@ export default function Header() {
               >
                 요금제
               </Link>
-              {!loading && (
+              {!loading && user && (
                 <>
-                  {user ? (
-                    <>
-                      <Link
-                        href={`/account?email=${encodeURIComponent(user.email || '')}`}
-                        className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        마이페이지
-                      </Link>
-                      <div className="pt-3 border-t border-gray-100">
-                        <p className="text-sm text-gray-500 mb-2">{user.email}</p>
-                        <button
-                          onClick={() => {
-                            handleSignOut();
-                            setMobileMenuOpen(false);
-                          }}
-                          className="flex items-center gap-2 text-red-500"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          로그아웃
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <Link
-                      href="/login"
-                      className="btn-primary py-2 px-4 text-sm text-center"
-                      onClick={() => setMobileMenuOpen(false)}
+                  <Link
+                    href={`/account?email=${encodeURIComponent(user.email || '')}`}
+                    className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    마이페이지
+                  </Link>
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-sm text-gray-500 mb-2">{user.email}</p>
+                    <button
+                      onClick={() => {
+                        handleSignOut();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 text-red-500"
                     >
-                      로그인
-                    </Link>
-                  )}
+                      <LogOut className="w-4 h-4" />
+                      로그아웃
+                    </button>
+                  </div>
                 </>
               )}
             </div>

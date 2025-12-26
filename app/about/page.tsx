@@ -238,7 +238,7 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             <div className="bg-[#171717] rounded-2xl p-5 sm:p-8">
-              <h3 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-3">유쾌한 대화형 AI</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3">유쾌한 대화형 AI</h3>
               <p className="text-[#8d8d93] text-xs sm:text-sm leading-relaxed">
                 사람보다 더 센스있고 재미있는 답변으로<br />
                 고객들이 상담을 즐거워합니다. 딱딱한 자동응답은 이제 안녕!
@@ -246,7 +246,7 @@ export default function AboutPage() {
             </div>
 
             <div className="bg-[#171717] rounded-2xl p-5 sm:p-8">
-              <h3 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-3">지능형 학습 시스템</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3">지능형 학습 시스템</h3>
               <p className="text-[#8d8d93] text-xs sm:text-sm leading-relaxed">
                 업체별 데이터를 학습하여 맞춤형 답변을 제공하고,<br />
                 다양한 질문패턴에 대해 학습하고 처리합니다.
@@ -254,7 +254,7 @@ export default function AboutPage() {
             </div>
 
             <div className="bg-[#171717] rounded-2xl p-5 sm:p-8">
-              <h3 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-3">업무 자동 분류</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3">업무 자동 분류</h3>
               <p className="text-[#8d8d93] text-xs sm:text-sm leading-relaxed">
                 단순 질의응답과 실제 처리가 필요한 업무를 자동으로 분류하여<br />
                 관리자에게 정리된 업무만 전달합니다.
@@ -262,7 +262,7 @@ export default function AboutPage() {
             </div>
 
             <div className="bg-[#171717] rounded-2xl p-5 sm:p-8">
-              <h3 className="text-base sm:text-xl font-bold text-white mb-2 sm:mb-3">실시간 분석</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3">실시간 분석</h3>
               <p className="text-[#8d8d93] text-xs sm:text-sm leading-relaxed">
                 고객 문의 패턴을 분석하여 매장 운영 개선점을<br />
                 데이터 기반으로 제안합니다.
@@ -317,8 +317,9 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <p className="text-gray-300 text-xs sm:text-lg">
-            사람들이 당장 원하는 것은 <span className="text-white font-bold">정확한 답, 해결 방안</span> 그리고 <span className="text-green-400 font-bold">안심</span>입니다.
+          <p className="text-gray-300 text-base sm:text-lg">
+            사람들이 당장 원하는 것은<br className="sm:hidden" />
+            <span className="text-white font-bold">정확한 답, 해결 방안</span> 그리고 <span className="text-green-400 font-bold">안심</span>입니다.
           </p>
         </div>
       </section>
@@ -333,8 +334,8 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-3 gap-3 sm:gap-6">
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤷</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-sm sm:text-base">
-                <X className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
                 즉각 대응 보장이 안 돼요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -345,8 +346,8 @@ export default function AboutPage() {
 
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤯</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-sm sm:text-base">
-                <X className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
                 감정이 개입되기 쉬워요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -357,8 +358,8 @@ export default function AboutPage() {
 
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤖</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-sm sm:text-base">
-                <X className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
                 빠른 답변, 그러나 융통성이 없어요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
