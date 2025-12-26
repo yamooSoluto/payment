@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageCircle, Mail, Copy, Check } from 'lucide-react';
+import { MessageCircle, Mail, Copy, Check, Building2, MapPin } from 'lucide-react';
 import TermsModal from './modals/TermsModal';
 import PrivacyModal from './modals/PrivacyModal';
 
@@ -35,20 +35,32 @@ export default function Footer() {
 
   return (
     <>
-      <footer className="bg-black py-8 px-4 mt-auto">
+      <footer className="bg-gray-800 py-8 px-4 mt-auto">
         <div className="max-w-5xl mx-auto text-sm text-gray-300">
           {/* PC: 2열 레이아웃 (중앙 정렬), 모바일: 1열 */}
           <div className="flex flex-col md:flex-row md:justify-center md:gap-24">
             {/* 좌측: 회사 정보 */}
-            <div className="space-y-1">
-              <p className="md:hidden">상호: 주식회사 솔루투</p>
-              <p className="md:hidden">대표자: 김채윤</p>
-              <p className="hidden md:block">상호: 주식회사 솔루투 | 대표자: 김채윤</p>
-              <p>소재지: 경기도 화성시 메타폴리스로 42, 902호</p>
-              <p className="mt-2 md:mt-1">사업자등록번호: 610-86-36594</p>
-              <p className="md:hidden">통신판매신고번호: 2025-화성동탄-3518</p>
-              <p className="md:hidden">개인정보관리책임자: 김채윤</p>
-              <p className="hidden md:block">통신판매신고번호: 2025-화성동탄-3518 | 개인정보관리책임자: 김채윤</p>
+            <div className="space-y-2">
+              <p className="font-semibold text-white">Company</p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 md:hidden">
+                  <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <p>주식회사 솔루투</p>
+                </div>
+                <p className="md:hidden">대표자: 김채윤</p>
+                <div className="hidden md:flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <p>주식회사 솔루투 | 대표자: 김채윤</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <p>경기도 화성시 메타폴리스로 42, 902호</p>
+                </div>
+                <p className="mt-2 md:mt-1">사업자등록번호: 610-86-36594</p>
+                <p className="md:hidden">통신판매신고번호: 2025-화성동탄-3518</p>
+                <p className="md:hidden">개인정보관리책임자: 김채윤</p>
+                <p className="hidden md:block">통신판매신고번호: 2025-화성동탄-3518 | 개인정보관리책임자: 김채윤</p>
+              </div>
             </div>
 
             {/* 우측: 고객센터 */}

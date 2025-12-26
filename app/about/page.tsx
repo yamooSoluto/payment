@@ -952,6 +952,119 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* 고민/여유 섹션 */}
+      <section className="bg-white py-8 sm:py-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-5xl font-bold text-gray-900 mb-6 sm:mb-12 text-center">
+            이제 정말 자유로워지세요
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-8 sm:mb-12">
+            {/* 더 이상 이런 고민 하지 마세요 */}
+            <div>
+              <div className="border border-gray-300 rounded-full py-2 px-4 sm:py-3 sm:px-6 text-center mb-3 sm:mb-4">
+                <span className="font-bold text-gray-800 text-sm sm:text-base">더 이상 이런 고민 하지 마세요</span>
+              </div>
+              <div className="bg-gray-100 rounded-2xl p-5 sm:p-8 text-center">
+                <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😟</p>
+                <div className="text-gray-600 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
+                  <p>💭 &quot;또 문의 왔나? 확인하기 싫다...&quot;</p>
+                  <p>💭 &quot;뭐라고 답해야 할지 모르겠네...&quot;</p>
+                  <p>💭 &quot;이 고객 또 까탈스럽게 구네...&quot;</p>
+                  <p>💭 &quot;밤늦게까지 답변하느라 피곤해...&quot;</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 대신 이런 여유를 누리세요 */}
+            <div>
+              <div className="bg-[#ffdf00] rounded-full py-2 px-4 sm:py-3 sm:px-6 text-center mb-3 sm:mb-4">
+                <span className="font-bold text-gray-800 text-sm sm:text-base">대신 이런 여유를 누리세요</span>
+              </div>
+              <div className="bg-[#fff9e0] rounded-2xl p-5 sm:p-8 text-center">
+                <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😊</p>
+                <div className="text-gray-700 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
+                  <p>✨ <strong>아침에 커피 한 잔 여유롭게 마시며</strong> 처리 내역 확인</p>
+                  <p>✨ <strong>가족과 저녁 식사 중에도</strong> 걱정 없이 폰 꺼두기</p>
+                  <p>✨ <strong>주말에 여행 가서도</strong> 매장 걱정 없이 힐링</p>
+                  <p>✨ <strong>본업에만 온전히 집중해서</strong> 매출 올리기</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* 본격, 아르바이트생 하루 급여로 24시간 전담 CS직원 고용하기 */}
+      <section
+        className="py-8 sm:py-16 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: 'url(/background5.png)' }}
+      >
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* 상단 타이틀 */}
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="bg-gray-900 rounded-full py-2 px-3 sm:py-4 sm:px-8 inline-block">
+              <p className="text-white text-sm sm:text-lg md:text-xl">
+                본격, <strong>아르바이트생 하루 급여</strong>로<br className="sm:hidden" /> 24시간 전담 CS직원 고용하기
+              </p>
+            </div>
+          </div>
+
+          {/* 캐릭터 4개 */}
+          <div className="flex justify-center items-end mb-6 sm:mb-12">
+            <Image src="/genie1.png" alt="야무지니1" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie2.png" alt="야무지니2" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie3.png" alt="야무지니3" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
+            <Image src="/genie4.png" alt="야무지니4" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto" />
+          </div>
+
+          {/* 비교 박스 */}
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-6 mb-8 sm:mb-12">
+            {/* 직원 고용 */}
+            <div className="bg-white/80 rounded-2xl p-4 sm:p-6 text-center border border-gray-200">
+              <p className="font-bold text-gray-800 mb-2 sm:mb-4 text-sm sm:text-base">👤 직원 고용 👤</p>
+              <div className="text-gray-600 space-y-0.5 sm:space-y-1 text-xs sm:text-base">
+                <p>8시간 근무</p>
+                <p>주말 휴무</p>
+                <p>실수 가능성</p>
+                <p>이직 리스크</p>
+              </div>
+            </div>
+
+            {/* 야무지니 */}
+            <div className="bg-[#fff9e0]/90 rounded-2xl p-4 sm:p-6 text-center border border-yellow-300">
+              <p className="font-bold text-gray-800 mb-2 sm:mb-4 text-sm sm:text-base">💛 야무지니 💛</p>
+              <div className="text-gray-700 space-y-0.5 sm:space-y-1 text-xs sm:text-base">
+                <p>24시간 근무</p>
+                <p>365일 근무</p>
+                <p>일관된 컨디션</p>
+                <p>관리 스트레스 제로</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 하단 리스트 */}
+          <div className="text-center space-y-1 sm:space-y-2 text-gray-700 text-sm sm:text-base">
+            <p>✨ 이제 직원 출근 확인하러 새벽에 깨지 마세요</p>
+            <p>✨ 직원 교육시키려고 주말 반납하지 마세요</p>
+            <p>✨ 직원 아프다고 연락와도 당황하지 마세요</p>
+            <p>✨ 연휴 때 직원 스케줄 걱정으로 잠 못 이루지 마세요</p>
+          </div>
+
+          {/* 구독 바로가기 버튼 */}
+          <div className="text-center mt-8 sm:mt-12">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
+            >
+              구독 바로가기
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* 무료체험 신청 섹션 */}
       <section id="free-trial-form" className="bg-black py-12 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1158,119 +1271,6 @@ export default function AboutPage() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 고민/여유 섹션 */}
-      <section className="bg-white py-10 sm:py-24">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl sm:text-5xl font-bold text-gray-900 mb-6 sm:mb-12 text-center">
-            이제 정말 자유로워지세요
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-8 sm:mb-12">
-            {/* 더 이상 이런 고민 하지 마세요 */}
-            <div>
-              <div className="border border-gray-300 rounded-full py-2 px-4 sm:py-3 sm:px-6 text-center mb-3 sm:mb-4">
-                <span className="font-bold text-gray-800 text-sm sm:text-base">더 이상 이런 고민 하지 마세요</span>
-              </div>
-              <div className="bg-gray-100 rounded-2xl p-5 sm:p-8 text-center">
-                <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😟</p>
-                <div className="text-gray-600 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
-                  <p>💭 &quot;또 문의 왔나? 확인하기 싫다...&quot;</p>
-                  <p>💭 &quot;뭐라고 답해야 할지 모르겠네...&quot;</p>
-                  <p>💭 &quot;이 고객 또 까탈스럽게 구네...&quot;</p>
-                  <p>💭 &quot;밤늦게까지 답변하느라 피곤해...&quot;</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 대신 이런 여유를 누리세요 */}
-            <div>
-              <div className="bg-[#ffdf00] rounded-full py-2 px-4 sm:py-3 sm:px-6 text-center mb-3 sm:mb-4">
-                <span className="font-bold text-gray-800 text-sm sm:text-base">대신 이런 여유를 누리세요</span>
-              </div>
-              <div className="bg-[#fff9e0] rounded-2xl p-5 sm:p-8 text-center">
-                <p className="text-3xl sm:text-5xl mb-4 sm:mb-6">😊</p>
-                <div className="text-gray-700 space-y-2 sm:space-y-3 text-left text-sm sm:text-base">
-                  <p>✨ <strong>아침에 커피 한 잔 여유롭게 마시며</strong> 처리 내역 확인</p>
-                  <p>✨ <strong>가족과 저녁 식사 중에도</strong> 걱정 없이 폰 꺼두기</p>
-                  <p>✨ <strong>주말에 여행 가서도</strong> 매장 걱정 없이 힐링</p>
-                  <p>✨ <strong>본업에만 온전히 집중해서</strong> 매출 올리기</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 본격, 아르바이트생 하루 급여로 24시간 전담 CS직원 고용하기 */}
-      <section
-        className="py-10 sm:py-24 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/background5.png)' }}
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* 상단 타이틀 */}
-          <div className="text-center mb-6 sm:mb-12">
-            <div className="bg-gray-900 rounded-full py-2 px-3 sm:py-4 sm:px-8 inline-block">
-              <p className="text-white text-sm sm:text-lg md:text-xl">
-                본격, <strong>아르바이트생 하루 급여</strong>로<br className="sm:hidden" /> 24시간 전담 CS직원 고용하기
-              </p>
-            </div>
-          </div>
-
-          {/* 캐릭터 4개 */}
-          <div className="flex justify-center items-end mb-6 sm:mb-12">
-            <Image src="/genie1.png" alt="야무지니1" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
-            <Image src="/genie2.png" alt="야무지니2" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
-            <Image src="/genie3.png" alt="야무지니3" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto -mr-5 sm:-mr-10" />
-            <Image src="/genie4.png" alt="야무지니4" width={1914} height={1914} className="w-[100px] sm:w-[200px] h-auto" />
-          </div>
-
-          {/* 비교 박스 */}
-          <div className="grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-6 mb-8 sm:mb-12">
-            {/* 직원 고용 */}
-            <div className="bg-white/80 rounded-2xl p-4 sm:p-6 text-center border border-gray-200">
-              <p className="font-bold text-gray-800 mb-2 sm:mb-4 text-sm sm:text-base">👤 직원 고용 👤</p>
-              <div className="text-gray-600 space-y-0.5 sm:space-y-1 text-xs sm:text-base">
-                <p>8시간 근무</p>
-                <p>주말 휴무</p>
-                <p>실수 가능성</p>
-                <p>이직 리스크</p>
-              </div>
-            </div>
-
-            {/* 야무지니 */}
-            <div className="bg-[#fff9e0]/90 rounded-2xl p-4 sm:p-6 text-center border border-yellow-300">
-              <p className="font-bold text-gray-800 mb-2 sm:mb-4 text-sm sm:text-base">💛 야무지니 💛</p>
-              <div className="text-gray-700 space-y-0.5 sm:space-y-1 text-xs sm:text-base">
-                <p>24시간 근무</p>
-                <p>365일 근무</p>
-                <p>일관된 컨디션</p>
-                <p>관리 스트레스 제로</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 하단 리스트 */}
-          <div className="text-center space-y-1 sm:space-y-2 text-gray-700 text-sm sm:text-base">
-            <p>✨ 이제 직원 출근 확인하러 새벽에 깨지 마세요</p>
-            <p>✨ 직원 교육시키려고 주말 반납하지 마세요</p>
-            <p>✨ 직원 아프다고 연락와도 당황하지 마세요</p>
-            <p>✨ 연휴 때 직원 스케줄 걱정으로 잠 못 이루지 마세요</p>
-          </div>
-
-          {/* 구독 바로가기 버튼 */}
-          <div className="text-center mt-8 sm:mt-12">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
-            >
-              구독 바로가기
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Link>
           </div>
         </div>
       </section>
