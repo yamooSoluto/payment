@@ -407,8 +407,9 @@ export default function AboutPage() {
                 <Image
                   src="/genie1.png"
                   alt="야무지니 - 즉시 해결"
-                  width={140}
-                  height={140}
+                  width={1914}
+                  height={1914}
+                  className="w-[140px] h-auto"
                 />
               </div>
               <div className="space-y-6 text-center md:text-left">
@@ -480,8 +481,9 @@ export default function AboutPage() {
                 <Image
                   src="/genie2.png"
                   alt="야무지니 - 맞춤 해결"
-                  width={140}
-                  height={140}
+                  width={1914}
+                  height={1914}
+                  className="w-[140px] h-auto"
                 />
               </div>
             </div>
@@ -502,8 +504,9 @@ export default function AboutPage() {
                 <Image
                   src="/genie3.png"
                   alt="야무지니 - 의견 접수"
-                  width={140}
-                  height={140}
+                  width={1914}
+                  height={1914}
+                  className="w-[140px] h-auto"
                 />
               </div>
               <div className="space-y-6 text-center md:text-left">
@@ -1179,15 +1182,6 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <div className="text-center">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
-            >
-              요금제 보기
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Link>
-          </div>
         </div>
       </section>
 
@@ -1207,11 +1201,11 @@ export default function AboutPage() {
           </div>
 
           {/* 캐릭터 4개 */}
-          <div className="grid grid-cols-4 sm:flex sm:justify-center gap-2 sm:gap-8 mb-6 sm:mb-12 max-w-[280px] sm:max-w-none mx-auto">
-            <Image src="/genie1.png" alt="야무지니1" width={140} height={140} className="w-full h-auto max-w-[60px] sm:max-w-[140px] mx-auto" />
-            <Image src="/genie2.png" alt="야무지니2" width={140} height={140} className="w-full h-auto max-w-[60px] sm:max-w-[140px] mx-auto" />
-            <Image src="/genie3.png" alt="야무지니3" width={140} height={140} className="w-full h-auto max-w-[60px] sm:max-w-[140px] mx-auto" />
-            <Image src="/genie4.png" alt="야무지니4" width={140} height={140} className="w-full h-auto max-w-[60px] sm:max-w-[140px] mx-auto" />
+          <div className="flex justify-center items-end gap-2 sm:gap-8 mb-6 sm:mb-12">
+            <Image src="/genie1.png" alt="야무지니1" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
+            <Image src="/genie2.png" alt="야무지니2" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
+            <Image src="/genie3.png" alt="야무지니3" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
+            <Image src="/genie4.png" alt="야무지니4" width={1914} height={1914} className="w-[60px] sm:w-[100px] h-auto" />
           </div>
 
           {/* 비교 박스 */}
@@ -1245,6 +1239,17 @@ export default function AboutPage() {
             <p>✨ 직원 교육시키려고 주말 반납하지 마세요</p>
             <p>✨ 직원 아프다고 연락와도 당황하지 마세요</p>
             <p>✨ 연휴 때 직원 스케줄 걱정으로 잠 못 이루지 마세요</p>
+          </div>
+
+          {/* 구독 바로가기 버튼 */}
+          <div className="text-center mt-8 sm:mt-12">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
+            >
+              구독 바로가기
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Link>
           </div>
         </div>
       </section>
