@@ -65,16 +65,30 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
         </div>
       )}
 
+      {/* 클레이모피즘 카드 */}
       <div
         className={cn(
-          'card card-hover flex flex-col relative flex-1',
-          plan.popular && 'border-2 border-yamoo-primary',
-          isCurrentPlan && 'ring-2 ring-green-500'
+          'flex flex-col relative flex-1 rounded-2xl p-6',
+          // 클레이모피즘: 흰 배경 + 테두리 + 입체 그림자
+          'bg-white',
+          'border border-gray-200',
+          // 입체감: 내부 하이라이트 + 외부 다중 그림자
+          'shadow-[inset_0_1px_0_0_rgba(255,255,255,1),0_4px_6px_-1px_rgba(0,0,0,0.08),0_10px_20px_-5px_rgba(0,0,0,0.06)]',
+          // 호버 효과
+          'transition-all duration-300 ease-out',
+          'hover:-translate-y-1',
+          'hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,1),0_8px_12px_-2px_rgba(0,0,0,0.1),0_16px_30px_-8px_rgba(0,0,0,0.08)]',
+          // 인기 플랜: 노란색 테두리 + 글로우
+          plan.popular && 'border-2 border-yamoo-primary bg-gradient-to-b from-yellow-50/50 to-white',
+          plan.popular && 'shadow-[inset_0_1px_0_0_rgba(255,255,255,1),0_4px_6px_-1px_rgba(250,204,21,0.15),0_10px_20px_-5px_rgba(250,204,21,0.1)]',
+          plan.popular && 'hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,1),0_8px_12px_-2px_rgba(250,204,21,0.2),0_16px_30px_-8px_rgba(250,204,21,0.15)]',
+          // 현재 플랜: 초록색 링
+          isCurrentPlan && 'ring-2 ring-green-500 ring-offset-2'
         )}
       >
         {plan.popular && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-            <span className="bg-yamoo-primary text-gray-900 text-xs font-semibold px-3 py-1 rounded-full">
+            <span className="bg-gradient-to-r from-yellow-400 to-yamoo-primary text-gray-900 text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg shadow-yamoo-primary/30">
               인기
             </span>
           </div>
@@ -82,7 +96,8 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
 
         {isCurrentPlan && (
           <div className="absolute -top-3 right-4">
-            <span className="bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
+            <span className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg shadow-green-500/30 flex items-center gap-1">
+              <Check width={12} height={12} strokeWidth={2.5} />
               현재 플랜
             </span>
           </div>

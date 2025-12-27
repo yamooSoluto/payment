@@ -21,7 +21,13 @@
       "Bash(xargs ls:*)",
       "Bash(taskkill:*)",
       "Bash(npx kill-port:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git revert:*)",
+      "Bash(git stash:*)",
+      "Bash(git reset:*)",
+      "Bash(timeout:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

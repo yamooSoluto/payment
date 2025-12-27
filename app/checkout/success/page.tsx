@@ -16,6 +16,34 @@ function getPlanName(plan: string): string {
   return names[plan] || plan;
 }
 
+
+// 이용기간 계산 (오늘 ~ 29일 후, 다음 결제일은 30일 후)
+function getSubscriptionPeriod(): { start: string; end: string; nextBilling: string } {
+  const today = new Date();
+
+  // 다음 결제일 (30일 후)
+  const billingDate = new Date(today);
+  billingDate.setDate(billingDate.getDate() + 30);
+
+  // 이용 기간 종료일 = 다음 결제일 - 1일
+  const endDate = new Date(billingDate);
+  endDate.setDate(endDate.getDate() - 1);
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  return {
+    start: formatDate(today),
+    end: formatDate(endDate),
+    nextBilling: formatDate(billingDate),
+  };
+}
+
 function SuccessContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get('plan') || '';
@@ -54,15 +82,31 @@ function SuccessContent() {
           YAMOO {getPlanName(plan)} 플랜 구독이 시작되었습니다.
         </p>
 
-        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-500 text-sm">주문번호</span>
-            <span className="text-gray-900 text-sm font-mono">{orderId}</span>
-          </div>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-gray-500 text-sm">구독 플랜</span>
             <span className="text-gray-900 font-semibold">{getPlanName(plan)}</span>
           </div>
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-sm">이용 기간</span>
+            <span className="text-gray-900 text-sm">
+              {getSubscriptionPeriod().start} ~ {getSubscriptionPeriod().end}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-sm">다음 결제일</span>
+            <span className="text-gray-900 text-sm">
+              {getSubscriptionPeriod().nextBilling}
+            </span>
+          </div>
+          {orderId && (
+            <div className="pt-2 border-t border-gray-200">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-gray-400 text-xs">주문번호</span>
+              </div>
+              <span className="text-gray-500 text-xs font-mono break-all">{orderId}</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -79,10 +123,6 @@ function SuccessContent() {
             홈으로 이동
           </Link>
         </div>
-
-        <p className="text-sm text-gray-500 mt-6">
-          결제 관련 문의: yamoo@soluto.co.kr
-        </p>
       </div>
     </div>
   );

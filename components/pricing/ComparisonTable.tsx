@@ -73,20 +73,20 @@ export default function ComparisonTable() {
 
       {isOpen && (
         <div className="mt-8 overflow-x-auto">
-          <table className="w-full border-collapse min-w-[600px]">
+          <table className="border-collapse min-w-[600px] max-w-4xl mx-auto">
             <thead>
               <tr className="bg-gray-50">
-                <th className="text-left p-3 sm:p-4 font-semibold text-gray-900 border-b whitespace-nowrap min-w-[140px]">기능</th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
+                <th className="text-left p-3 sm:p-4 font-semibold text-gray-900 border-b whitespace-nowrap w-[220px]">기능</th>
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
                   Trial
                 </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
                   Basic
                 </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
                   Business
                 </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base">
+                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
                   Enterprise
                 </th>
               </tr>

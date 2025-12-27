@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
 import TenantList from '@/components/account/TenantList';
 
+// Force dynamic rendering - this page requires searchParams
+export const dynamic = 'force-dynamic';
+
 interface AccountPageProps {
   searchParams: Promise<{ token?: string; email?: string }>;
 }

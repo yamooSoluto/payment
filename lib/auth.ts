@@ -390,14 +390,20 @@ export async function getPlans(): Promise<Array<{
   try {
     const snapshot = await db.collection('plans')
       .where('isActive', '==', true)
-      .orderBy('order', 'asc')
       .get();
 
     if (snapshot.empty) {
       return DEFAULT_PLANS;
     }
 
-    return snapshot.docs.map(doc => {
+    // Sort by order in memory (avoids needing composite index)
+    const sortedDocs = snapshot.docs.sort((a, b) => {
+      const orderA = a.data().order ?? 999;
+      const orderB = b.data().order ?? 999;
+      return orderA - orderB;
+    });
+
+    return sortedDocs.map(doc => {
       const data = doc.data();
       const priceNumber = data.price || 0;
 

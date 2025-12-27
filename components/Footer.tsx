@@ -116,7 +116,7 @@ export default function Footer() {
               </button>
             </div>
             <p className="text-gray-500 text-xs">
-              Copyright 2025. Soluto Inc. All rights reserved.
+              Copyright 2025. YAMOO All rights reserved.
             </p>
           </div>
         </div>

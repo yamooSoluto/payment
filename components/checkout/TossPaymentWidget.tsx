@@ -14,6 +14,35 @@ interface TossPaymentWidgetProps {
   fullAmount?: number;
   isNewTenant?: boolean;
   authParam?: string;
+  nextBillingDate?: string; // 업그레이드 시 다음 결제일
+}
+
+// 이용기간 계산 (종료일 = 다음 결제일 하루 전)
+function getSubscriptionPeriod(nextBillingDate?: string): { start: string; end: string; nextBilling: string } {
+  const today = new Date();
+
+  // 다음 결제일
+  const billingDate = nextBillingDate
+    ? new Date(nextBillingDate)
+    : new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  // 이용 기간 종료일 = 다음 결제일 - 1일
+  const endDate = new Date(billingDate);
+  endDate.setDate(endDate.getDate() - 1);
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  return {
+    start: formatDate(today),
+    end: formatDate(endDate),
+    nextBilling: formatDate(billingDate),
+  };
 }
 
 export default function TossPaymentWidget({
@@ -26,6 +55,7 @@ export default function TossPaymentWidget({
   fullAmount,
   isNewTenant = false,
   authParam = '',
+  nextBillingDate,
 }: TossPaymentWidgetProps) {
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,7 +67,7 @@ export default function TossPaymentWidget({
 
   const handlePayment = async () => {
     if (!agreed) {
-      setError('정기결제 약관에 동의해주세요.');
+      setError('결제/환불 규정에 동의해주세요.');
       return;
     }
 
@@ -62,7 +92,8 @@ export default function TossPaymentWidget({
         const data = await response.json();
 
         if (response.ok) {
-          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}`;
+          const authQuery = authParam ? `&${authParam}` : '';
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}${authQuery}`;
         } else {
           throw new Error(data.error || '업그레이드에 실패했습니다.');
         }
@@ -99,6 +130,18 @@ export default function TossPaymentWidget({
           <span className="text-gray-600">선택한 플랜</span>
           <span className="font-semibold">{planName}</span>
         </div>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-gray-600">이용 기간</span>
+          <span className="text-sm text-gray-900">
+            {getSubscriptionPeriod(nextBillingDate).start} ~ {getSubscriptionPeriod(nextBillingDate).end}
+          </span>
+        </div>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-gray-600">다음 결제일</span>
+          <span className="text-sm text-gray-900">
+            {getSubscriptionPeriod(nextBillingDate).nextBilling}
+          </span>
+        </div>
         {isUpgrade && fullAmount ? (
           <>
             <div className="flex justify-between items-center mb-2">
@@ -109,7 +152,7 @@ export default function TossPaymentWidget({
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">지금 결제 (차액)</span>
-              <span className="text-xl font-bold text-yamoo-primary">
+              <span className="text-xl font-bold text-gray-900">
                 {formatPrice(amount)}원
               </span>
             </div>
@@ -117,7 +160,7 @@ export default function TossPaymentWidget({
         ) : (
           <div className="flex justify-between items-center">
             <span className="text-gray-600">결제 금액</span>
-            <span className="text-xl font-bold text-yamoo-primary">
+            <span className="text-xl font-bold text-gray-900">
               {formatPrice(amount)}원 / 월
             </span>
           </div>
@@ -136,7 +179,7 @@ export default function TossPaymentWidget({
         </p>
       </div>
 
-      {/* 약관 동의 */}
+      {/* 결제/환불 규정 동의 */}
       <div className="border rounded-lg p-4">
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -147,12 +190,13 @@ export default function TossPaymentWidget({
           />
           <div>
             <span className="font-medium text-gray-900">
-              {isUpgrade ? '업그레이드 결제에 동의합니다 (필수)' : '정기결제 약관에 동의합니다 (필수)'}
+              결제/환불 규정에 동의합니다 (필수)
             </span>
             <p className="text-sm text-gray-500 mt-1">
               {isUpgrade && fullAmount
                 ? `지금 ${formatPrice(amount)}원이 결제되고, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`
-                : `매월 ${formatPrice(amount)}원이 자동으로 결제됩니다. 언제든지 구독을 해지할 수 있습니다.`}
+                : `매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`}
+              {' '}구독 해지 시 다음 결제일부터 결제가 중단되며, 이미 결제된 금액은 환불되지 않습니다.
             </p>
           </div>
         </label>
@@ -168,17 +212,17 @@ export default function TossPaymentWidget({
       {/* 결제 버튼 */}
       <button
         onClick={handlePayment}
-        disabled={isLoading || isProcessing || !agreed}
-        className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isLoading || isProcessing}
+        className="w-full py-4 px-6 rounded-lg font-semibold transition-all bg-gray-900 text-yamoo-primary hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isLoading ? (
           <span className="flex items-center justify-center gap-2">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yamoo-primary"></div>
             로딩 중...
           </span>
         ) : isProcessing ? (
           <span className="flex items-center justify-center gap-2">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yamoo-primary"></div>
             {isUpgrade ? '결제 처리 중...' : '카드 등록 페이지로 이동 중...'}
           </span>
         ) : isUpgrade ? (
@@ -201,7 +245,6 @@ export default function TossPaymentWidget({
             <li>• 언제든지 구독을 해지할 수 있습니다.</li>
           </>
         )}
-        <li>• 결제 관련 문의: <button type="button" onClick={() => window.ChannelIO?.('showMessenger')} className="text-yamoo-primary hover:underline">야무 YAMOO</button></li>
       </ul>
     </div>
   );

@@ -147,6 +147,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
             />
             <PaymentHistory
               payments={payments as Parameters<typeof PaymentHistory>[0]['payments']}
+              tenantName={tenantData.brandName}
             />
           </>
         ) : (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Flash, Calendar, Xmark } from 'iconoir-react';
+import { Flash, Calendar, Xmark, CheckCircle, WarningCircle } from 'iconoir-react';
 
 interface ChangePlanButtonProps {
   newPlan: string;
@@ -47,6 +47,18 @@ export default function ChangePlanButton({
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedMode, setSelectedMode] = useState<'immediate' | 'scheduled' | null>(null);
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+    refundAmount?: number;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
 
   // 즉시 변경 시 일할 계산 (실제 결제 기간 기준)
   // 남은 일수에 대한 현재 플랜 환불액
@@ -92,23 +104,42 @@ export default function ChangePlanButton({
           // 업그레이드: 결제 페이지로 이동
           window.location.href = `/checkout?plan=${newPlan}&${authParam}${tenantParam}&mode=immediate&refund=${refundAmount}`;
         } else {
-          // 다운그레이드 또는 예약 변경: 완료 메시지
-          let message = '';
+          // 다운그레이드 또는 예약 변경: 완료 모달
+          setShowModal(false);
           if (mode === 'immediate') {
-            message = data.refundProcessed
-              ? `${newPlanName} 플랜으로 즉시 변경되었습니다. ${data.refundAmount?.toLocaleString() || 0}원이 환불 처리됩니다.`
-              : `${newPlanName} 플랜으로 즉시 변경되었습니다.`;
+            setResultModal({
+              isOpen: true,
+              type: 'success',
+              title: '플랜이 변경되었습니다',
+              message: `${newPlanName} 플랜으로 즉시 변경되었습니다.`,
+              refundAmount: data.refundProcessed ? data.refundAmount : undefined,
+            });
           } else {
-            message = `${newPlanName} 플랜으로 ${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 변경됩니다.`;
+            setResultModal({
+              isOpen: true,
+              type: 'success',
+              title: '플랜 변경이 예약되었습니다',
+              message: `${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 ${newPlanName} 플랜이 적용됩니다.`,
+            });
           }
-          alert(message);
-          window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
         }
       } else {
-        alert(data.error || '플랜 변경에 실패했습니다.');
+        setShowModal(false);
+        setResultModal({
+          isOpen: true,
+          type: 'error',
+          title: '플랜 변경 실패',
+          message: data.error || '플랜 변경에 실패했습니다.',
+        });
       }
     } catch {
-      alert('오류가 발생했습니다.');
+      setShowModal(false);
+      setResultModal({
+        isOpen: true,
+        type: 'error',
+        title: '오류 발생',
+        message: '오류가 발생했습니다. 다시 시도해주세요.',
+      });
     } finally {
       setIsLoading(false);
       setShowModal(false);
@@ -160,8 +191,8 @@ export default function ChangePlanButton({
                 onClick={() => setSelectedMode('immediate')}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Flash width={20} height={20} strokeWidth={1.5} className="text-yellow-600" />
+                  <div className="w-10 h-10 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Flash width={20} height={20} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900 mb-1">즉시 변경</h4>
@@ -203,8 +234,8 @@ export default function ChangePlanButton({
                 onClick={() => setSelectedMode('scheduled')}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Calendar width={20} height={20} strokeWidth={1.5} className="text-blue-600" />
+                  <div className="w-10 h-10 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Calendar width={20} height={20} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900 mb-1">예약 변경</h4>
@@ -232,23 +263,6 @@ export default function ChangePlanButton({
                 </div>
               </div>
 
-              {/* 가격 비교 */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">월 요금 변화</span>
-                  <div className="text-right">
-                    <span className="text-gray-400 line-through mr-2">
-                      {formatPrice(currentAmount)}원
-                    </span>
-                    <span className="font-bold text-gray-900">
-                      {formatPrice(newAmount)}원
-                    </span>
-                    <span className={`ml-2 text-sm ${priceDiff > 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                      ({priceDiff > 0 ? '+' : ''}{formatPrice(priceDiff)}원)
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Footer */}
@@ -269,6 +283,72 @@ export default function ChangePlanButton({
                   {isLoading ? '처리 중...' : '변경하기'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Result Modal */}
+      {resultModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setResultModal(prev => ({ ...prev, isOpen: false }));
+              if (resultModal.type === 'success') {
+                window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
+              }
+            }}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Icon */}
+            <div className="pt-8 pb-4 flex justify-center">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                resultModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+              }`}>
+                {resultModal.type === 'success' ? (
+                  <CheckCircle width={32} height={32} strokeWidth={1.5} className="text-green-600" />
+                ) : (
+                  <WarningCircle width={32} height={32} strokeWidth={1.5} className="text-red-600" />
+                )}
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-6 text-center">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {resultModal.title}
+              </h3>
+              <p className="text-gray-600 text-sm mb-2">
+                {resultModal.message}
+              </p>
+              {resultModal.refundAmount && resultModal.refundAmount > 0 && (
+                <div className="bg-green-50 rounded-lg p-3 mb-4">
+                  <p className="text-green-700 text-sm font-medium">
+                    {formatPrice(resultModal.refundAmount)}원이 환불 처리됩니다
+                  </p>
+                  <p className="text-green-600 text-xs mt-1">
+                    영업일 기준 3~5일 내 환불 완료
+                  </p>
+                </div>
+              )}
+
+              {/* Button */}
+              <button
+                onClick={() => {
+                  setResultModal(prev => ({ ...prev, isOpen: false }));
+                  if (resultModal.type === 'success') {
+                    window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
+                  }
+                }}
+                className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
+                  resultModal.type === 'success'
+                    ? 'bg-gray-900 text-white hover:bg-gray-800'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                확인
+              </button>
             </div>
           </div>
         </div>

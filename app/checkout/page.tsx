@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscription, getTenantInfo } from '@/lib/auth';
+import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo } from '@/lib/auth';
 import { getPlanAmount, getPlanName } from '@/lib/toss';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
-import { NavArrowLeft, Shield, Lock, Shop, WarningCircle } from 'iconoir-react';
+import { NavArrowLeft, Shield, Lock, Sofa, WarningCircle } from 'iconoir-react';
 import Link from 'next/link';
 
 interface CheckoutPageProps {
@@ -58,8 +58,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
   // 병렬로 데이터 조회 (성능 최적화)
+  // mode=immediate인 경우 특정 tenant의 구독 정보를 조회
   const [subscription, tenantInfo] = await Promise.all([
-    getSubscription(email),
+    (mode === 'immediate' && tenantId)
+      ? getSubscriptionByTenantId(tenantId, email)
+      : getSubscription(email),
     tenantId ? getTenantInfo(tenantId) : Promise.resolve(null),
   ]);
 
@@ -75,6 +78,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   let amount = fullAmount;
   let isUpgradeMode = false;
   let currentPlanName = '';
+  let nextBillingDateStr: string | undefined;
 
   if (mode === 'immediate' && subscription?.status === 'active') {
     isUpgradeMode = true;
@@ -87,6 +91,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       const nextDate = subscription.nextBillingDate.toDate
         ? subscription.nextBillingDate.toDate()
         : new Date(subscription.nextBillingDate);
+      nextBillingDateStr = nextDate.toISOString();
       daysLeft = Math.max(0, Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
     }
 
@@ -110,7 +115,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
       <Link
-        href={isUpgradeMode ? `/account/change-plan?${authParam}` : `/pricing?${authParam}`}
+        href={isUpgradeMode ? `/account/change-plan?${authParam}&tenantId=${tenantId}` : `/pricing?${authParam}`}
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >
         <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
@@ -145,8 +150,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* 매장 정보 */}
       {tenantInfo && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Shop width={20} height={20} strokeWidth={1.5} className="text-yamoo-primary" />
+          <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center flex-shrink-0">
+            <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
           </div>
           <div>
             <p className="text-sm text-gray-500">적용 매장</p>
@@ -164,16 +169,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         </div>
       )}
 
-      {/* Upgrade Info */}
-      {isUpgradeMode && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-blue-800">
-            <strong>일할 계산 적용:</strong> 현재 플랜의 남은 기간에 대한 환불액을 차감한 금액입니다.
-            다음 결제일부터 월 {fullAmount.toLocaleString()}원이 정기 결제됩니다.
-          </p>
-        </div>
-      )}
-
       {/* Main Content */}
       <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
         <TossPaymentWidget
@@ -186,6 +181,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           fullAmount={fullAmount}
           isNewTenant={isNewTenant}
           authParam={authParam}
+          nextBillingDate={nextBillingDateStr}
         />
       </div>
 

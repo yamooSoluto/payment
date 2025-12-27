@@ -23,12 +23,13 @@ interface Payment {
 
 interface PaymentHistoryProps {
   payments: Payment[];
+  tenantName?: string;
 }
 
 type FilterPeriod = 'all' | 'month' | '3months' | 'custom';
 type FilterStatus = 'all' | 'done' | 'refund' | 'canceled';
 
-export default function PaymentHistory({ payments }: PaymentHistoryProps) {
+export default function PaymentHistory({ payments, tenantName }: PaymentHistoryProps) {
   const [showAll, setShowAll] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<FilterPeriod>('all');
@@ -92,7 +93,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
   // CSV 다운로드 함수
   const downloadCSV = () => {
     // CSV 헤더
-    const headers = ['결제일', '플랜', '금액', '상태', '결제유형', '카드정보'];
+    const headers = ['매장명', '결제일', '플랜', '금액', '상태', '결제유형', '카드정보'];
 
     // CSV 데이터
     const rows = filteredPayments.map((p) => {
@@ -104,7 +105,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
       const type = p.type === 'upgrade' ? '업그레이드' : p.type === 'downgrade' ? '다운그레이드' : p.type === 'refund' ? '환불' : '정기결제';
       const card = p.cardCompany ? `${p.cardCompany}카드 ${p.cardNumber || ''}` : '';
 
-      return [formattedDate, planName, amount, status, type, card];
+      return [tenantName || '', formattedDate, planName, amount, status, type, card];
     });
 
     // CSV 문자열 생성
@@ -118,10 +119,11 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
     const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
-    // 다운로드
+    // 다운로드 (파일명에 매장명 포함)
     const link = document.createElement('a');
     link.href = url;
-    link.download = `결제내역_${new Date().toISOString().split('T')[0]}.csv`;
+    const fileNamePrefix = tenantName ? `${tenantName}_결제내역` : '결제내역';
+    link.download = `${fileNamePrefix}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
