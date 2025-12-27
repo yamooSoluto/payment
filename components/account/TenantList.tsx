@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, Shop } from 'iconoir-react';
 import { formatPrice } from '@/lib/utils';
@@ -26,6 +25,7 @@ interface Tenant {
 interface TenantListProps {
   authParam: string;
   email: string;
+  initialTenants: Tenant[];
 }
 
 const PLAN_NAMES: Record<string, string> = {
@@ -41,54 +41,9 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
 };
 
-export default function TenantList({ authParam, email }: TenantListProps) {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchTenants = async () => {
-      try {
-        const response = await fetch(`/api/tenants?${authParam}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch tenants');
-        }
-        const data = await response.json();
-        setTenants(data.tenants || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '매장 목록을 불러오는데 실패했습니다.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTenants();
-  }, [authParam]);
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-xl shadow-lg p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-          <div className="space-y-3">
-            <div className="h-20 bg-gray-100 rounded-lg"></div>
-            <div className="h-20 bg-gray-100 rounded-lg"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white rounded-xl shadow-lg p-8">
-        <div className="text-center text-red-600">
-          <WarningCircle width={48} height={48} strokeWidth={1.5} className="mx-auto mb-4" />
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
+export default function TenantList({ authParam, initialTenants }: TenantListProps) {
+  // 서버에서 초기 데이터를 받아서 바로 표시 (로딩 지연 없음)
+  const tenants = initialTenants;
 
   if (tenants.length === 0) {
     return (

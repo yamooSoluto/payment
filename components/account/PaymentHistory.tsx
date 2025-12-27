@@ -303,18 +303,20 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
       <div className="divide-y">
         {displayPayments.map((payment) => (
           <div key={payment.id} className="py-4 first:pt-0 last:pb-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {getStatusIcon(payment.status, payment.type)}
-                <div>
-                  <p className="font-medium text-gray-900">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5">
+                  {getStatusIcon(payment.status, payment.type)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-900 text-sm sm:text-base">
                     {payment.type === 'refund' && payment.previousPlan
                       ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 다운그레이드`
                       : payment.type === 'upgrade' && payment.previousPlan
                         ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 업그레이드`
                         : `${getPlanName(payment.plan)} 플랜`}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500">
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
                     {payment.cardCompany && ` · ${payment.cardCompany}카드`}
                   </p>
@@ -325,19 +327,19 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`font-semibold ${
+              <div className="flex items-center gap-2 ml-7 sm:ml-0">
+                <span className={`font-semibold text-sm sm:text-base ${
                   payment.type === 'refund' ? 'text-red-600' :
                   payment.status === 'canceled' ? 'text-gray-400 line-through' :
                   'text-gray-900'
                 }`}>
                   {payment.type === 'refund' ? `-${formatPrice(Math.abs(payment.amount))}원` : `${formatPrice(payment.amount)}원`}
                 </span>
-                <span className={`text-xs ${
-                  payment.type === 'refund' ? 'text-red-600' :
-                  payment.status === 'done' ? 'text-green-600' :
-                  payment.status === 'canceled' ? 'text-gray-400' :
-                  'text-red-600'
+                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                  payment.type === 'refund' ? 'text-red-600 bg-red-50' :
+                  payment.status === 'done' ? 'text-green-600 bg-green-50' :
+                  payment.status === 'canceled' ? 'text-gray-400 bg-gray-50' :
+                  'text-red-600 bg-red-50'
                 }`}>
                   {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
                 </span>

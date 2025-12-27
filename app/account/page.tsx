@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
+import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import TenantList from '@/components/account/TenantList';
 
 // Force dynamic rendering - this page requires searchParams
@@ -7,6 +8,21 @@ export const dynamic = 'force-dynamic';
 
 interface AccountPageProps {
   searchParams: Promise<{ token?: string; email?: string }>;
+}
+
+// Timestamp를 ISO string으로 변환
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function serializeTimestamp(val: any): string | null {
+  if (!val) return null;
+  if (typeof val === 'object' && val !== null) {
+    if ('toDate' in val && typeof val.toDate === 'function') {
+      return val.toDate().toISOString();
+    }
+    if ('_seconds' in val) {
+      return new Date(val._seconds * 1000).toISOString();
+    }
+  }
+  return val;
 }
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
@@ -30,6 +46,86 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
+  // 서버에서 직접 매장 목록 조회 (빠른 초기 로딩)
+  const db = adminDb || initializeFirebaseAdmin();
+  let tenants: Array<{
+    id: string;
+    tenantId: string;
+    brandName: string;
+    email: string;
+    createdAt: string | null;
+    subscription: {
+      plan: string;
+      status: string;
+      amount: number;
+      nextBillingDate: string | null;
+      currentPeriodEnd: string | null;
+      canceledAt: string | null;
+    } | null;
+  }> = [];
+
+  if (db) {
+    try {
+      // tenants 컬렉션에서 email로 매장 목록 조회
+      const tenantsSnapshot = await db
+        .collection('tenants')
+        .where('email', '==', email)
+        .get();
+
+      if (!tenantsSnapshot.empty) {
+        // 모든 tenant 데이터 수집
+        const tenantDataList = tenantsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            tenantId: data.tenantId || doc.id,
+            brandName: data.brandName || '이름 없음',
+            email: data.email,
+            createdAt: serializeTimestamp(data.createdAt),
+          };
+        });
+
+        // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
+        const subscriptionRefs = tenantDataList.map((t) =>
+          db.collection('subscriptions').doc(t.tenantId)
+        );
+        const subscriptionDocs = await db.getAll(...subscriptionRefs);
+
+        // 구독 정보를 Map으로 변환
+        const subscriptionMap = new Map<string, {
+          plan: string;
+          status: string;
+          amount: number;
+          nextBillingDate: string | null;
+          currentPeriodEnd: string | null;
+          canceledAt: string | null;
+        }>();
+
+        subscriptionDocs.forEach((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            subscriptionMap.set(doc.id, {
+              plan: data?.plan,
+              status: data?.status,
+              amount: data?.amount,
+              nextBillingDate: serializeTimestamp(data?.nextBillingDate),
+              currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
+              canceledAt: serializeTimestamp(data?.canceledAt),
+            });
+          }
+        });
+
+        // 최종 결과 조합
+        tenants = tenantDataList.map((tenant) => ({
+          ...tenant,
+          subscription: subscriptionMap.get(tenant.tenantId) || null,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch tenants:', error);
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Header */}
@@ -40,7 +136,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
       {/* Content */}
       <div className="space-y-6">
-        <TenantList authParam={authParam} email={email} />
+        <TenantList authParam={authParam} email={email} initialTenants={tenants} />
       </div>
     </div>
   );
