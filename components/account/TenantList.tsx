@@ -39,6 +39,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   canceled: { label: '해지 예정', color: 'text-orange-600 bg-orange-50', icon: Clock },
   past_due: { label: '결제 실패', color: 'text-red-600 bg-red-50', icon: WarningCircle },
   trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
+  expired: { label: '미구독', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
 };
 
 export default function TenantList({ authParam, initialTenants }: TenantListProps) {
@@ -71,12 +72,17 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
       <div className="p-6 border-b border-gray-100">
-        <h2 className="text-xl font-bold text-gray-900">내 매장</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          총 {tenants.length}개의 매장
-        </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Shop width={20} height={20} strokeWidth={1.5} className="text-gray-600" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">내 매장</h2>
+          </div>
+          <span className="text-sm text-gray-500">총 {tenants.length}개</span>
+        </div>
       </div>
 
       <div className="divide-y divide-gray-100">
@@ -102,19 +108,36 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
                     </h3>
                     {tenant.subscription ? (
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig?.color || 'text-gray-600 bg-gray-100'}`}>
-                          <StatusIcon width={12} height={12} strokeWidth={2} />
-                          {statusConfig?.label || '미구독'}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          {PLAN_NAMES[tenant.subscription.plan] || tenant.subscription.plan}
-                        </span>
-                        <span className="text-sm text-gray-400">
-                          월 {formatPrice(tenant.subscription.amount)}원
-                        </span>
+                        {status === 'expired' ? (
+                          // 만료(즉시해지) - 아이콘 없이 미구독만 표시
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100">
+                            미구독
+                          </span>
+                        ) : (
+                          <>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig?.color || 'text-gray-600 bg-gray-100'}`}>
+                              <StatusIcon width={12} height={12} strokeWidth={2} />
+                              {statusConfig?.label || '미구독'}
+                              {/* 해지 예정인 경우 만료일 표시 */}
+                              {status === 'canceled' && tenant.subscription.currentPeriodEnd && (
+                                <span className="ml-0.5">
+                                  (~{new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })})
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {PLAN_NAMES[tenant.subscription.plan] || tenant.subscription.plan}
+                            </span>
+                            {tenant.subscription.amount > 0 && (
+                              <span className="text-sm text-gray-400">
+                                월 {formatPrice(tenant.subscription.amount)}원
+                              </span>
+                            )}
+                          </>
+                        )}
                       </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100 mt-1">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100 mt-1">
                         미구독
                       </span>
                     )}
@@ -124,18 +147,11 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
               </div>
 
               {/* 추가 정보 */}
-              {tenant.subscription && (
+              {tenant.subscription && tenant.subscription.status === 'active' && tenant.subscription.nextBillingDate && (
                 <div className="mt-3 ml-16 text-sm text-gray-500">
-                  {tenant.subscription.status === 'canceled' && tenant.subscription.currentPeriodEnd && (
-                    <p>
-                      {new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR')}까지 이용 가능
-                    </p>
-                  )}
-                  {tenant.subscription.status === 'active' && tenant.subscription.nextBillingDate && (
-                    <p>
-                      다음 결제일: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}
-                    </p>
-                  )}
+                  <p>
+                    다음 결제일: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}
+                  </p>
                 </div>
               )}
             </Link>

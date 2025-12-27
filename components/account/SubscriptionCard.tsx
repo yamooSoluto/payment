@@ -1,10 +1,88 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, WarningCircle, Clock } from 'iconoir-react';
+import { Calendar, WarningCircle, Clock, Check, Xmark } from 'iconoir-react';
 import { formatPrice, formatDate, getStatusText, getStatusColor, calculateDaysLeft } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
 import CancelModal from './CancelModal';
+
+// 해지 성공 결과 모달
+interface CancelResultModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  mode: 'scheduled' | 'immediate';
+  refundAmount?: number;
+  endDate?: string;
+}
+
+function CancelResultModal({ isOpen, onClose, mode, refundAmount, endDate }: CancelResultModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+        </button>
+
+        {/* Icon */}
+        <div className="pt-10 pb-4 flex justify-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+            <Check width={32} height={32} strokeWidth={2} className="text-green-600" />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 pb-8 text-center">
+          <h3 className="text-xl font-bold text-gray-900 mb-3">
+            {mode === 'immediate' ? '구독이 해지되었습니다' : '해지가 예약되었습니다'}
+          </h3>
+
+          {mode === 'immediate' ? (
+            <div className="space-y-2 text-gray-600">
+              {refundAmount && refundAmount > 0 ? (
+                <>
+                  <p className="text-lg">
+                    <span className="font-bold text-gray-900">{formatPrice(refundAmount)}원</span>이 환불됩니다.
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    환불은 영업일 기준 3~5일 내 처리됩니다.
+                  </p>
+                </>
+              ) : (
+                <p>서비스 이용이 즉시 중단됩니다.</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 text-gray-600">
+              {endDate && (
+                <p>
+                  <span className="font-bold text-gray-900">{formatDate(endDate)}</span>까지 서비스를 이용할 수 있습니다.
+                </p>
+              )}
+              <p className="text-sm text-gray-500">
+                해지 예약은 언제든지 취소할 수 있습니다.
+              </p>
+            </div>
+          )}
+
+          {/* Button */}
+          <button
+            onClick={onClose}
+            className="mt-6 w-full py-3 px-4 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-colors"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface SubscriptionCardProps {
   subscription: {
@@ -28,6 +106,11 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   const [isLoading, setIsLoading] = useState(false);
   const [isCancelingPending, setIsCancelingPending] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [cancelResult, setCancelResult] = useState<{
+    isOpen: boolean;
+    mode: 'scheduled' | 'immediate';
+    refundAmount?: number;
+  }>({ isOpen: false, mode: 'scheduled' });
 
   const isTrial = subscription.status === 'trial';
   const isActive = subscription.status === 'active';
@@ -73,12 +156,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
       const data = await response.json();
 
       if (response.ok) {
-        if (mode === 'immediate' && data.refundAmount > 0) {
-          alert(`구독이 즉시 해지되었습니다. ${data.refundAmount.toLocaleString()}원이 환불됩니다.`);
-        } else if (mode === 'immediate') {
-          alert('구독이 즉시 해지되었습니다.');
-        }
-        window.location.reload();
+        setShowCancelModal(false);
+        setCancelResult({
+          isOpen: true,
+          mode: mode || 'scheduled',
+          refundAmount: data.refundAmount,
+        });
       } else {
         alert(data.error || '구독 해지에 실패했습니다. 다시 시도해주세요.');
       }
@@ -86,8 +169,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
       alert('오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
-      setShowCancelModal(false);
     }
+  };
+
+  const handleCancelResultClose = () => {
+    setCancelResult({ isOpen: false, mode: 'scheduled' });
+    window.location.reload();
   };
 
   const handleReactivate = async () => {
@@ -297,7 +384,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               <span className="font-medium">구독이 만료되었습니다</span>
             </div>
             <p className="text-sm text-orange-600 mt-1">
-              무료 체험 기간이 종료되었습니다. 유료 플랜을 선택하여 서비스를 계속 이용해주세요.
+              {subscription.plan === 'trial'
+                ? '무료 체험 기간이 종료되었습니다. 유료 플랜을 선택하여 서비스를 계속 이용해주세요.'
+                : '구독이 해지되어 서비스 이용이 종료되었습니다. 다시 구독하시려면 플랜을 선택해주세요.'}
             </p>
           </div>
         )}
@@ -376,6 +465,15 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           amount={subscription.amount}
         />
       )}
+
+      {/* Cancel Result Modal */}
+      <CancelResultModal
+        isOpen={cancelResult.isOpen}
+        onClose={handleCancelResultClose}
+        mode={cancelResult.mode}
+        refundAmount={cancelResult.refundAmount}
+        endDate={subscription.currentPeriodEnd ? String(subscription.currentPeriodEnd) : undefined}
+      />
     </>
   );
 }

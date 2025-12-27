@@ -320,11 +320,6 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
                     {payment.cardCompany && ` · ${payment.cardCompany}카드`}
                   </p>
-                  {payment.type === 'refund' && payment.refundReason && (
-                    <p className="text-xs text-red-500 mt-1">
-                      환불 사유: {payment.refundReason}
-                    </p>
-                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 ml-7 sm:ml-0">
@@ -343,16 +338,29 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                 }`}>
                   {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
                 </span>
-                {payment.status === 'done' && payment.receiptUrl && (
-                  <a
-                    href={payment.receiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                    title="영수증 보기"
-                  >
-                    <Page width={14} height={14} strokeWidth={1.5} />
-                  </a>
+                {/* 영수증/인보이스 버튼 - 완료된 결제 또는 환불에 표시 */}
+                {payment.status === 'done' && (
+                  payment.receiptUrl ? (
+                    <a
+                      href={payment.receiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                      title="영수증 보기"
+                    >
+                      <Page width={14} height={14} strokeWidth={1.5} />
+                    </a>
+                  ) : (
+                    <a
+                      href={`/api/invoices/${payment.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                      title={payment.type === 'refund' ? '환불 확인서' : '인보이스'}
+                    >
+                      <Page width={14} height={14} strokeWidth={1.5} />
+                    </a>
+                  )
                 )}
               </div>
             </div>

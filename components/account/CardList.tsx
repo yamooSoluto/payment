@@ -37,6 +37,12 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingAlias, setEditingAlias] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; cardId: string | null; cardNumber: string }>({
+    isOpen: false,
+    cardId: null,
+    cardNumber: '',
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchCards = useCallback(async () => {
     setIsLoading(true);
@@ -133,11 +139,23 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     }
   };
 
-  const handleDeleteCard = async (cardId: string) => {
-    if (!confirm('이 카드를 삭제하시겠습니까?')) {
-      return;
-    }
+  const openDeleteConfirm = (card: Card) => {
+    setDeleteConfirm({
+      isOpen: true,
+      cardId: card.id,
+      cardNumber: card.cardInfo.number,
+    });
+  };
 
+  const closeDeleteConfirm = () => {
+    setDeleteConfirm({ isOpen: false, cardId: null, cardNumber: '' });
+  };
+
+  const handleDeleteCard = async () => {
+    const cardId = deleteConfirm.cardId;
+    if (!cardId) return;
+
+    setIsDeleting(true);
     setError(null);
 
     // 낙관적 업데이트
@@ -150,6 +168,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
       remainingCards[0].isPrimary = true;
     }
     setCards(remainingCards);
+    closeDeleteConfirm();
 
     try {
       const response = await fetch(`/api/cards/${cardId}`, {
@@ -173,6 +192,8 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
       console.error('Error deleting card:', err);
       setCards(previousCards); // 롤백
       setError(err instanceof Error ? err.message : '카드 삭제에 실패했습니다.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -334,7 +355,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
                         <EditPencil width={16} height={16} strokeWidth={1.5} />
                       </button>
                       <button
-                        onClick={() => handleDeleteCard(card.id)}
+                        onClick={() => openDeleteConfirm(card)}
                         disabled={card.isPrimary && cards.length === 1}
                         className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
@@ -395,6 +416,57 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
             </button>
           )}
         </>
+      )}
+
+      {/* 카드 삭제 확인 모달 */}
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={closeDeleteConfirm}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Icon */}
+            <div className="pt-8 pb-4 flex justify-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash width={28} height={28} strokeWidth={1.5} className="text-red-600" />
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-6 text-center">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                카드를 삭제하시겠습니까?
+              </h3>
+              <p className="text-gray-500 text-sm mb-6">
+                <span className="font-medium text-gray-700">{deleteConfirm.cardNumber}</span>
+                <br />
+                이 카드를 삭제하면 복구할 수 없습니다.
+              </p>
+
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={closeDeleteConfirm}
+                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteCard}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    '삭제'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

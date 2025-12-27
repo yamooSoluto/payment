@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, ChevronLeft, ChevronRight, Loader2, Download, Calendar } from 'lucide-react';
+import { ShoppingCart, ChevronLeft, ChevronRight, Loader2, Download, Calendar, X, RefreshCw } from 'lucide-react';
+
+type OrderType = 'subscription' | 'renewal' | 'upgrade' | 'downgrade' | 'refund' | 'cancel_refund' | 'unknown';
 
 interface Order {
   id: string;
@@ -9,10 +11,16 @@ interface Order {
   amount: number;
   status: string;
   plan: string;
+  type: OrderType;
   isTest: boolean;
   createdAt: string;
   paidAt: string | null;
   canceledAt: string | null;
+  paymentKey?: string;
+  orderId?: string;
+  cancelReason?: string;
+  refundReason?: string;
+  tenantId?: string;
   memberInfo: {
     businessName: string;
     ownerName: string;
@@ -50,6 +58,11 @@ export default function OrdersPage() {
     totalPages: 0,
   });
   const [stats, setStats] = useState<Stats | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [isRefunding, setIsRefunding] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -89,6 +102,7 @@ export default function OrdersPage() {
   const getStatusBadge = (orderStatus: string) => {
     switch (orderStatus) {
       case 'completed':
+      case 'done':
         return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">완료</span>;
       case 'pending':
         return <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">대기</span>;
@@ -101,12 +115,89 @@ export default function OrdersPage() {
     }
   };
 
+  const getTypeBadge = (orderType: OrderType) => {
+    switch (orderType) {
+      case 'subscription':
+        return <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">구독</span>;
+      case 'renewal':
+        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">갱신</span>;
+      case 'upgrade':
+        return <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">업그레이드</span>;
+      case 'downgrade':
+        return <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">다운그레이드</span>;
+      case 'refund':
+        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">환불</span>;
+      case 'cancel_refund':
+        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">해지환불</span>;
+      default:
+        return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">-</span>;
+    }
+  };
+
   const getPlanName = (plan: string) => {
     switch (plan) {
       case 'basic': return 'Basic';
       case 'business': return 'Business';
       case 'enterprise': return 'Enterprise';
       default: return plan || '-';
+    }
+  };
+
+  const handleRowClick = (order: Order) => {
+    setSelectedOrder(order);
+  };
+
+  const handleOpenRefundModal = (order: Order) => {
+    setSelectedOrder(order);
+    setRefundAmount(order.amount?.toString() || '');
+    setRefundReason('');
+    setShowRefundModal(true);
+  };
+
+  const handleRefund = async () => {
+    if (!selectedOrder || !refundAmount) return;
+
+    const amount = parseInt(refundAmount.replace(/,/g, ''));
+    if (isNaN(amount) || amount <= 0) {
+      alert('올바른 환불 금액을 입력하세요.');
+      return;
+    }
+
+    if (amount > (selectedOrder.amount || 0)) {
+      alert('환불 금액이 결제 금액보다 클 수 없습니다.');
+      return;
+    }
+
+    if (!confirm(`${amount.toLocaleString()}원을 환불하시겠습니까?`)) return;
+
+    setIsRefunding(true);
+    try {
+      const response = await fetch('/api/admin/orders/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: selectedOrder.id,
+          paymentKey: selectedOrder.paymentKey,
+          tenantId: selectedOrder.tenantId,
+          refundAmount: amount,
+          refundReason: refundReason || '관리자 요청 환불',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('환불이 완료되었습니다.');
+        setShowRefundModal(false);
+        setSelectedOrder(null);
+        fetchOrders();
+      } else {
+        alert(data.error || '환불 처리에 실패했습니다.');
+      }
+    } catch {
+      alert('오류가 발생했습니다.');
+    } finally {
+      setIsRefunding(false);
     }
   };
 
@@ -244,12 +335,12 @@ export default function OrdersPage() {
                 <tr>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">결제일</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장명</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">플랜</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">유형</th>
                   <th className="text-right px-6 py-4 text-sm font-medium text-gray-500">금액</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">상태</th>
-                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">테스트</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

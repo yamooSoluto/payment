@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import TenantList from '@/components/account/TenantList';
+import UserProfile from '@/components/account/UserProfile';
+import AccountDeletion from '@/components/account/AccountDeletion';
 
 // Force dynamic rendering - this page requires searchParams
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,9 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     } | null;
   }> = [];
 
+  // 사용자 정보 (첫 번째 tenant에서 가져옴)
+  let userInfo: { name: string; phone: string } = { name: '', phone: '' };
+
   if (db) {
     try {
       // tenants 컬렉션에서 email로 매장 목록 조회
@@ -73,6 +78,13 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         .get();
 
       if (!tenantsSnapshot.empty) {
+        // 첫 번째 tenant에서 사용자 정보 가져오기
+        const firstTenantData = tenantsSnapshot.docs[0].data();
+        userInfo = {
+          name: firstTenantData.name || '',
+          phone: firstTenantData.phone || '',
+        };
+
         // 모든 tenant 데이터 수집
         const tenantDataList = tenantsSnapshot.docs.map((doc) => {
           const data = doc.data();
@@ -126,6 +138,13 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     }
   }
 
+  // 활성/해지예정 구독 여부 확인 (active, trial, canceled 모두 탈퇴 불가)
+  const hasActiveSubscriptions = tenants.some(
+    (t) => t.subscription?.status === 'active' ||
+           t.subscription?.status === 'trial' ||
+           t.subscription?.status === 'canceled'
+  );
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Header */}
@@ -136,7 +155,19 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
       {/* Content */}
       <div className="space-y-6">
+        {/* 기본 정보 */}
+        <UserProfile
+          email={email}
+          name={userInfo.name}
+          phone={userInfo.phone}
+        />
+        {/* 내 매장 */}
         <TenantList authParam={authParam} email={email} initialTenants={tenants} />
+        {/* 회원 탈퇴 */}
+        <AccountDeletion
+          authParam={authParam}
+          hasActiveSubscriptions={hasActiveSubscriptions}
+        />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ interface Tenant {
     status: string;
     currentPeriodEnd?: string;
     nextBillingDate?: string;
+    canceledAt?: string;
   } | null;
 }
 
@@ -81,7 +82,7 @@ export default function TenantSelectModal({
   };
 
   const handleSelectTenant = (tenant: Tenant) => {
-    const isSubscribed = tenant.subscription?.status === 'active' || tenant.subscription?.status === 'trial';
+    const isSubscribed = tenant.subscription?.status === 'active' || tenant.subscription?.status === 'trial' || tenant.subscription?.status === 'canceled';
 
     if (isSubscribed) {
       const currentPlan = tenant.subscription?.plan || '';
@@ -180,25 +181,47 @@ export default function TenantSelectModal({
                           <p className="font-semibold text-gray-900">
                             {tenant.brandName}
                           </p>
-                          {tenant.subscription?.status === 'active' || tenant.subscription?.status === 'trial' ? (
-                            (() => {
-                              const colors = getPlanColors(tenant.subscription.plan);
+                          {(() => {
+                            const status = tenant.subscription?.status;
+
+                            // 활성 or 체험중
+                            if (status === 'active' || status === 'trial') {
+                              const colors = getPlanColors(tenant.subscription!.plan);
+                              const endDate = tenant.subscription!.currentPeriodEnd || tenant.subscription!.nextBillingDate;
                               return (
                                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${colors.bg} ${colors.text}`}>
-                                  {tenant.subscription.plan} 플랜
-                                  {(tenant.subscription.currentPeriodEnd || tenant.subscription.nextBillingDate) && (
+                                  {tenant.subscription!.plan} 플랜
+                                  {endDate && (
                                     <span className={`ml-1 ${colors.dateBg}`}>
-                                      ~{new Date(tenant.subscription.currentPeriodEnd || tenant.subscription.nextBillingDate!).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                                      ~{new Date(endDate).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
                                     </span>
                                   )}
                                 </span>
                               );
-                            })()
-                          ) : (
-                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
-                              미구독
-                            </span>
-                          )}
+                            }
+
+                            // 해지 예정 (예약 해지)
+                            if (status === 'canceled') {
+                              const endDate = tenant.subscription?.currentPeriodEnd || tenant.subscription?.nextBillingDate;
+                              return (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                                  해지 예정
+                                  {endDate && (
+                                    <span className="ml-1">
+                                      ~{new Date(endDate).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            }
+
+                            // 미구독 (만료 or 없음)
+                            return (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
+                                미구독
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
