@@ -4,14 +4,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, ChevronLeft, ChevronRight, Users, Loader2, Plus, X } from 'lucide-react';
 
+interface TenantInfo {
+  tenantId: string;
+  brandName: string;
+  plan: string;
+  status: string;
+}
+
 interface Member {
   id: string;
-  businessName: string;
-  ownerName: string;
   email: string;
+  name: string;
   phone: string;
-  planId: string;
-  subscriptionStatus: string;
+  tenants: TenantInfo[];
+  tenantCount: number;
   createdAt: string;
 }
 
@@ -38,8 +44,8 @@ export default function MembersPage() {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
-    businessName: '',
-    ownerName: '',
+    brandName: '',
+    name: '',
     phone: '',
     planId: '',
     subscriptionStatus: 'trial',
@@ -81,8 +87,8 @@ export default function MembersPage() {
   const handleOpenModal = () => {
     setFormData({
       email: '',
-      businessName: '',
-      ownerName: '',
+      brandName: '',
+      name: '',
       phone: '',
       planId: '',
       subscriptionStatus: 'trial',
@@ -171,7 +177,7 @@ export default function MembersPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="매장명, 대표자명, 이메일, 전화번호 검색"
+              placeholder="이름, 이메일, 전화번호, 매장명 검색"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -214,11 +220,10 @@ export default function MembersPage() {
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장명</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">대표자</th>
+                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">플랜</th>
+                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">상태</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
                 </tr>
@@ -231,10 +236,7 @@ export default function MembersPage() {
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {member.businessName || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {member.ownerName || '-'}
+                      {member.name || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {member.email || '-'}
@@ -243,10 +245,30 @@ export default function MembersPage() {
                       {member.phone || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {getPlanName(member.planId)}
+                      {member.tenantCount > 0 ? (
+                        <div>
+                          <span className="font-medium">{member.tenants[0]?.brandName || '-'}</span>
+                          {member.tenantCount > 1 && (
+                            <span className="ml-1 text-xs text-gray-400">
+                              외 {member.tenantCount - 1}개
+                            </span>
+                          )}
+                        </div>
+                      ) : '-'}
                     </td>
                     <td className="px-6 py-4">
-                      {getStatusBadge(member.subscriptionStatus)}
+                      {member.tenants.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {member.tenants.slice(0, 2).map((tenant, idx) => (
+                            <span key={idx}>
+                              {getStatusBadge(tenant.status)}
+                            </span>
+                          ))}
+                          {member.tenants.length > 2 && (
+                            <span className="text-xs text-gray-400">+{member.tenants.length - 2}</span>
+                          )}
+                        </div>
+                      ) : '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
@@ -318,27 +340,27 @@ export default function MembersPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  매장명
+                  이름
                 </label>
                 <input
                   type="text"
-                  value={formData.businessName}
-                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="매장명 입력"
+                  placeholder="이름 입력"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  대표자명
+                  매장명
                 </label>
                 <input
                   type="text"
-                  value={formData.ownerName}
-                  onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                  value={formData.brandName}
+                  onChange={(e) => setFormData({ ...formData, brandName: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="대표자명 입력"
+                  placeholder="매장명 입력"
                 />
               </div>
 

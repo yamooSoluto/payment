@@ -6,17 +6,28 @@ import { ArrowLeft, User, Store, CreditCard, Save, Loader2 } from 'lucide-react'
 
 interface Member {
   id: string;
-  businessName: string;
-  ownerName: string;
   email: string;
+  name: string;
   phone: string;
-  planId: string;
-  subscriptionStatus: string;
-  subscriptionStartDate: string | null;
-  subscriptionEndDate: string | null;
-  trialEndDate: string | null;
   createdAt: string;
   memo?: string;
+}
+
+interface TenantSubscription {
+  plan: string;
+  status: string;
+  amount: number;
+  nextBillingDate: string | null;
+  currentPeriodEnd: string | null;
+}
+
+interface TenantInfo {
+  docId: string;
+  tenantId: string;
+  brandName: string;
+  address?: string;
+  createdAt: string | null;
+  subscription: TenantSubscription | null;
 }
 
 interface Payment {
@@ -24,28 +35,22 @@ interface Payment {
   amount: number;
   status: string;
   planId: string;
+  tenantId?: string;
   createdAt: string;
   paidAt: string | null;
-}
-
-interface StoreInfo {
-  id: string;
-  name: string;
-  address?: string;
 }
 
 export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [member, setMember] = useState<Member | null>(null);
+  const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [stores, setStores] = useState<StoreInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({
-    businessName: '',
-    ownerName: '',
+    name: '',
     phone: '',
     memo: '',
   });
@@ -60,11 +65,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (response.ok) {
         const data = await response.json();
         setMember(data.member);
-        setPayments(data.payments);
-        setStores(data.stores);
+        setTenants(data.tenants || []);
+        setPayments(data.payments || []);
         setFormData({
-          businessName: data.member.businessName || '',
-          ownerName: data.member.ownerName || '',
+          name: data.member.name || '',
           phone: data.member.phone || '',
           memo: data.member.memo || '',
         });
@@ -96,18 +100,29 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, size: 'sm' | 'md' = 'md') => {
+    const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
     switch (status) {
       case 'active':
-        return <span className="px-3 py-1 text-sm font-medium bg-green-100 text-green-700 rounded-full">활성</span>;
+        return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>활성</span>;
       case 'trial':
-        return <span className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-700 rounded-full">체험중</span>;
+        return <span className={`${sizeClass} font-medium bg-blue-100 text-blue-700 rounded-full`}>체험중</span>;
       case 'canceled':
-        return <span className="px-3 py-1 text-sm font-medium bg-gray-100 text-gray-700 rounded-full">해지</span>;
+        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-700 rounded-full`}>해지</span>;
       case 'past_due':
-        return <span className="px-3 py-1 text-sm font-medium bg-red-100 text-red-700 rounded-full">연체</span>;
+        return <span className={`${sizeClass} font-medium bg-red-100 text-red-700 rounded-full`}>연체</span>;
       default:
-        return <span className="px-3 py-1 text-sm font-medium bg-gray-100 text-gray-500 rounded-full">{status || '-'}</span>;
+        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-500 rounded-full`}>{status || '-'}</span>;
+    }
+  };
+
+  const getPlanName = (planId: string) => {
+    switch (planId) {
+      case 'basic': return 'Basic';
+      case 'business': return 'Business';
+      case 'enterprise': return 'Enterprise';
+      case 'trial': return 'Trial';
+      default: return planId || '-';
     }
   };
 
@@ -160,10 +175,12 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{member.businessName || '이름 없음'}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{member.name || '이름 없음'}</h1>
             <p className="text-sm text-gray-500">{member.email}</p>
           </div>
-          {getStatusBadge(member.subscriptionStatus)}
+          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+            매장 {tenants.length}개
+          </span>
         </div>
         <div className="flex gap-2">
           {editMode ? (
@@ -204,29 +221,16 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-500 mb-1">매장명</label>
+                <label className="block text-sm text-gray-500 mb-1">이름</label>
                 {editMode ? (
                   <input
                     type="text"
-                    value={formData.businessName}
-                    onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 ) : (
-                  <p className="font-medium">{member.businessName || '-'}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">대표자명</label>
-                {editMode ? (
-                  <input
-                    type="text"
-                    value={formData.ownerName}
-                    onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="font-medium">{member.ownerName || '-'}</p>
+                  <p className="font-medium">{member.name || '-'}</p>
                 )}
               </div>
               <div>
@@ -251,10 +255,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <p className="font-medium">
                   {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
                 </p>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">플랜</label>
-                <p className="font-medium">{member.planId || '-'}</p>
               </div>
             </div>
             {/* 메모 */}
@@ -321,55 +321,43 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
         {/* 사이드바 */}
         <div className="space-y-6">
-          {/* 구독 정보 */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <h2 className="text-lg font-semibold mb-4">구독 정보</h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-500">상태</span>
-                {getStatusBadge(member.subscriptionStatus)}
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">시작일</span>
-                <span className="font-medium">
-                  {member.subscriptionStartDate
-                    ? new Date(member.subscriptionStartDate).toLocaleDateString('ko-KR')
-                    : '-'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">종료일</span>
-                <span className="font-medium">
-                  {member.subscriptionEndDate
-                    ? new Date(member.subscriptionEndDate).toLocaleDateString('ko-KR')
-                    : '-'}
-                </span>
-              </div>
-              {member.trialEndDate && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">체험 종료</span>
-                  <span className="font-medium">
-                    {new Date(member.trialEndDate).toLocaleDateString('ko-KR')}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* 매장 목록 */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-4">
               <Store className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-semibold">매장 목록</h2>
             </div>
-            {stores.length === 0 ? (
+            {tenants.length === 0 ? (
               <p className="text-gray-500 text-center py-4">등록된 매장이 없습니다.</p>
             ) : (
-              <ul className="space-y-2">
-                {stores.map((store) => (
-                  <li key={store.id} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="font-medium">{store.name}</p>
-                    {store.address && <p className="text-sm text-gray-500">{store.address}</p>}
+              <ul className="space-y-3">
+                {tenants.map((tenant) => (
+                  <li key={tenant.tenantId} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-start justify-between">
+                      <p className="font-medium text-gray-900">{tenant.brandName}</p>
+                      {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
+                    </div>
+                    {tenant.address && <p className="text-sm text-gray-500 mt-1">{tenant.address}</p>}
+                    {tenant.subscription && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>플랜</span>
+                          <span className="font-medium">{getPlanName(tenant.subscription.plan)}</span>
+                        </div>
+                        {tenant.subscription.amount > 0 && (
+                          <div className="flex justify-between">
+                            <span>금액</span>
+                            <span>{tenant.subscription.amount.toLocaleString()}원/월</span>
+                          </div>
+                        )}
+                        {tenant.subscription.nextBillingDate && (
+                          <div className="flex justify-between">
+                            <span>다음 결제일</span>
+                            <span>{new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

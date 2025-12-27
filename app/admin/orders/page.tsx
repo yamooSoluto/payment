@@ -9,6 +9,8 @@ interface Order {
   id: string;
   email: string;
   amount: number;
+  refundedAmount?: number;
+  remainingAmount?: number;
   status: string;
   plan: string;
   type: OrderType;
@@ -149,7 +151,9 @@ export default function OrdersPage() {
 
   const handleOpenRefundModal = (order: Order) => {
     setSelectedOrder(order);
-    setRefundAmount(order.amount?.toString() || '');
+    // 환불 가능 금액 (remainingAmount가 있으면 사용, 없으면 amount 사용)
+    const refundableAmount = order.remainingAmount ?? order.amount;
+    setRefundAmount(refundableAmount?.toString() || '');
     setRefundReason('');
     setShowRefundModal(true);
   };
@@ -163,8 +167,10 @@ export default function OrdersPage() {
       return;
     }
 
-    if (amount > (selectedOrder.amount || 0)) {
-      alert('환불 금액이 결제 금액보다 클 수 없습니다.');
+    // 환불 가능 금액 검증 (이미 환불된 금액 고려)
+    const maxRefundable = selectedOrder.remainingAmount ?? selectedOrder.amount ?? 0;
+    if (amount > maxRefundable) {
+      alert(`환불 가능 금액(${maxRefundable.toLocaleString()}원)을 초과했습니다.`);
       return;
     }
 
@@ -337,10 +343,10 @@ export default function OrdersPage() {
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장명</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">플랜</th>
-                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">유형</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">결제유형</th>
                   <th className="text-right px-6 py-4 text-sm font-medium text-gray-500">금액</th>
-                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">상태</th>
-                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">관리</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">결제상태</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">환불</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -357,26 +363,52 @@ export default function OrdersPage() {
                       {order.memberInfo?.businessName || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {order.memberInfo?.ownerName || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
                       {order.memberInfo?.email || order.email || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {getPlanName(order.plan)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
-                      {order.amount?.toLocaleString()}원
+                    <td className="px-6 py-4 text-center">
+                      {getTypeBadge(order.type)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-right font-medium">
+                      <span className={order.amount < 0 ? 'text-red-600' : 'text-gray-900'}>
+                        {order.amount?.toLocaleString()}원
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {getStatusBadge(order.status)}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {order.isTest ? (
-                        <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">테스트</span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      {(() => {
+                        const remainingAmount = order.remainingAmount ?? order.amount ?? 0;
+                        const hasPartialRefund = (order.refundedAmount ?? 0) > 0 && remainingAmount > 0;
+                        const isCompleted = order.status === 'completed' || order.status === 'done';
+                        const isRefundType = order.type === 'refund' || order.type === 'cancel_refund';
+
+                        if (isCompleted && !isRefundType && remainingAmount > 0) {
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              {hasPartialRefund && (
+                                <span className="text-xs text-orange-600">부분환불됨</span>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenRefundModal(order);
+                                }}
+                                className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
+                              >
+                                환불하기
+                              </button>
+                            </div>
+                          );
+                        } else if (order.status === 'refunded' || (isCompleted && remainingAmount === 0)) {
+                          return <span className="text-xs text-gray-400">환불완료</span>;
+                        } else {
+                          return <span className="text-gray-400">-</span>;
+                        }
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -414,6 +446,119 @@ export default function OrdersPage() {
           </div>
         )}
       </div>
+
+      {/* 환불 모달 */}
+      {showRefundModal && selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowRefundModal(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <button
+              onClick={() => setShowRefundModal(false)}
+              className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+
+            <h3 className="text-lg font-bold text-gray-900 mb-4">결제 취소/환불</h3>
+
+            {/* 주문 정보 */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">매장명</span>
+                <span className="font-medium">{selectedOrder.memberInfo?.businessName || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">이메일</span>
+                <span className="font-medium">{selectedOrder.memberInfo?.email || selectedOrder.email || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">플랜</span>
+                <span className="font-medium">{getPlanName(selectedOrder.plan)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">결제 금액</span>
+                <span className="font-medium">{selectedOrder.amount?.toLocaleString()}원</span>
+              </div>
+              {(selectedOrder.refundedAmount ?? 0) > 0 && (
+                <>
+                  <div className="flex justify-between text-orange-600">
+                    <span>이미 환불된 금액</span>
+                    <span className="font-medium">-{selectedOrder.refundedAmount?.toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
+                    <span className="text-gray-700 font-medium">환불 가능 금액</span>
+                    <span className="font-bold text-blue-600">{selectedOrder.remainingAmount?.toLocaleString()}원</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 환불 금액 입력 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                환불 금액
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={refundAmount}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setRefundAmount(value ? parseInt(value).toLocaleString() : '');
+                  }}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="환불할 금액 입력"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">원</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                최대 환불 가능 금액: {(selectedOrder.remainingAmount ?? selectedOrder.amount)?.toLocaleString()}원
+              </p>
+            </div>
+
+            {/* 환불 사유 입력 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                환불 사유
+              </label>
+              <textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="환불 사유를 입력하세요 (선택)"
+              />
+            </div>
+
+            {/* 버튼 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRefundModal(false)}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRefund}
+                disabled={isRefunding || !refundAmount}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isRefunding ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    처리 중...
+                  </>
+                ) : (
+                  '환불 처리'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

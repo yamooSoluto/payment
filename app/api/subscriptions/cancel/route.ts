@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
     if (isImmediate) {
       // 즉시 취소: 환불 처리 후 즉시 만료
       let refundResult = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let latestPayment: any = null;
+      let latestPaymentId: string | null = null;
 
       // 환불 금액이 있으면 부분 취소 시도
       if (refundAmount && refundAmount > 0) {
@@ -68,8 +71,6 @@ export async function POST(request: NextRequest) {
           .get();
 
         // 가장 최근 결제 찾기
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let latestPayment: any = null;
         let latestDate = new Date(0);
 
         paymentsSnapshot.docs.forEach((doc) => {
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
           if (createdAt > latestDate) {
             latestDate = createdAt;
             latestPayment = payment;
+            latestPaymentId = doc.id;
           }
         });
 
@@ -129,6 +131,7 @@ export async function POST(request: NextRequest) {
             type: 'refund',
             status: 'done',
             refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,
+            originalPaymentId: latestPaymentId,  // 원결제 ID 연결
             paidAt: now,
             createdAt: now,
           });

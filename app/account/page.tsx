@@ -82,7 +82,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         // 첫 번째 tenant에서 사용자 정보 가져오기
         const firstTenantData = tenantsSnapshot.docs[0].data();
         userInfo = {
-          name: firstTenantData.name || '',
+          name: firstTenantData.name || firstTenantData.ownerName || '',
           phone: firstTenantData.phone || '',
         };
 

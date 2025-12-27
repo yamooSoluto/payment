@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
         let refundResult = null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let latestPayment: any = null;
+        let latestPaymentId: string | null = null;
 
         // 환불 금액이 있으면 부분 취소 시도
         if (refundAmount && refundAmount > 0) {
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
             if (createdAt > latestDate) {
               latestDate = createdAt;
               latestPayment = payment;
+              latestPaymentId = doc.id;
             }
           });
 
@@ -163,6 +165,7 @@ export async function POST(request: NextRequest) {
               type: 'refund',
               status: 'done',
               refundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
+              originalPaymentId: latestPaymentId,  // 원결제 ID 연결
               paidAt: now,
               createdAt: now,
             });
