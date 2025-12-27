@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, AlertCircle, Clock } from 'lucide-react';
+import { Calendar, WarningCircle, Clock } from 'iconoir-react';
 import { formatPrice, formatDate, getStatusText, getStatusColor, calculateDaysLeft } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
 import CancelModal from './CancelModal';
@@ -198,7 +198,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         {isTrial && subscription.trialEndDate && (
           <div className="bg-blue-50 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2 text-blue-700">
-              <Calendar className="w-5 h-5" />
+              <Calendar width={20} height={20} strokeWidth={1.5} />
               <span className="font-medium">
                 무료체험 {calculateDaysLeft(subscription.trialEndDate)}일 남음
               </span>
@@ -213,7 +213,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         {isActive && (
           <div className="space-y-4 mb-6">
             <div className="flex items-center gap-3 text-gray-600">
-              <Calendar className="w-5 h-5 text-gray-400" />
+              <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
               <div>
                 <p className="text-sm text-gray-500">이용기간</p>
                 <p className="font-medium">
@@ -228,7 +228,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               </div>
             </div>
             <div className="flex items-center gap-3 text-gray-600">
-              <Calendar className="w-5 h-5 text-gray-400" />
+              <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
               <div>
                 <p className="text-sm text-gray-500">다음 결제일</p>
                 <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
@@ -242,7 +242,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           <div className="bg-blue-50 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-blue-700">
-                <Clock className="w-5 h-5" />
+                <Clock width={20} height={20} strokeWidth={1.5} />
                 <div>
                   <span className="font-medium">예약된 플랜 변경</span>
                   <p className="text-sm text-blue-600 mt-0.5">
@@ -267,7 +267,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         {isPastDue && (
           <div className="bg-red-50 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-5 h-5" />
+              <WarningCircle width={20} height={20} strokeWidth={1.5} />
               <span className="font-medium">결제 실패</span>
             </div>
             <p className="text-sm text-red-600 mt-1">
@@ -293,7 +293,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         {isExpired && (
           <div className="bg-orange-50 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2 text-orange-700">
-              <AlertCircle className="w-5 h-5" />
+              <WarningCircle width={20} height={20} strokeWidth={1.5} />
               <span className="font-medium">구독이 만료되었습니다</span>
             </div>
             <p className="text-sm text-orange-600 mt-1">
@@ -315,17 +315,17 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           {isActive && (
             <a
               href={`/account/change-plan?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
-              className="btn-primary"
+              className="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
             >
-              플랜 변경하기
+              플랜 변경
             </a>
           )}
           {isActive && (
             <button
               onClick={() => setShowCancelModal(true)}
-              className="btn-secondary text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+              className="border-2 border-black text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:border-yamoo-primary transition-all duration-200"
             >
-              구독 해지하기
+              구독 해지
             </button>
           )}
           {isPastDue && (

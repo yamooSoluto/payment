@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
 import Link from 'next/link';
-import { ArrowLeft, Check } from 'lucide-react';
+import { NavArrowLeft, Check } from 'iconoir-react';
 import { PLAN_PRICES, getPlanName } from '@/lib/toss';
 import ChangePlanButton from '@/components/account/ChangePlanButton';
 
@@ -111,7 +111,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
           href={`/account/${tenantId}?${authParam}`}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
           매장 구독 관리로 돌아가기
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">플랜 변경</h1>
@@ -166,7 +166,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
               <ul className="space-y-3 mb-6 flex-grow">
                 {plan.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-2">
-                    <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <Check width={20} height={20} strokeWidth={1.5} className="text-green-500 flex-shrink-0 mt-0.5" />
                     <span className="text-gray-600 text-sm">{feature}</span>
                   </li>
                 ))}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Check, X } from 'lucide-react';
+import { NavArrowDown, NavArrowUp, Check, Xmark } from 'iconoir-react';
 import React from 'react';
 
 const features = [
@@ -44,9 +44,9 @@ export default function ComparisonTable() {
   const renderCell = (value: boolean | string) => {
     if (typeof value === 'boolean') {
       return value ? (
-        <Check className="w-5 h-5 text-green-500 mx-auto" />
+        <Check width={20} height={20} strokeWidth={1.5} className="text-green-500 mx-auto" />
       ) : (
-        <X className="w-5 h-5 text-gray-300 mx-auto" />
+        <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-300 mx-auto" />
       );
     }
     return <span className="text-sm text-gray-700">{value}</span>;
@@ -61,12 +61,12 @@ export default function ComparisonTable() {
         {isOpen ? (
           <>
             <span>상세 기능 비교표 접기</span>
-            <ChevronUp className="w-5 h-5" />
+            <NavArrowUp width={20} height={20} strokeWidth={1.5} />
           </>
         ) : (
           <>
             <span>상세 기능 비교표 보기</span>
-            <ChevronDown className="w-5 h-5" />
+            <NavArrowDown width={20} height={20} strokeWidth={1.5} />
           </>
         )}
       </button>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { Xmark } from 'iconoir-react';
+import { Loader2 } from 'lucide-react';
 
 interface DynamicTermsModalProps {
   type: 'terms' | 'privacy';
@@ -45,7 +46,7 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <Xmark width={20} height={20} strokeWidth={1.5} />
           </button>
         </div>
 

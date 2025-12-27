@@ -22,7 +22,7 @@ export function formatDate(date: Date | string | { toDate?: () => Date }): strin
     d = date as Date;
   }
 
-  return format(d, 'yyyy년 MM월 dd일', { locale: ko });
+  return format(d, 'yyyy-MM-dd', { locale: ko });
 }
 
 export function calculateDaysLeft(endDate: Date | string | { toDate?: () => Date }): number {

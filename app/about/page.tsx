@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Check, X, Loader2 } from 'lucide-react';
+import { NavArrowRight, Check, Xmark } from 'iconoir-react';
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 // n8n 웹훅 URL
@@ -299,19 +300,19 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-3 gap-3 sm:gap-6 mb-8 sm:mb-12">
             <div className="bg-gray-900 rounded-xl py-4 px-4 sm:py-6 sm:px-6">
               <p className="text-white text-sm sm:text-lg">
-                <Check className="inline w-4 h-4 sm:w-5 sm:h-5 text-green-400 mr-1 sm:mr-2" />
+                <Check width={16} height={16} strokeWidth={1.5} className="inline text-green-400 mr-1 sm:mr-2 sm:w-5 sm:h-5" />
                 빠르고 정확하게 <span className="font-bold">알려주고</span>
               </p>
             </div>
             <div className="bg-gray-900 rounded-xl py-4 px-4 sm:py-6 sm:px-6">
               <p className="text-white text-sm sm:text-lg">
-                <Check className="inline w-4 h-4 sm:w-5 sm:h-5 text-green-400 mr-1 sm:mr-2" />
+                <Check width={16} height={16} strokeWidth={1.5} className="inline text-green-400 mr-1 sm:mr-2 sm:w-5 sm:h-5" />
                 고객의 목소리를 <span className="font-bold">들어주고</span>
               </p>
             </div>
             <div className="bg-gray-900 rounded-xl py-4 px-4 sm:py-6 sm:px-6">
               <p className="text-white text-sm sm:text-lg">
-                <Check className="inline w-4 h-4 sm:w-5 sm:h-5 text-green-400 mr-1 sm:mr-2" />
+                <Check width={16} height={16} strokeWidth={1.5} className="inline text-green-400 mr-1 sm:mr-2 sm:w-5 sm:h-5" />
                 문제해결을 <span className="font-bold">약속하고</span>
               </p>
             </div>
@@ -335,7 +336,7 @@ export default function AboutPage() {
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤷</div>
               <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
-                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 즉각 대응 보장이 안 돼요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -347,7 +348,7 @@ export default function AboutPage() {
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤯</div>
               <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
-                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 감정이 개입되기 쉬워요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -359,7 +360,7 @@ export default function AboutPage() {
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤖</div>
               <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
-                <X className="inline w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 빠른 답변, 그러나 융통성이 없어요
               </p>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -1060,7 +1061,7 @@ export default function AboutPage() {
               className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
             >
               구독 바로가기
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              <NavArrowRight width={16} height={16} strokeWidth={1.5} className="sm:w-5 sm:h-5" />
             </Link>
           </div>
         </div>

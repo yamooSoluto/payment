@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Zap, Calendar, X } from 'lucide-react';
+import { Flash, Calendar, Xmark } from 'iconoir-react';
 
 interface ChangePlanButtonProps {
   newPlan: string;
@@ -144,7 +144,7 @@ export default function ChangePlanButton({
                 onClick={() => setShowModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5" />
+                <Xmark width={20} height={20} strokeWidth={1.5} />
               </button>
             </div>
 
@@ -161,7 +161,7 @@ export default function ChangePlanButton({
               >
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Zap className="w-5 h-5 text-yellow-600" />
+                    <Flash width={20} height={20} strokeWidth={1.5} className="text-yellow-600" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900 mb-1">즉시 변경</h4>
@@ -204,7 +204,7 @@ export default function ChangePlanButton({
               >
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <Calendar width={20} height={20} strokeWidth={1.5} className="text-blue-600" />
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900 mb-1">예약 변경</h4>

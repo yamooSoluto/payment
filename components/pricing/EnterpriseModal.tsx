@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Loader2, Building2, CheckCircle } from 'lucide-react';
+import { Xmark, Building, CheckCircle } from 'iconoir-react';
+import { Loader2 } from 'lucide-react';
 
 interface EnterpriseModalProps {
   isOpen: boolean;
@@ -121,7 +122,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-gray-900 to-gray-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-yamoo-primary rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-gray-900" />
+              <Building width={20} height={20} strokeWidth={1.5} className="text-gray-900" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-white">Enterprise 문의</h2>
@@ -132,7 +133,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
             onClick={handleClose}
             className="p-2 hover:bg-white/10 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-white" />
+            <Xmark width={20} height={20} strokeWidth={1.5} className="text-white" />
           </button>
         </div>
 
@@ -141,7 +142,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
           {isSuccess ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+                <CheckCircle width={32} height={32} strokeWidth={1.5} className="text-green-600" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">
                 문의가 접수되었습니다!

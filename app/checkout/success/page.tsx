@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle } from 'iconoir-react';
 import { Suspense } from 'react';
 
 // 플랜 이름 (클라이언트용)
@@ -37,7 +37,7 @@ function SuccessContent() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-10 h-10 text-green-500" />
+          <CheckCircle width={40} height={40} strokeWidth={1.5} className="text-green-500" />
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">

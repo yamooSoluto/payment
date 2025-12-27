@@ -1,6 +1,6 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check } from 'iconoir-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -99,7 +99,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
         <ul className="space-y-3 mb-6 flex-1">
           {plan.features.map((feature, index) => (
             <li key={index} className="flex items-start gap-2">
-              <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+              <Check width={20} height={20} strokeWidth={1.5} className="text-green-500 flex-shrink-0 mt-0.5" />
               <span className="text-gray-600 text-sm">{feature}</span>
             </li>
           ))}

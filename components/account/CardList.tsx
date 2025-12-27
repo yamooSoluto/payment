@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { CreditCard, Check, Trash2, Plus, Loader2, AlertCircle, Pencil, X } from 'lucide-react';
+import { CreditCard, Check, Trash, Plus, WarningCircle, EditPencil, Xmark } from 'iconoir-react';
+import { Loader2 } from 'lucide-react';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 
 interface CardInfo {
@@ -241,7 +242,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
 
       {error && (
         <div className="mb-3 p-2 text-red-500 text-xs flex items-center gap-1.5">
-          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          <WarningCircle width={14} height={14} strokeWidth={1.5} className="flex-shrink-0" />
           {error}
         </div>
       )}
@@ -250,7 +251,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
       <div className="space-y-2 mb-4">
         {cards.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            <CreditCard className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+            <CreditCard width={40} height={40} strokeWidth={1.5} className="mx-auto mb-2 text-gray-300" />
             <p className="text-sm">등록된 카드가 없습니다.</p>
           </div>
         ) : (
@@ -263,7 +264,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
                 /* 별칭 수정 모드 */
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-gray-400" />
+                    <CreditCard width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
                     <span className="text-sm font-medium text-gray-900">
                       {card.cardInfo.number}
                     </span>
@@ -292,56 +293,54 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
                       onClick={cancelEditing}
                       className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
                     >
-                      <X className="w-4 h-4" />
+                      <Xmark width={16} height={16} strokeWidth={1.5} />
                     </button>
                   </div>
                 </div>
               ) : (
                 /* 일반 보기 모드 */
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900">
-                          {card.cardInfo.number}
-                        </span>
-                        {card.isPrimary && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
-                            <Check className="w-3 h-3" />
-                            기본 카드
-                          </span>
-                        )}
-                      </div>
-                      {card.alias && (
-                        <p className="text-xs text-gray-500">{card.alias}</p>
-                      )}
+                <div className="flex items-start justify-between">
+                  {/* 왼쪽: 카드 정보 */}
+                  <div className="flex items-start gap-3">
+                    <CreditCard width={20} height={20} strokeWidth={1.5} className="text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <span className="text-sm font-medium text-gray-900">
+                        {card.cardInfo.number}
+                      </span>
+                      <p className="text-xs text-gray-500">{card.alias || card.cardInfo.company}</p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1">
-                    {!card.isPrimary && (
+                  {/* 오른쪽: 아이콘 + 기본카드/기본설정 */}
+                  <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    {card.isPrimary ? (
+                      <span className="order-2 sm:order-1 inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                        <Check width={12} height={12} strokeWidth={2} />
+                        기본 카드
+                      </span>
+                    ) : (
                       <button
                         onClick={() => handleSetPrimary(card.id)}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                        className="order-2 sm:order-1 px-2 py-0.5 text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                       >
                         기본 설정
                       </button>
                     )}
-                    <button
-                      onClick={() => startEditing(card)}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                      title="별칭 수정"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCard(card.id)}
-                      disabled={card.isPrimary && cards.length === 1}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="order-1 sm:order-2 flex items-center gap-1">
+                      <button
+                        onClick={() => startEditing(card)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                        title="별칭 수정"
+                      >
+                        <EditPencil width={16} height={16} strokeWidth={1.5} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCard(card.id)}
+                        disabled={card.isPrimary && cards.length === 1}
+                        className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash width={16} height={16} strokeWidth={1.5} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -391,7 +390,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
               onClick={() => setShowAddForm(true)}
               className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center gap-1"
             >
-              <Plus className="w-4 h-4" />
+              <Plus width={16} height={16} strokeWidth={1.5} />
               카드 추가
             </button>
           )}

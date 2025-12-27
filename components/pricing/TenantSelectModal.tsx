@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Store, Sparkles, CreditCard } from 'lucide-react';
+import { Xmark, Sofa, Sparks, CreditCard } from 'iconoir-react';
 import { cn } from '@/lib/utils';
 
 interface Tenant {
@@ -69,7 +69,7 @@ export default function TenantSelectModal({
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
           </button>
         </div>
 
@@ -94,8 +94,8 @@ export default function TenantSelectModal({
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center">
-                      <Store className="w-5 h-5 text-yamoo-primary" />
+                    <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
+                      <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-gray-900">
@@ -126,7 +126,7 @@ export default function TenantSelectModal({
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-yamoo-primary rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-6 h-6 text-white" />
+                    <Sparks width={24} height={24} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div>
                     <p className="font-bold text-gray-900 text-lg">
@@ -147,7 +147,7 @@ export default function TenantSelectModal({
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CreditCard className="w-6 h-6 text-gray-600" />
+                    <CreditCard width={24} height={24} strokeWidth={1.5} className="text-gray-600" />
                   </div>
                   <div>
                     <p className="font-bold text-gray-900 text-lg">

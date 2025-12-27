@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { verifyToken, getSubscription, getTenantInfo } from '@/lib/auth';
 import { getPlanAmount, getPlanName } from '@/lib/toss';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
-import { ArrowLeft, Shield, Lock, Store, AlertCircle } from 'lucide-react';
+import { NavArrowLeft, Shield, Lock, Shop, WarningCircle } from 'iconoir-react';
 import Link from 'next/link';
 
 interface CheckoutPageProps {
@@ -113,7 +113,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         href={isUpgradeMode ? `/account/change-plan?${authParam}` : `/pricing?${authParam}`}
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
         {isUpgradeMode ? '플랜 변경으로 돌아가기' : '요금제 선택으로 돌아가기'}
       </Link>
 
@@ -132,7 +132,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* 에러 메시지 */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <WarningCircle width={20} height={20} strokeWidth={1.5} className="text-red-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-medium text-red-800">결제 오류</p>
             <p className="text-sm text-red-600 mt-1">
@@ -146,7 +146,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {tenantInfo && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-3">
           <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Store className="w-5 h-5 text-yamoo-primary" />
+            <Shop width={20} height={20} strokeWidth={1.5} className="text-yamoo-primary" />
           </div>
           <div>
             <p className="text-sm text-gray-500">적용 매장</p>
@@ -192,11 +192,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* Security Badges */}
       <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-gray-500">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-green-500" />
+          <Shield width={16} height={16} strokeWidth={1.5} className="text-green-500" />
           <span>안전결제</span>
         </div>
         <div className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-green-500" />
+          <Lock width={16} height={16} strokeWidth={1.5} className="text-green-500" />
           <span>SSL 암호화 적용</span>
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CreditCard } from 'lucide-react';
+import { CreditCard } from 'iconoir-react';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 
 interface ChangeCardButtonProps {
@@ -87,7 +87,7 @@ export default function ChangeCardButton({ email, authParam, currentAlias, tenan
           </span>
         ) : (
           <>
-            <CreditCard className="w-5 h-5" />
+            <CreditCard width={20} height={20} strokeWidth={1.5} />
             카드 변경하기
           </>
         )}

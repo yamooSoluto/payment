@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { XCircle, ArrowLeft, Mail } from 'lucide-react';
+import { XmarkCircle, NavArrowLeft, Mail } from 'iconoir-react';
 
 interface FailPageProps {
   searchParams: Promise<{ error?: string; message?: string }>;
@@ -27,7 +27,7 @@ export default async function FailPage({ searchParams }: FailPageProps) {
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="text-center max-w-md">
         <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <XCircle className="w-10 h-10 text-red-500" />
+          <XmarkCircle width={40} height={40} strokeWidth={1.5} className="text-red-500" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-4">
           결제 실패
@@ -50,7 +50,7 @@ export default async function FailPage({ searchParams }: FailPageProps) {
             href="javascript:history.back()"
             className="btn-primary inline-flex items-center justify-center gap-2"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
             다시 시도하기
           </Link>
           <a

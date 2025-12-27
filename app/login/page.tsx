@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle } from 'iconoir-react';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
@@ -135,7 +135,7 @@ export default function LoginPage() {
           {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <WarningCircle width={20} height={20} strokeWidth={1.5} className="flex-shrink-0" />
               <span className="text-sm">{error}</span>
             </div>
           )}
@@ -179,7 +179,7 @@ export default function LoginPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? <EyeClosed width={20} height={20} strokeWidth={1.5} /> : <Eye width={20} height={20} strokeWidth={1.5} />}
                   </button>
                 </div>
               </div>

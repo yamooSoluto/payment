@@ -5,7 +5,7 @@ import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
 import CardList from '@/components/account/CardList';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Sofa } from 'lucide-react';
+import { NavArrowLeft, NavArrowRight, Sofa } from 'iconoir-react';
 
 interface TenantPageProps {
   params: Promise<{ tenantId: string }>;
@@ -116,7 +116,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
         href={`/account?${authParam}`}
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-6 transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
         매장 목록으로 돌아가기
       </Link>
 
@@ -124,7 +124,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
-            <Sofa className="w-5 h-5 text-white" />
+            <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">{tenantData.brandName || '매장'}</h1>
         </div>
@@ -153,7 +153,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
           /* 구독이 없을 때 */
           <div className="bg-white rounded-xl shadow-lg p-8 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sofa className="w-8 h-8 text-gray-400" />
+              <Sofa width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-6">
               이 매장에 구독 중인 플랜이 없습니다
@@ -163,7 +163,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
               className="btn-primary inline-flex items-center gap-2"
             >
               요금제 보기
-              <ArrowRight className="w-5 h-5" />
+              <NavArrowRight width={20} height={20} strokeWidth={1.5} />
             </Link>
           </div>
         )}

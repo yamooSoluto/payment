@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, Menu, X } from 'lucide-react';
+import { LogOut, Menu, Xmark } from 'iconoir-react';
 import { useState } from 'react';
 
 export default function Header() {
@@ -64,7 +64,7 @@ export default function Header() {
                         onClick={handleSignOut}
                         className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors"
                       >
-                        <LogOut className="w-4 h-4" />
+                        <LogOut width={16} height={16} strokeWidth={1.5} />
                       </button>
                     </div>
                   </>
@@ -95,9 +95,9 @@ export default function Header() {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? (
-                <X className="w-6 h-6 text-gray-600" />
+                <Xmark width={24} height={24} strokeWidth={1.5} className="text-gray-600" />
               ) : (
-                <Menu className="w-6 h-6 text-gray-600" />
+                <Menu width={24} height={24} strokeWidth={1.5} className="text-gray-600" />
               )}
             </button>
           </div>
@@ -139,7 +139,7 @@ export default function Header() {
                       }}
                       className="flex items-center gap-2 text-red-500"
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut width={16} height={16} strokeWidth={1.5} />
                       로그아웃
                     </button>
                   </div>

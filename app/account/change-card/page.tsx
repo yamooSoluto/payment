@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
 import Link from 'next/link';
-import { ArrowLeft, CreditCard } from 'lucide-react';
+import { NavArrowLeft, CreditCard } from 'iconoir-react';
 import ChangeCardButton from '@/components/account/ChangeCardButton';
 
 interface ChangeCardPageProps {
@@ -49,7 +49,7 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
           href={`/account/${tenantId}?${authParam}`}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
           매장 구독 관리로 돌아가기
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">결제 카드 변경</h1>
@@ -61,7 +61,7 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
         <h2 className="text-lg font-semibold text-gray-900 mb-4">현재 등록된 카드</h2>
         <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
           <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-            <CreditCard className="w-6 h-6 text-gray-500" />
+            <CreditCard width={24} height={24} strokeWidth={1.5} className="text-gray-500" />
           </div>
           <div>
             <p className="font-medium text-gray-900">

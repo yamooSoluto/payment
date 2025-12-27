@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
-import { ChevronDown, ChevronUp, Receipt, CheckCircle, XCircle, FileText, MinusCircle, Filter, Download, FileDown, Loader2 } from 'lucide-react';
+import { NavArrowDown, NavArrowUp, Journal, CheckCircle, XmarkCircle, Page, MinusCircle, Filter, Download } from 'iconoir-react';
 
 interface Payment {
   id: string;
@@ -25,7 +25,7 @@ interface PaymentHistoryProps {
   payments: Payment[];
 }
 
-type FilterPeriod = 'all' | 'month' | '3months';
+type FilterPeriod = 'all' | 'month' | '3months' | 'custom';
 type FilterStatus = 'all' | 'done' | 'refund' | 'canceled';
 
 export default function PaymentHistory({ payments }: PaymentHistoryProps) {
@@ -33,7 +33,8 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<FilterPeriod>('all');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
-  const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // 필터링된 결제 내역
   const filteredPayments = useMemo(() => {
@@ -41,19 +42,35 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
 
     // 기간 필터
     if (periodFilter !== 'all') {
-      const now = new Date();
-      const filterDate = new Date();
+      if (periodFilter === 'custom') {
+        // 직접 입력
+        if (customStartDate || customEndDate) {
+          result = result.filter((p) => {
+            const paymentDate = new Date(p.paidAt || p.createdAt);
+            if (customStartDate && paymentDate < new Date(customStartDate)) return false;
+            if (customEndDate) {
+              const endDate = new Date(customEndDate);
+              endDate.setHours(23, 59, 59, 999);
+              if (paymentDate > endDate) return false;
+            }
+            return true;
+          });
+        }
+      } else {
+        const now = new Date();
+        const filterDate = new Date();
 
-      if (periodFilter === 'month') {
-        filterDate.setMonth(now.getMonth() - 1);
-      } else if (periodFilter === '3months') {
-        filterDate.setMonth(now.getMonth() - 3);
+        if (periodFilter === 'month') {
+          filterDate.setMonth(now.getMonth() - 1);
+        } else if (periodFilter === '3months') {
+          filterDate.setMonth(now.getMonth() - 3);
+        }
+
+        result = result.filter((p) => {
+          const paymentDate = new Date(p.paidAt || p.createdAt);
+          return paymentDate >= filterDate;
+        });
       }
-
-      result = result.filter((p) => {
-        const paymentDate = new Date(p.paidAt || p.createdAt);
-        return paymentDate >= filterDate;
-      });
     }
 
     // 상태 필터
@@ -66,9 +83,9 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
     }
 
     return result;
-  }, [payments, periodFilter, statusFilter]);
+  }, [payments, periodFilter, statusFilter, customStartDate, customEndDate]);
 
-  const hasActiveFilters = periodFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = periodFilter !== 'all' || statusFilter !== 'all' || customStartDate || customEndDate;
 
   const displayPayments = showAll ? filteredPayments : filteredPayments.slice(0, 5);
 
@@ -111,43 +128,17 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
     URL.revokeObjectURL(url);
   };
 
-  // 인보이스 PDF 다운로드 함수
-  const downloadInvoice = async (paymentId: string) => {
-    setDownloadingInvoice(paymentId);
-    try {
-      const response = await fetch(`/api/invoices/${paymentId}`);
-      if (!response.ok) {
-        throw new Error('Failed to download invoice');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `invoice_${paymentId.substring(0, 15)}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Invoice download failed:', error);
-      alert('인보이스 다운로드에 실패했습니다.');
-    } finally {
-      setDownloadingInvoice(null);
-    }
-  };
-
   const getStatusIcon = (status: string, type?: string) => {
     if (type === 'refund') {
-      return <MinusCircle className="w-4 h-4 text-red-500" />;
+      return <MinusCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
     }
     switch (status) {
       case 'done':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
+        return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-green-500" />;
       case 'canceled':
-        return <XCircle className="w-4 h-4 text-gray-400" />;
+        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-gray-400" />;
       case 'failed':
-        return <XCircle className="w-4 h-4 text-red-500" />;
+        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
       default:
         return null;
     }
@@ -171,7 +162,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
         <h2 className="text-xl font-bold text-gray-900 mb-4">결제 내역</h2>
         <div className="text-center py-8 text-gray-500">
-          <Receipt className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <Journal width={48} height={48} strokeWidth={1.5} className="mx-auto mb-3 text-gray-300" />
           <p>결제 내역이 없습니다.</p>
         </div>
       </div>
@@ -189,7 +180,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
               className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               title="CSV 다운로드"
             >
-              <Download className="w-4 h-4" />
+              <Download width={16} height={16} strokeWidth={1.5} />
               내보내기
             </button>
           )}
@@ -201,7 +192,7 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <Filter className="w-4 h-4" />
+            <Filter width={16} height={16} strokeWidth={1.5} />
             필터
             {hasActiveFilters && (
               <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-xs">
@@ -217,15 +208,22 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
         <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1.5 block">기간</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {[
                 { value: 'all' as const, label: '전체' },
                 { value: 'month' as const, label: '최근 1개월' },
                 { value: '3months' as const, label: '최근 3개월' },
+                { value: 'custom' as const, label: '직접 입력' },
               ].map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setPeriodFilter(option.value)}
+                  onClick={() => {
+                    setPeriodFilter(option.value);
+                    if (option.value !== 'custom') {
+                      setCustomStartDate('');
+                      setCustomEndDate('');
+                    }
+                  }}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                     periodFilter === option.value
                       ? 'bg-yamoo-primary text-white'
@@ -236,6 +234,23 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                 </button>
               ))}
             </div>
+            {periodFilter === 'custom' && (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-yamoo-primary"
+                />
+                <span className="text-gray-400">~</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-yamoo-primary"
+                />
+              </div>
+            )}
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1.5 block">상태</label>
@@ -265,6 +280,8 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
               onClick={() => {
                 setPeriodFilter('all');
                 setStatusFilter('all');
+                setCustomStartDate('');
+                setCustomEndDate('');
               }}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
@@ -322,32 +339,16 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
                 }`}>
                   {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
                 </span>
-                {payment.status === 'done' && (
-                  <>
-                    {payment.receiptUrl && (
-                      <a
-                        href={payment.receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                        title="영수증 보기"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => downloadInvoice(payment.id)}
-                      disabled={downloadingInvoice === payment.id}
-                      className="text-gray-400 hover:text-yamoo-primary transition-colors disabled:opacity-50"
-                      title="인보이스 다운로드"
-                    >
-                      {downloadingInvoice === payment.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <FileDown className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </>
+                {payment.status === 'done' && payment.receiptUrl && (
+                  <a
+                    href={payment.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                    title="영수증 보기"
+                  >
+                    <Page width={14} height={14} strokeWidth={1.5} />
+                  </a>
                 )}
               </div>
             </div>
@@ -362,11 +363,11 @@ export default function PaymentHistory({ payments }: PaymentHistoryProps) {
         >
           {showAll ? (
             <>
-              접기 <ChevronUp className="w-4 h-4" />
+              접기 <NavArrowUp width={16} height={16} strokeWidth={1.5} />
             </>
           ) : (
             <>
-              더 보기 ({filteredPayments.length - 5}건) <ChevronDown className="w-4 h-4" />
+              더 보기 ({filteredPayments.length - 5}건) <NavArrowDown width={16} height={16} strokeWidth={1.5} />
             </>
           )}
         </button>

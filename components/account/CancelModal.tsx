@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, Calendar, Zap } from 'lucide-react';
+import { Xmark, WarningTriangle, Calendar, Flash } from 'iconoir-react';
 import { formatDate, formatPrice } from '@/lib/utils';
 
 // 취소 사유 옵션
@@ -80,14 +80,14 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <Xmark width={20} height={20} strokeWidth={1.5} />
           </button>
         </div>
 
         <div className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              <WarningTriangle width={24} height={24} strokeWidth={1.5} className="text-yellow-600" />
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">정말 해지하시겠습니까?</h3>
@@ -155,7 +155,7 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                   />
                   <div className="ml-3">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <Calendar width={16} height={16} strokeWidth={1.5} className="text-gray-500" />
                       <span className="text-sm font-medium text-gray-700">기간 종료 후 해지</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
@@ -181,7 +181,7 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                   />
                   <div className="ml-3">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-orange-500" />
+                      <Flash width={16} height={16} strokeWidth={1.5} className="text-orange-500" />
                       <span className="text-sm font-medium text-gray-700">즉시 해지</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">

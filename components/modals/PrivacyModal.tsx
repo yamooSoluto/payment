@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { Xmark } from 'iconoir-react';
 
 interface PrivacyModalProps {
   onClose: () => void;
@@ -19,7 +19,7 @@ export default function PrivacyModal({ onClose }: PrivacyModalProps) {
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <Xmark width={20} height={20} strokeWidth={1.5} />
           </button>
         </div>
 

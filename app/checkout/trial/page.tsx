@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSubscription } from '@/lib/auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { CheckCircle, ArrowRight } from 'lucide-react';
+import { CheckCircle, NavArrowRight } from 'iconoir-react';
 import Link from 'next/link';
 
 interface TrialPageProps {
@@ -48,7 +48,7 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
     <div className="max-w-lg mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
       <div className="bg-white rounded-xl shadow-lg p-8">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-10 h-10 text-green-500" />
+          <CheckCircle width={40} height={40} strokeWidth={1.5} className="text-green-500" />
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-4">
@@ -67,7 +67,7 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
             className="btn-primary w-full inline-flex items-center justify-center gap-2"
           >
             YAMOO 시작하기
-            <ArrowRight className="w-5 h-5" />
+            <NavArrowRight width={20} height={20} strokeWidth={1.5} />
           </Link>
 
           <Link

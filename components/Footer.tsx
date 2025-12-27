@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageCircle, Mail, Copy, Check, Building2, MapPin } from 'lucide-react';
+import { ChatBubble, Mail, Copy, Check, Building, MapPin } from 'iconoir-react';
 import DynamicTermsModal from './modals/DynamicTermsModal';
 
 export default function Footer() {
@@ -43,18 +43,18 @@ export default function Footer() {
               <p className="font-semibold text-white">Company</p>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 md:hidden">
-                  <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <Building width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
                   <p>주식회사 솔루투</p>
                 </div>
-                <p className="md:hidden">대표자: 김채윤</p>
                 <div className="hidden md:flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <Building width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
                   <p>주식회사 솔루투 | 대표자: 김채윤</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <MapPin width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
                   <p>경기도 화성시 메타폴리스로 42, 902호</p>
                 </div>
+                <p className="md:hidden">대표자: 김채윤</p>
                 <p className="mt-2 md:mt-1">사업자등록번호: 610-86-36594</p>
                 <p className="md:hidden">통신판매신고번호: 2025-화성동탄-3518</p>
                 <p className="md:hidden">개인정보관리책임자: 김채윤</p>
@@ -66,7 +66,7 @@ export default function Footer() {
             <div className="mt-4 pt-4 border-t border-gray-700 md:mt-0 md:pt-0 md:border-t-0 space-y-2">
               <p className="font-semibold text-white">고객센터</p>
               <div className="flex items-start gap-2">
-                <MessageCircle className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                <ChatBubble width={16} height={16} strokeWidth={1.5} className="text-gray-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <button
                     onClick={openChannelTalk}
@@ -81,7 +81,7 @@ export default function Footer() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <Mail width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
                 <span>yamoo@soluto.co.kr</span>
                 <button
                   onClick={handleCopyEmail}
@@ -89,9 +89,9 @@ export default function Footer() {
                   title="이메일 복사"
                 >
                   {copied ? (
-                    <Check className="w-4 h-4 text-green-400" />
+                    <Check width={16} height={16} strokeWidth={1.5} className="text-green-400" />
                   ) : (
-                    <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
+                    <Copy width={16} height={16} strokeWidth={1.5} className="text-gray-400 hover:text-white" />
                   )}
                 </button>
                 {copied && <span className="text-xs text-green-400">복사됨</span>}

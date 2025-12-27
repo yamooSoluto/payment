@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CheckCircle, ArrowRight } from 'lucide-react';
+import { CheckCircle, NavArrowRight } from 'iconoir-react';
 
 interface SuccessPageProps {
   searchParams: Promise<{ plan?: string }>;
@@ -54,7 +54,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
           className="btn-primary inline-flex items-center gap-2"
         >
           포탈로 이동하기
-          <ArrowRight className="w-4 h-4" />
+          <NavArrowRight width={16} height={16} strokeWidth={1.5} />
         </Link>
       </div>
     </div>
