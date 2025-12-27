@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyToken } from '@/lib/auth';
+import { getAuthFromParamsOrSession } from '@/lib/auth-session';
 import TenantList from '@/components/account/TenantList';
 
 interface AccountPageProps {
@@ -10,22 +10,20 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
   const { token, email: emailParam } = params;
 
-  let email: string | null = null;
+  // URL params 또는 세션에서 인증 정보 가져오기
+  const { email, shouldRedirect } = await getAuthFromParamsOrSession({
+    token,
+    email: emailParam,
+  });
 
-  // 1. 토큰으로 인증 (포탈 SSO)
-  if (token) {
-    email = await verifyToken(token);
-  }
-  // 2. 이메일 파라미터로 접근 (Firebase Auth)
-  else if (emailParam) {
-    email = emailParam;
+  // URL에 token/email이 있었다면 clean URL로 리다이렉트
+  if (shouldRedirect && email) {
+    redirect('/account');
   }
 
   if (!email) {
     redirect('/login');
   }
-
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -37,7 +35,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
       {/* Content */}
       <div className="space-y-6">
-        <TenantList authParam={authParam} email={email} />
+        <TenantList email={email} />
       </div>
     </div>
   );

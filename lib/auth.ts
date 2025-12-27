@@ -220,6 +220,8 @@ export async function getTenantsByEmail(email: string): Promise<Array<{
   subscription?: {
     plan: string;
     status: string;
+    currentPeriodEnd?: string;
+    nextBillingDate?: string;
   } | null;
 }>> {
   const db = adminDb || initializeFirebaseAdmin();
@@ -255,13 +257,15 @@ export async function getTenantsByEmail(email: string): Promise<Array<{
     const subscriptionDocs = await db.getAll(...subscriptionRefs);
 
     // 구독 정보를 Map으로 변환
-    const subscriptionMap = new Map<string, { plan: string; status: string }>();
+    const subscriptionMap = new Map<string, { plan: string; status: string; currentPeriodEnd?: string; nextBillingDate?: string }>();
     subscriptionDocs.forEach((doc) => {
       if (doc.exists) {
         const data = doc.data();
         subscriptionMap.set(doc.id, {
           plan: data?.plan,
           status: data?.status,
+          currentPeriodEnd: data?.currentPeriodEnd?.toDate?.()?.toISOString() || data?.currentPeriodEnd,
+          nextBillingDate: data?.nextBillingDate?.toDate?.()?.toISOString() || data?.nextBillingDate,
         });
       }
     });

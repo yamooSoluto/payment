@@ -1,37 +1,28 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle } from 'iconoir-react';
-import { Suspense } from 'react';
+import { getSessionIdFromCookie, getCheckoutSession, deleteCheckoutSession, clearSessionCookie } from '@/lib/checkout-session';
+import { getPlanName } from '@/lib/toss';
 
-// 플랜 이름 (클라이언트용)
-function getPlanName(plan: string): string {
-  const names: Record<string, string> = {
-    trial: 'Trial',
-    basic: 'Basic',
-    business: 'Business',
-    enterprise: 'Enterprise',
-  };
-  return names[plan] || plan;
-}
+export default async function CheckoutSuccessPage() {
+  // 쿠키에서 세션 ID 가져오기
+  const sessionId = await getSessionIdFromCookie();
+  if (!sessionId) {
+    redirect('/pricing');
+  }
 
-function SuccessContent() {
-  const searchParams = useSearchParams();
-  const plan = searchParams.get('plan') || '';
-  const orderId = searchParams.get('orderId') || '';
-  const tenantId = searchParams.get('tenantId') || '';
-  const tenantName = searchParams.get('tenantName') || '';
-  const token = searchParams.get('token');
-  const email = searchParams.get('email');
+  // 세션 데이터 조회
+  const session = await getCheckoutSession(sessionId);
+  if (!session || session.status !== 'success') {
+    redirect('/pricing');
+  }
 
-  // 인증 파라미터 생성
-  const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
-  const accountUrl = tenantId && authParam
-    ? `/account/${tenantId}?${authParam}`
-    : authParam
-    ? `/account?${authParam}`
-    : '/account';
+  const { plan, orderId, tenantId, tenantName } = session;
+  const planName = getPlanName(plan);
+
+  // 성공 페이지 표시 후 세션 삭제 (cleanup)
+  await deleteCheckoutSession(sessionId);
+  await clearSessionCookie();
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -51,7 +42,7 @@ function SuccessContent() {
         )}
 
         <p className="text-gray-600 mb-6">
-          YAMOO {getPlanName(plan)} 플랜 구독이 시작되었습니다.
+          YAMOO {planName} 플랜 구독이 시작되었습니다.
         </p>
 
         <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
@@ -61,13 +52,13 @@ function SuccessContent() {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-500 text-sm">구독 플랜</span>
-            <span className="text-gray-900 font-semibold">{getPlanName(plan)}</span>
+            <span className="text-gray-900 font-semibold">{planName}</span>
           </div>
         </div>
 
         <div className="space-y-3">
           <Link
-            href={accountUrl}
+            href={tenantId ? `/account/${tenantId}` : '/account'}
             className="btn-primary w-full block text-center"
           >
             내 계정으로 이동
@@ -85,17 +76,5 @@ function SuccessContent() {
         </p>
       </div>
     </div>
-  );
-}
-
-export default function CheckoutSuccessPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yamoo-primary"></div>
-      </div>
-    }>
-      <SuccessContent />
-    </Suspense>
   );
 }

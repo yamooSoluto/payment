@@ -24,7 +24,6 @@ interface Tenant {
 }
 
 interface TenantListProps {
-  authParam: string;
   email: string;
 }
 
@@ -41,7 +40,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
 };
 
-export default function TenantList({ authParam, email }: TenantListProps) {
+export default function TenantList({ email }: TenantListProps) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +48,8 @@ export default function TenantList({ authParam, email }: TenantListProps) {
   useEffect(() => {
     const fetchTenants = async () => {
       try {
-        const response = await fetch(`/api/tenants?${authParam}`);
+        // 세션 쿠키가 있으므로 email만 전달
+        const response = await fetch(`/api/tenants?email=${encodeURIComponent(email)}`);
         if (!response.ok) {
           throw new Error('Failed to fetch tenants');
         }
@@ -63,7 +63,7 @@ export default function TenantList({ authParam, email }: TenantListProps) {
     };
 
     fetchTenants();
-  }, [authParam]);
+  }, [email]);
 
   if (loading) {
     return (
@@ -133,7 +133,7 @@ export default function TenantList({ authParam, email }: TenantListProps) {
           return (
             <Link
               key={tenant.tenantId}
-              href={`/account/${tenant.tenantId}?${authParam}`}
+              href={`/account/${tenant.tenantId}`}
               className="block p-6 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center justify-between">

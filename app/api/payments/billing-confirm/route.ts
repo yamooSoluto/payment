@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey, getPlanName, getPlanAmount } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
+import { getSessionIdFromRequest, getCheckoutSession, updateCheckoutSession } from '@/lib/checkout-session';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -9,30 +10,32 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const authKey = searchParams.get('authKey');
   const customerKey = searchParams.get('customerKey');
-  const plan = searchParams.get('plan');
+  // URL에서 필수 파라미터 가져오기 (Toss callback에서 전달)
+  const planFromUrl = searchParams.get('plan');
   const amount = searchParams.get('amount');
-  const tenantId = searchParams.get('tenantId');
-  const token = searchParams.get('token');
-  const emailParam = searchParams.get('email');
+  const tenantIdFromUrl = searchParams.get('tenantId');
 
-  // 인증 파라미터 생성 (리다이렉트 시 사용)
-  const authParam = token ? `token=${token}` : emailParam ? `email=${encodeURIComponent(emailParam)}` : '';
+  // 세션에서 추가 정보 가져오기
+  const sessionId = getSessionIdFromRequest(request);
+  let session = sessionId ? await getCheckoutSession(sessionId) : null;
 
-  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, hasToken: !!token });
+  // 세션 또는 URL에서 값 가져오기
+  const plan = planFromUrl || session?.plan;
+  const tenantId = tenantIdFromUrl || session?.tenantId;
+
+  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, hasSession: !!session });
 
   // 필수 파라미터 검증
   if (!authKey || !customerKey || !plan || !tenantId) {
-    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan || 'basic'}&tenantId=${tenantId || ''}${authQuery}&error=missing_params`, request.url)
+      new URL('/checkout?error=missing_params', request.url)
     );
   }
 
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
-    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=database_unavailable`, request.url)
+      new URL('/checkout?error=database_unavailable', request.url)
     );
   }
 
@@ -142,11 +145,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 성공 페이지로 리다이렉트
-    const authQuery = authParam ? `&${authParam}` : '';
-    const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
+    // 세션 업데이트 (성공 정보 저장)
+    if (sessionId) {
+      await updateCheckoutSession(sessionId, {
+        status: 'success',
+        orderId,
+        tenantName,
+        tenantId,
+      });
+    }
+
+    // 성공 페이지로 리다이렉트 (클린 URL)
     return NextResponse.redirect(
-      new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&orderId=${orderId}${tenantNameQuery}${authQuery}`, request.url)
+      new URL('/checkout/success', request.url)
     );
   } catch (error) {
     console.error('Billing confirm failed:', error);
@@ -157,9 +168,8 @@ export async function GET(request: NextRequest) {
       errorMessage = error.message;
     }
 
-    const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
-      new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent(errorMessage)}`, request.url)
+      new URL(`/checkout?error=${encodeURIComponent(errorMessage)}`, request.url)
     );
   }
 }
