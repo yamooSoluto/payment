@@ -2,6 +2,8 @@ import { verifyToken, getSubscription, getTenantsByEmail, getPlans } from '@/lib
 import PricingClient from '@/components/pricing/PricingClient';
 import ComparisonTable from '@/components/pricing/ComparisonTable';
 
+export const dynamic = 'force-dynamic';
+
 interface PricingPageProps {
   searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
 }
