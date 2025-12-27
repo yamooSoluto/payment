@@ -7,6 +7,7 @@ import AccountDeletion from '@/components/account/AccountDeletion';
 
 // Force dynamic rendering - this page requires searchParams
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface AccountPageProps {
   searchParams: Promise<{ token?: string; email?: string }>;
