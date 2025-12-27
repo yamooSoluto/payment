@@ -67,12 +67,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       />
 
       {/* 메인 컨텐츠 */}
-      <div className="flex-1 flex flex-col min-h-screen lg:ml-0">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-0 min-w-0">
         {/* 헤더 */}
         <AdminHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* 컨텐츠 영역 */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-w-0 max-w-full">
           {children}
         </main>
       </div>

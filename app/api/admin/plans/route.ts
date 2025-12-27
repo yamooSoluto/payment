@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, price, tagline, description, features, refundPolicy, isActive, popular, order } = body;
+    const { id, name, price, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
       isActive: isActive !== false,
       popular: popular || false,
       order: order || 0,
+      isNegotiable: isNegotiable || false,
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: admin.adminId,

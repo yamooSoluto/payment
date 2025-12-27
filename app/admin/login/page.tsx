@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 export default function AdminLoginPage() {
   const [loginId, setLoginId] = useState('');
@@ -12,6 +13,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login } = useAdminAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,18 +21,12 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/admin/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loginId, password }),
-      });
+      const result = await login(loginId, password);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (result.success) {
         router.push('/admin');
       } else {
-        setError(data.error || '로그인에 실패했습니다.');
+        setError(result.error || '로그인에 실패했습니다.');
       }
     } catch {
       setError('로그인 중 오류가 발생했습니다.');

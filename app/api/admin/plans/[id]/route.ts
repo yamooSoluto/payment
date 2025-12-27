@@ -66,7 +66,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, price, tagline, description, features, refundPolicy, isActive, popular, order } = body;
+    const { name, price, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
 
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -82,6 +82,7 @@ export async function PUT(
     if (isActive !== undefined) updateData.isActive = isActive;
     if (popular !== undefined) updateData.popular = popular;
     if (order !== undefined) updateData.order = order;
+    if (isNegotiable !== undefined) updateData.isNegotiable = isNegotiable;
 
     await db.collection('plans').doc(id).update(updateData);
 

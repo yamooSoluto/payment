@@ -145,15 +145,15 @@ export default function AdminsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 overflow-x-hidden">
+      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
           <Shield className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">운영진 관리</h1>
         </div>
         <button
           onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" />
           운영진 추가
@@ -172,7 +172,7 @@ export default function AdminsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>

@@ -137,8 +137,8 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 overflow-x-hidden">
+      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
           <ShoppingCart className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">주문 내역</h1>
@@ -146,7 +146,7 @@ export default function OrdersPage() {
         <button
           onClick={handleExportCSV}
           disabled={orders.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
         >
           <Download className="w-4 h-4" />
           엑셀 다운로드
@@ -155,7 +155,7 @@ export default function OrdersPage() {
 
       {/* 통계 카드 */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 sticky left-0">
           <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <p className="text-sm text-gray-500">전체</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -180,8 +180,8 @@ export default function OrdersPage() {
       )}
 
       {/* 필터 */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 sticky left-0">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4">
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -239,7 +239,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">결제일</th>
@@ -296,7 +296,7 @@ export default function OrdersPage() {
 
         {/* 페이지네이션 */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 sticky left-0">
             <p className="text-sm text-gray-500">
               {pagination.total}개 중 {(pagination.page - 1) * pagination.limit + 1}-
               {Math.min(pagination.page * pagination.limit, pagination.total)}개 표시

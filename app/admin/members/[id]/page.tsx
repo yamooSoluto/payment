@@ -284,7 +284,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <p className="text-gray-500 text-center py-8">결제 내역이 없습니다.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-max">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="text-left px-4 py-2 text-sm font-medium text-gray-500">결제일</th>

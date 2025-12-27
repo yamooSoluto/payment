@@ -211,7 +211,7 @@ export default function MembersPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장명</th>

@@ -14,6 +14,7 @@ interface Plan {
   isActive: boolean;
   popular: boolean;
   order: number;
+  isNegotiable: boolean;
 }
 
 export default function PlansPage() {
@@ -33,6 +34,7 @@ export default function PlansPage() {
     isActive: true,
     popular: false,
     order: 0,
+    isNegotiable: false,
   });
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function PlansPage() {
         isActive: plan.isActive,
         popular: plan.popular || false,
         order: plan.order || 0,
+        isNegotiable: plan.isNegotiable || false,
       });
     } else {
       setEditingPlan(null);
@@ -81,6 +84,7 @@ export default function PlansPage() {
         isActive: true,
         popular: false,
         order: plans.length,
+        isNegotiable: false,
       });
     }
     setShowModal(true);
@@ -126,6 +130,26 @@ export default function PlansPage() {
       alert('저장에 실패했습니다.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (plan: Plan) => {
+    try {
+      const response = await fetch(`/api/admin/plans/${plan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...plan, isActive: !plan.isActive }),
+      });
+
+      if (response.ok) {
+        fetchPlans();
+      } else {
+        const data = await response.json();
+        alert(data.error || '변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to toggle plan:', error);
+      alert('변경에 실패했습니다.');
     }
   };
 
@@ -192,11 +216,6 @@ export default function PlansPage() {
                     {plan.popular && (
                       <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">인기</span>
                     )}
-                    {plan.isActive ? (
-                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">활성</span>
-                    ) : (
-                      <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded-full">비활성</span>
-                    )}
                   </div>
                   <p className="text-sm text-gray-500">ID: {plan.id}</p>
                   {plan.tagline && (
@@ -221,9 +240,36 @@ export default function PlansPage() {
                 </div>
               </div>
 
+              {/* 노출 여부 토글 */}
+              <div className="flex items-center justify-between py-3 px-4 -mx-4 mb-4 bg-gray-50 border-y border-gray-100">
+                <span className="text-sm text-gray-600">요금제 페이지 노출</span>
+                <button
+                  type="button"
+                  onClick={() => handleToggleActive(plan)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    plan.isActive ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      plan.isActive ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
               <p className="text-2xl font-bold text-gray-900 mb-2">
-                {plan.price.toLocaleString()}원
-                <span className="text-sm font-normal text-gray-500">/월</span>
+                {plan.isNegotiable ? (
+                  <>
+                    협의
+                    <span className="text-sm font-normal text-gray-500"> / 월</span>
+                  </>
+                ) : (
+                  <>
+                    {plan.price.toLocaleString()}원
+                    <span className="text-sm font-normal text-gray-500">/월</span>
+                  </>
+                )}
               </p>
 
               {plan.description && (
@@ -372,7 +418,7 @@ export default function PlansPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-6">
+              <div className="flex flex-wrap items-center gap-6">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -405,6 +451,23 @@ export default function PlansPage() {
                     />
                   </button>
                   <span className="text-sm text-gray-700">인기 플랜</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isNegotiable: !formData.isNegotiable })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      formData.isNegotiable ? 'bg-purple-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        formData.isNegotiable ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-700">협의 가격</span>
                 </div>
               </div>
             </div>

@@ -160,7 +160,7 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Bell className="w-8 h-8 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">알림톡 설정</h1>
+          <h1 className="text-2xl font-bold text-gray-900">알림톡</h1>
         </div>
         <button
           onClick={() => handleOpenModal()}
@@ -191,7 +191,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">템플릿 코드</th>
