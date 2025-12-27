@@ -1,8 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { formatPrice } from '@/lib/utils';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
+import { Check, InfoCircle } from 'iconoir-react';
+
+// 플랜별 상세 기능 (요금제 페이지와 동일)
+const PLAN_FEATURES: Record<string, string[]> = {
+  basic: [
+    '월 300건 이내',
+    '데이터 무제한 추가',
+    'AI 자동 답변',
+    '업무 처리 메세지 요약 전달',
+  ],
+  business: [
+    'Basic 기능 모두 포함',
+    '문의 건수 제한 없음',
+    '답변 메시지 AI 보정',
+    '미니맵 연동 및 활용',
+    '예약 및 재고 연동',
+  ],
+};
 
 interface TossPaymentWidgetProps {
   email: string;
@@ -21,21 +39,25 @@ interface TossPaymentWidgetProps {
 function getSubscriptionPeriod(nextBillingDate?: string): { start: string; end: string; nextBilling: string } {
   const today = new Date();
 
-  // 다음 결제일
-  const billingDate = nextBillingDate
-    ? new Date(nextBillingDate)
-    : new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  // 다음 결제일: 오늘 + 1개월 (달력 기준)
+  let billingDate: Date;
+  if (nextBillingDate) {
+    billingDate = new Date(nextBillingDate);
+  } else {
+    billingDate = new Date(today);
+    billingDate.setMonth(billingDate.getMonth() + 1);
+  }
 
   // 이용 기간 종료일 = 다음 결제일 - 1일
   const endDate = new Date(billingDate);
   endDate.setDate(endDate.getDate() - 1);
 
+  // 컴팩트한 날짜 포맷 (YYYY-MM-DD)
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   return {
@@ -61,6 +83,26 @@ export default function TossPaymentWidget({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(sdkError);
   const [agreed, setAgreed] = useState(false);
+  const [showPlanTooltip, setShowPlanTooltip] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // 툴팁 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setShowPlanTooltip(false);
+      }
+    };
+
+    if (showPlanTooltip) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPlanTooltip]);
+
+  const planFeatures = PLAN_FEATURES[plan] || [];
 
   // 신규 매장인 경우 tenantId를 'new'로 처리
   const effectiveTenantId = tenantId || (isNewTenant ? 'new' : '');
@@ -128,12 +170,37 @@ export default function TossPaymentWidget({
       <div className="bg-gray-50 rounded-lg p-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-600">선택한 플랜</span>
-          <span className="font-semibold">{planName}</span>
+          <div className="relative" ref={tooltipRef}>
+            <button
+              type="button"
+              onClick={() => setShowPlanTooltip(!showPlanTooltip)}
+              onMouseEnter={() => setShowPlanTooltip(true)}
+              onMouseLeave={() => setShowPlanTooltip(false)}
+              className="font-semibold flex items-center gap-1 hover:text-yamoo-primary transition-colors"
+            >
+              {planName}
+              <InfoCircle width={16} height={16} strokeWidth={1.5} className="text-gray-400" />
+            </button>
+            {/* 플랜 상세 툴팁 */}
+            {showPlanTooltip && planFeatures.length > 0 && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+                <h4 className="font-semibold text-gray-900 mb-3">{planName} 플랜 혜택</h4>
+                <ul className="space-y-2">
+                  {planFeatures.map((feature, index) => (
+                    <li key={index} className="flex items-start gap-2 text-sm">
+                      <Check width={16} height={16} strokeWidth={2} className="text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-600">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-600">이용 기간</span>
-          <span className="text-sm text-gray-900">
-            {getSubscriptionPeriod(nextBillingDate).start} ~ {getSubscriptionPeriod(nextBillingDate).end}
+          <span className="text-sm text-gray-900 whitespace-nowrap">
+            {getSubscriptionPeriod(nextBillingDate).start}~{getSubscriptionPeriod(nextBillingDate).end}
           </span>
         </div>
         <div className="flex justify-between items-center mb-2">

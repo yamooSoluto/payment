@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, Shop } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Shop } from 'iconoir-react';
 import { formatPrice } from '@/lib/utils';
 
 interface Subscription {
@@ -43,12 +44,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 };
 
 export default function TenantList({ authParam, initialTenants }: TenantListProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
   // 서버에서 초기 데이터를 받아서 바로 표시 (로딩 지연 없음)
   const tenants = initialTenants;
 
   if (tenants.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+      <div className="bg-white rounded-xl shadow-lg p-8 text-center border border-gray-100">
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Shop width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
         </div>
@@ -73,19 +75,24 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
 
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Shop width={20} height={20} strokeWidth={1.5} className="text-gray-600" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">내 매장</h2>
-          </div>
-          <span className="text-sm text-gray-500">총 {tenants.length}개</span>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full p-6 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-white">내 매장</h2>
+          <span className="text-sm text-gray-400">총 {tenants.length}개</span>
         </div>
-      </div>
+        {isExpanded ? (
+          <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+        ) : (
+          <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+        )}
+      </button>
 
-      <div className="divide-y divide-gray-100">
+      {isExpanded && (
+        <>
+          <div className="divide-y divide-gray-100 border-t border-gray-100">
         {tenants.map((tenant) => {
           const status = tenant.subscription?.status || 'none';
           const statusConfig = STATUS_CONFIG[status];
@@ -157,20 +164,22 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
             </Link>
           );
         })}
-      </div>
+          </div>
 
-      {/* 새 매장 추가 버튼 */}
-      <div className="p-4 bg-gray-50 border-t border-gray-100">
-        <a
-          href="https://app.yamoo.ai.kr"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full py-3 text-sm text-gray-600 hover:text-yamoo-primary transition-colors"
-        >
-          <Plus width={16} height={16} strokeWidth={2} />
-          새 매장 추가하기
-        </a>
-      </div>
+          {/* 새 매장 추가 버튼 */}
+          <div className="p-4 bg-gray-50 border-t border-gray-100">
+            <a
+              href="https://app.yamoo.ai.kr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 text-sm text-gray-600 hover:text-yamoo-primary transition-colors"
+            >
+              <Plus width={16} height={16} strokeWidth={2} />
+              새 매장 추가하기
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }

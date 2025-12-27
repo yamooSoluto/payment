@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Trash, WarningTriangle, Xmark, NavArrowDown, NavArrowUp } from 'iconoir-react';
+import { WarningTriangle, Xmark, NavArrowDown, NavArrowUp } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 
 interface AccountDeletionProps {
@@ -72,24 +72,19 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
         {/* Header - 클릭하면 펼침/접힘 */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          className="w-full p-6 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Trash width={20} height={20} strokeWidth={1.5} className="text-gray-600" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">회원 탈퇴</h2>
-          </div>
+          <h2 className="text-lg font-bold text-white">회원 탈퇴</h2>
           {isExpanded ? (
-            <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
+            <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
           ) : (
-            <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
+            <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
           )}
         </button>
 
         {/* Content - 펼쳐졌을 때만 표시 */}
         {isExpanded && (
-          <div className="px-6 pb-6">
+          <div className="px-6 pt-6 pb-6">
             <div className="border border-red-200 rounded-lg p-4 bg-red-50/50">
               <p className="text-sm text-gray-600 mb-3">
                 {hasActiveSubscriptions
