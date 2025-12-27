@@ -138,7 +138,6 @@ export default function PricingClient({
         tenants={tenants}
         selectedPlan={selectedPlan}
         authParam={finalAuthParam}
-        email={userEmail || ''}
         onSelectTenant={handleSelectTenant}
       />
 

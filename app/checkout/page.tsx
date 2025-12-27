@@ -1,13 +1,19 @@
 import { redirect } from 'next/navigation';
-import { getSubscription, getTenantInfo } from '@/lib/auth';
+import { verifyToken, getSubscription, getTenantInfo } from '@/lib/auth';
 import { getPlanAmount, getPlanName } from '@/lib/toss';
-import { getSessionIdFromCookie, getCheckoutSession } from '@/lib/checkout-session';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
-import { NavArrowLeft, Shield, Lock, Sofa, WarningCircle } from 'iconoir-react';
+import { NavArrowLeft, Shield, Lock, Shop, WarningCircle } from 'iconoir-react';
 import Link from 'next/link';
 
 interface CheckoutPageProps {
   searchParams: Promise<{
+    plan?: string;
+    token?: string;
+    email?: string;
+    tenantId?: string;  // 매장 ID
+    mode?: string;      // 'immediate' for upgrade
+    refund?: string;    // 현재 플랜 환불액
+    newTenant?: string; // 신규 매장 (매장 없이 결제)
     error?: string;     // 결제 실패 에러
   }>;
 }
@@ -18,30 +24,35 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_params: '필수 정보가 누락되었습니다. 다시 시도해주세요.',
   database_unavailable: '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
   unknown_error: '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.',
-  session_expired: '결제 세션이 만료되었습니다. 요금제 페이지에서 다시 시작해주세요.',
 };
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const params = await searchParams;
-  const { error } = params;
+  const { plan, token, email: emailParam, tenantId, mode, refund, newTenant, error } = params;
 
-  // 쿠키에서 세션 ID 가져오기
-  const sessionId = await getSessionIdFromCookie();
-  if (!sessionId) {
-    redirect('/pricing');
+  if (!plan) {
+    redirect('/error?message=invalid_access');
   }
-
-  // 세션 데이터 조회
-  const session = await getCheckoutSession(sessionId);
-  if (!session) {
-    redirect('/pricing?error=session_expired');
-  }
-
-  const { email, plan, tenantId, isNewTenant, mode, refund, token } = session;
 
   // 신규 매장이 아닌 경우에만 tenantId 필수
+  const isNewTenant = newTenant === 'true';
   if (!tenantId && !isNewTenant) {
-    redirect('/pricing?error=missing_tenant');
+    redirect('/error?message=missing_tenant_id');
+  }
+
+  let email: string | null = null;
+
+  // 1. 토큰으로 인증 (포탈 SSO)
+  if (token) {
+    email = await verifyToken(token);
+  }
+  // 2. 이메일 파라미터로 접근 (Firebase Auth)
+  else if (emailParam) {
+    email = emailParam;
+  }
+
+  if (!email) {
+    redirect('/login?redirect=/checkout?plan=' + plan);
   }
 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
@@ -54,7 +65,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   // 이미 같은 플랜을 사용 중인 경우
   if (subscription?.plan === plan && subscription?.status === 'active') {
-    redirect('/account');
+    redirect(`/account?${authParam}`);
   }
 
   const fullAmount = getPlanAmount(plan);
@@ -81,25 +92,25 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
     // 일할 계산: 새 플랜 비용 - 현재 플랜 환불액
     const proratedNewAmount = Math.round((fullAmount / 30) * daysLeft);
-    const refundAmount = refund || Math.round((currentAmount / 30) * daysLeft);
+    const refundAmount = refund ? parseInt(refund) : Math.round((currentAmount / 30) * daysLeft);
     amount = Math.max(0, proratedNewAmount - refundAmount);
   }
 
   // Trial 플랜은 무료 - 별도 처리 필요
   if (plan === 'trial') {
-    redirect('/checkout/trial');
+    redirect(`/checkout/trial?email=${encodeURIComponent(email)}`);
   }
 
   // 유효하지 않은 플랜 (trial, basic, business 외)
   if (fullAmount === undefined || (plan !== 'trial' && fullAmount === 0)) {
-    redirect('/pricing?error=invalid_plan');
+    redirect('/error?message=invalid_plan');
   }
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
       <Link
-        href="/pricing"
+        href={isUpgradeMode ? `/account/change-plan?${authParam}` : `/pricing?${authParam}`}
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >
         <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
@@ -134,8 +145,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* 매장 정보 */}
       {tenantInfo && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
+          <div className="w-10 h-10 bg-yamoo-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+            <Shop width={20} height={20} strokeWidth={1.5} className="text-yamoo-primary" />
           </div>
           <div>
             <p className="text-sm text-gray-500">적용 매장</p>
@@ -173,7 +184,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           tenantId={tenantId}
           isUpgrade={isUpgradeMode}
           fullAmount={fullAmount}
-          isNewTenant={isNewTenant || false}
+          isNewTenant={isNewTenant}
           authParam={authParam}
         />
       </div>

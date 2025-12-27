@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAuthFromParamsOrSession } from '@/lib/auth-session';
+import { verifyToken } from '@/lib/auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
@@ -46,15 +46,12 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   const { tenantId } = await params;
   const { token, email: emailParam } = await searchParams;
 
-  // URL params 또는 세션에서 인증 정보 가져오기
-  const { email, shouldRedirect } = await getAuthFromParamsOrSession({
-    token,
-    email: emailParam,
-  });
+  let email: string | null = null;
 
-  // URL에 token/email이 있었다면 clean URL로 리다이렉트
-  if (shouldRedirect && email) {
-    redirect(`/account/${tenantId}`);
+  if (token) {
+    email = await verifyToken(token);
+  } else if (emailParam) {
+    email = emailParam;
   }
 
   if (!email) {
@@ -110,12 +107,13 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   // 직렬화
   const subscription = rawSubscription ? serializeData(rawSubscription) : null;
   const payments = serializeData(limitedPayments);
+  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
       <Link
-        href="/account"
+        href={`/account?${authParam}`}
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-6 transition-colors"
       >
         <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
@@ -139,11 +137,13 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
           <>
             <SubscriptionCard
               subscription={subscription}
+              authParam={authParam}
               tenantId={tenantId}
             />
             <CardList
               tenantId={tenantId}
               email={email}
+              authParam={authParam}
             />
             <PaymentHistory
               payments={payments as Parameters<typeof PaymentHistory>[0]['payments']}
@@ -159,7 +159,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
               이 매장에 구독 중인 플랜이 없습니다
             </h2>
             <Link
-              href={`/pricing?tenantId=${tenantId}`}
+              href={`/pricing?${authParam}&tenantId=${tenantId}`}
               className="btn-primary inline-flex items-center gap-2"
             >
               요금제 보기

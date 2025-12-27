@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CreditCard, Check, Trash, Plus, WarningCircle, EditPencil, Xmark } from 'iconoir-react';
+import { Loader2 } from 'lucide-react';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 
 interface CardInfo {
@@ -22,10 +23,11 @@ interface Card {
 interface CardListProps {
   tenantId: string;
   email: string;
+  authParam: string;
   onCardChange?: () => void;
 }
 
-export default function CardList({ tenantId, email, onCardChange }: CardListProps) {
+export default function CardList({ tenantId, email, authParam, onCardChange }: CardListProps) {
   const { isReady: sdkReady, isLoading: sdkLoading } = useTossSDK();
   const [cards, setCards] = useState<Card[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +42,7 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
     setIsLoading(true);
     try {
       const response = await fetch(
-        `/api/cards?tenantId=${encodeURIComponent(tenantId)}`
+        `/api/cards?${authParam}&tenantId=${encodeURIComponent(tenantId)}`
       );
       if (!response.ok) {
         throw new Error('Failed to fetch cards');
@@ -59,7 +61,7 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [authParam, tenantId]);
 
   useEffect(() => {
     fetchCards();
@@ -77,13 +79,13 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
     try {
       const tossPayments = getTossPayments();
       const aliasParam = newCardAlias ? `&cardAlias=${encodeURIComponent(newCardAlias)}` : '';
-      const tenantParam = `tenantId=${encodeURIComponent(tenantId)}`;
+      const tenantParam = `&tenantId=${encodeURIComponent(tenantId)}`;
       const primaryParam = cards.length === 0 ? '' : '&setAsPrimary=false';
 
       await tossPayments.requestBillingAuth('카드', {
         customerKey: email,
-        successUrl: `${window.location.origin}/api/payments/update-card?${tenantParam}${aliasParam}${primaryParam}`,
-        failUrl: `${window.location.origin}/account/${tenantId}?error=card_add_failed`,
+        successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}${tenantParam}${primaryParam}`,
+        failUrl: `${window.location.origin}/account/${tenantId}?${authParam}&error=card_add_failed`,
         customerEmail: email,
       });
     } catch (err) {
@@ -110,7 +112,12 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
       const response = await fetch(`/api/cards/${cardId}/primary`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId }),
+        body: JSON.stringify({
+          ...(authParam.includes('token=')
+            ? { token: authParam.replace('token=', '') }
+            : { email }),
+          tenantId,
+        }),
       });
 
       if (!response.ok) {
@@ -148,7 +155,12 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
       const response = await fetch(`/api/cards/${cardId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId }),
+        body: JSON.stringify({
+          ...(authParam.includes('token=')
+            ? { token: authParam.replace('token=', '') }
+            : { email }),
+          tenantId,
+        }),
       });
 
       if (!response.ok) {
@@ -177,6 +189,9 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(authParam.includes('token=')
+            ? { token: authParam.replace('token=', '') }
+            : { email }),
           tenantId,
           alias: editingAlias,
         }),
@@ -210,7 +225,7 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">결제 수단</h2>
         <div className="flex items-center justify-center py-6">
-          <div className="w-5 h-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+          <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
         </div>
       </div>
     );
@@ -363,7 +378,7 @@ export default function CardList({ tenantId, email, onCardChange }: CardListProp
                   className="flex-1 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   {isAddingCard ? (
-                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     '추가'
                   )}

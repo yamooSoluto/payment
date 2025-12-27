@@ -12,6 +12,7 @@ interface ChangePlanButtonProps {
   isUpgrade: boolean;
   isDowngrade: boolean;
   priceDiff: number;
+  authParam: string;
   nextBillingDate?: string;
   daysLeft?: number;
   totalDaysInPeriod?: number;
@@ -37,6 +38,7 @@ export default function ChangePlanButton({
   currentAmount,
   isUpgrade,
   priceDiff,
+  authParam,
   nextBillingDate,
   daysLeft = 0,
   totalDaysInPeriod = 30,
@@ -57,6 +59,10 @@ export default function ChangePlanButton({
   const handleChangePlan = async (mode: 'immediate' | 'scheduled') => {
     setIsLoading(true);
     try {
+      const params = new URLSearchParams(authParam);
+      const token = params.get('token');
+      const email = params.get('email');
+
       // 즉시 다운그레이드 시 환불 금액 계산
       // 다운그레이드: immediatePayment가 음수 (환불해야 함)
       const actualRefundAmount = mode === 'immediate' && immediatePayment < 0
@@ -67,6 +73,8 @@ export default function ChangePlanButton({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          token,
+          email,
           tenantId,
           newPlan,
           newAmount,
@@ -77,26 +85,12 @@ export default function ChangePlanButton({
 
       const data = await response.json();
 
+      const tenantParam = tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '';
+
       if (response.ok) {
         if (mode === 'immediate' && data.requiresPayment) {
-          // 업그레이드: 체크아웃 세션 생성 후 결제 페이지로 이동
-          const sessionResponse = await fetch('/api/checkout/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: data.email, // API에서 반환된 email 사용
-              plan: newPlan,
-              tenantId,
-              mode: 'immediate',
-              refund: refundAmount,
-            }),
-          });
-
-          if (sessionResponse.ok) {
-            window.location.href = '/checkout';
-          } else {
-            throw new Error('Failed to create checkout session');
-          }
+          // 업그레이드: 결제 페이지로 이동
+          window.location.href = `/checkout?plan=${newPlan}&${authParam}${tenantParam}&mode=immediate&refund=${refundAmount}`;
         } else {
           // 다운그레이드 또는 예약 변경: 완료 메시지
           let message = '';
@@ -108,7 +102,7 @@ export default function ChangePlanButton({
             message = `${newPlanName} 플랜으로 ${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 변경됩니다.`;
           }
           alert(message);
-          window.location.href = tenantId ? `/account/${tenantId}` : '/account';
+          window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
         }
       } else {
         alert(data.error || '플랜 변경에 실패했습니다.');

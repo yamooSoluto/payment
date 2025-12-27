@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAuthFromParamsOrSession } from '@/lib/auth-session';
-import { getSubscriptionByTenantId } from '@/lib/auth';
+import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
 import Link from 'next/link';
 import { NavArrowLeft, Check } from 'iconoir-react';
 import { PLAN_PRICES, getPlanName } from '@/lib/toss';
@@ -61,15 +60,12 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   const params = await searchParams;
   const { token, email: emailParam, tenantId } = params;
 
-  // URL params 또는 세션에서 인증 정보 가져오기
-  const { email, shouldRedirect } = await getAuthFromParamsOrSession({
-    token,
-    email: emailParam,
-  });
+  let email: string | null = null;
 
-  // URL에 token/email이 있었다면 clean URL로 리다이렉트
-  if (shouldRedirect && email && tenantId) {
-    redirect(`/account/change-plan?tenantId=${tenantId}`);
+  if (token) {
+    email = await verifyToken(token);
+  } else if (emailParam) {
+    email = emailParam;
   }
 
   if (!email) {
@@ -87,10 +83,11 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
 
   // 해지된 구독은 플랜 변경 대신 요금제 페이지로 이동
   if (rawSubscription.status === 'canceled') {
-    redirect(`/pricing?tenantId=${tenantId}`);
+    redirect(`/pricing?${token ? `token=${token}` : `email=${encodeURIComponent(email)}`}&tenantId=${tenantId}`);
   }
 
   const subscription = serializeData(rawSubscription);
+  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
   const currentPlan = subscription.plan;
   const currentAmount = PLAN_PRICES[currentPlan] || 0;
   const nextBillingDate = subscription.nextBillingDate;
@@ -111,7 +108,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
       {/* Header */}
       <div className="mb-8">
         <Link
-          href={`/account/${tenantId}`}
+          href={`/account/${tenantId}?${authParam}`}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
@@ -192,6 +189,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
                   isUpgrade={isUpgrade}
                   isDowngrade={isDowngrade}
                   priceDiff={priceDiff}
+                  authParam={authParam}
                   nextBillingDate={nextBillingDate}
                   daysLeft={daysLeft}
                   totalDaysInPeriod={totalDaysInPeriod}

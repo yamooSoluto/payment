@@ -19,10 +19,11 @@ interface SubscriptionCardProps {
     pendingAmount?: number;
     pendingChangeAt?: Date | string;
   };
+  authParam: string;
   tenantId?: string;
 }
 
-export default function SubscriptionCard({ subscription, tenantId }: SubscriptionCardProps) {
+export default function SubscriptionCard({ subscription, authParam, tenantId }: SubscriptionCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCancelingPending, setIsCancelingPending] = useState(false);
@@ -34,6 +35,15 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
   const isPastDue = subscription.status === 'past_due';
   const isExpired = subscription.status === 'expired';
 
+  // authParam 파싱 헬퍼
+  const parseAuthParam = () => {
+    const params = new URLSearchParams(authParam);
+    return {
+      token: params.get('token'),
+      email: params.get('email'),
+    };
+  };
+
   const handleCancel = async (
     reason: string,
     reasonDetail?: string,
@@ -42,6 +52,8 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
   ) => {
     setIsLoading(true);
     try {
+      const { token, email } = parseAuthParam();
+
       // 취소 사유 조합 (기타인 경우 상세 사유 포함)
       const cancelReason = reasonDetail ? `${reason}: ${reasonDetail}` : reason;
 
@@ -49,6 +61,8 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          token,
+          email,
           tenantId,
           reason: cancelReason,
           mode: mode || 'scheduled',
@@ -79,10 +93,12 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
   const handleReactivate = async () => {
     setIsLoading(true);
     try {
+      const { token, email } = parseAuthParam();
+
       const response = await fetch('/api/subscriptions/reactivate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId }),
+        body: JSON.stringify({ token, email, tenantId }),
       });
 
       const data = await response.json();
@@ -92,7 +108,7 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
       } else if (data.expired) {
         // 만료된 경우 요금제 페이지로 이동
         alert('이용 기간이 만료되었습니다. 새로 구독해주세요.');
-        window.location.href = tenantId ? `/pricing?tenantId=${tenantId}` : '/pricing';
+        window.location.href = `/pricing?${authParam}`;
       } else {
         alert('구독 재활성화에 실패했습니다. 다시 시도해주세요.');
       }
@@ -108,10 +124,12 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
 
     setIsCancelingPending(true);
     try {
+      const { token, email } = parseAuthParam();
+
       const response = await fetch('/api/subscriptions/cancel-pending-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId }),
+        body: JSON.stringify({ token, email, tenantId }),
       });
 
       if (response.ok) {
@@ -132,10 +150,12 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
 
     setIsRetrying(true);
     try {
+      const { token, email } = parseAuthParam();
+
       const response = await fetch('/api/payments/retry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId }),
+        body: JSON.stringify({ token, email, tenantId }),
       });
 
       const data = await response.json();
@@ -286,7 +306,7 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
         <div className="flex flex-wrap gap-3">
           {isTrial && (
             <a
-              href={tenantId ? `/pricing?tenantId=${tenantId}` : '/pricing'}
+              href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
               className="btn-primary"
             >
               유료 전환하기
@@ -294,7 +314,7 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
           )}
           {isActive && (
             <a
-              href={tenantId ? `/account/change-plan?tenantId=${tenantId}` : '/account/change-plan'}
+              href={`/account/change-plan?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
               className="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
             >
               플랜 변경
@@ -318,7 +338,7 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
                 {isRetrying ? '결제 중...' : '재결제하기'}
               </button>
               <a
-                href={tenantId ? `/account/change-card?tenantId=${tenantId}` : '/account/change-card'}
+                href={`/checkout?plan=${subscription.plan}&${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
                 className="btn-secondary"
               >
                 카드 변경하기
@@ -336,7 +356,7 @@ export default function SubscriptionCard({ subscription, tenantId }: Subscriptio
           )}
           {isExpired && (
             <a
-              href={tenantId ? `/pricing?tenantId=${tenantId}` : '/pricing'}
+              href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
               className="btn-primary"
             >
               유료 플랜 선택하기

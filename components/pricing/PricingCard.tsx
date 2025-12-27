@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { Check } from 'iconoir-react';
-import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -29,7 +27,6 @@ interface PricingCardProps {
 
 export default function PricingCard({ plan, currentPlan, subscriptionStatus, authParam, isLoggedIn, tenantId, tenantCount = 0, onSelectWithoutTenant, onEnterpriseClick }: PricingCardProps) {
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
   const isCurrentPlan = currentPlan === plan.id;
   const isEnterprise = plan.id === 'enterprise';
 
@@ -38,34 +35,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
 
   const isTrial = plan.id === 'trial';
 
-  // 세션 생성 후 checkout으로 이동
-  const createSessionAndRedirect = async (email: string, planId: string, tid?: string, token?: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/checkout/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          plan: planId,
-          tenantId: tid,
-          token,
-        }),
-      });
-
-      if (response.ok) {
-        window.location.href = '/checkout';
-      } else {
-        console.error('Failed to create checkout session');
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error('Error creating session:', error);
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelect = async () => {
+  const handleSelect = () => {
     if (isEnterprise) {
       onEnterpriseClick?.();
     } else if (isTrial) {
@@ -78,10 +48,9 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
       // 매장이 없거나 여러 개면 모달 표시 (매장 선택)
       onSelectWithoutTenant?.(plan.id);
     } else {
-      // 매장이 1개면 세션 생성 후 결제 페이지로
-      const email = user?.email || '';
-      const token = authParam.startsWith('token=') ? authParam.replace('token=', '') : undefined;
-      await createSessionAndRedirect(email, plan.id, tenantId, token);
+      // 매장이 1개면 결제 페이지로
+      const finalAuthParam = authParam || (user?.email ? `email=${encodeURIComponent(user.email)}` : '');
+      window.location.href = `/checkout?plan=${plan.id}&${finalAuthParam}&tenantId=${tenantId}`;
     }
   };
 
@@ -138,30 +107,23 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
 
         <button
           onClick={handleSelect}
-          disabled={isCurrentPlan || isLoading}
+          disabled={isCurrentPlan}
           className={cn(
-            'w-full py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2',
-            isCurrentPlan || isLoading
+            'w-full py-3 px-4 rounded-lg font-semibold transition-all',
+            isCurrentPlan
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : plan.popular
               ? 'btn-primary'
               : 'btn-secondary'
           )}
         >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              처리 중...
-            </>
-          ) : isCurrentPlan ? (
-            '현재 이용 중'
-          ) : isEnterprise ? (
-            '문의하기'
-          ) : isTrial ? (
-            '무료 체험하기'
-          ) : (
-            '구독하기'
-          )}
+          {isCurrentPlan
+            ? '현재 이용 중'
+            : isEnterprise
+            ? '문의하기'
+            : isTrial
+            ? '무료 체험하기'
+            : '구독하기'}
         </button>
       </div>
     </div>

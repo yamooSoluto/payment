@@ -1,36 +1,25 @@
 import { redirect } from 'next/navigation';
 import { getSubscription } from '@/lib/auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { getSessionIdFromCookie, getCheckoutSession, deleteCheckoutSession } from '@/lib/checkout-session';
 import { CheckCircle, NavArrowRight } from 'iconoir-react';
 import Link from 'next/link';
 
-export default async function TrialPage() {
-  // 쿠키에서 세션 ID 가져오기
-  const sessionId = await getSessionIdFromCookie();
-  if (!sessionId) {
-    redirect('/pricing');
-  }
+interface TrialPageProps {
+  searchParams: Promise<{ email?: string }>;
+}
 
-  // 세션 데이터 조회
-  const session = await getCheckoutSession(sessionId);
-  if (!session) {
-    redirect('/pricing?error=session_expired');
-  }
+export default async function TrialPage({ searchParams }: TrialPageProps) {
+  const params = await searchParams;
+  const { email } = params;
 
-  const { email, plan } = session;
-
-  // Trial 플랜이 아닌 경우 checkout으로 리다이렉트
-  if (plan !== 'trial') {
-    redirect('/checkout');
+  if (!email) {
+    redirect('/login?redirect=/pricing');
   }
 
   // 이미 구독 중인지 확인
   const subscription = await getSubscription(email);
   if (subscription?.status === 'active') {
-    // 세션 삭제 후 리다이렉트
-    await deleteCheckoutSession(sessionId);
-    redirect('/account');
+    redirect(`/account?email=${encodeURIComponent(email)}`);
   }
 
   // Trial 구독 생성
@@ -53,9 +42,6 @@ export default async function TrialPage() {
       },
       { merge: true }
     );
-
-    // Trial 생성 완료 후 세션 삭제
-    await deleteCheckoutSession(sessionId);
   }
 
   return (
@@ -85,7 +71,7 @@ export default async function TrialPage() {
           </Link>
 
           <Link
-            href="/account"
+            href={`/account?email=${encodeURIComponent(email)}`}
             className="btn-secondary w-full inline-block"
           >
             마이페이지로 이동
