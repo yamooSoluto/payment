@@ -126,7 +126,7 @@ export default function AboutPage() {
       phone: formData.phone.trim(),
       brandName: formData.brandName.trim(),
       industry: formData.industry,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }),
       source: 'website_trial_form',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
       language: typeof navigator !== 'undefined' ? navigator.language : ''

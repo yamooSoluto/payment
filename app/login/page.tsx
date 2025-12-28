@@ -13,6 +13,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showResetOption, setShowResetOption] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
@@ -80,7 +81,8 @@ function LoginForm() {
     } catch (err: unknown) {
       const error = err as { code?: string };
       if (error.code === 'auth/email-already-in-use') {
-        setError('이미 사용 중인 이메일입니다.');
+        setError('이미 가입된 이메일입니다. 비밀번호를 재설정해주세요.');
+        setShowResetOption(true);
       } else if (error.code === 'auth/invalid-email') {
         setError('유효하지 않은 이메일 형식입니다.');
       } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -149,9 +151,24 @@ function LoginForm() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-              <WarningCircle width={20} height={20} strokeWidth={1.5} className="flex-shrink-0" />
-              <span className="text-sm">{error}</span>
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              <div className="flex items-center gap-2">
+                <WarningCircle width={20} height={20} strokeWidth={1.5} className="flex-shrink-0" />
+                <span className="text-sm">{error}</span>
+              </div>
+              {showResetOption && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('reset');
+                    setError('');
+                    setShowResetOption(false);
+                  }}
+                  className="mt-3 w-full py-2 px-4 bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium rounded-lg transition-colors"
+                >
+                  비밀번호 재설정하기
+                </button>
+              )}
             </div>
           )}
 
@@ -228,6 +245,7 @@ function LoginForm() {
                     setMode('reset');
                     setError('');
                     setSuccess('');
+                    setShowResetOption(false);
                   }}
                   className="text-sm text-yamoo-dark hover:underline"
                 >
@@ -297,6 +315,7 @@ function LoginForm() {
                   setMode('login');
                   setError('');
                   setSuccess('');
+                  setShowResetOption(false);
                 }}
                 className="text-yamoo-dark font-medium hover:underline"
               >
@@ -309,6 +328,7 @@ function LoginForm() {
                   onClick={() => {
                     setMode('login');
                     setError('');
+                    setShowResetOption(false);
                   }}
                   className="text-yamoo-dark font-medium hover:underline"
                 >
@@ -322,6 +342,7 @@ function LoginForm() {
                   onClick={() => {
                     setMode('signup');
                     setError('');
+                    setShowResetOption(false);
                   }}
                   className="text-yamoo-dark font-medium hover:underline"
                 >
