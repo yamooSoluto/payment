@@ -71,10 +71,12 @@ function LoginForm() {
         await signIn(email, password);
       }
       // 로그인한 이메일을 URL에 추가해서 리다이렉트
-      const urlWithEmail = redirectUrl.includes('?')
-        ? `${redirectUrl}&email=${encodeURIComponent(email)}`
-        : `${redirectUrl}?email=${encodeURIComponent(email)}`;
-      router.push(urlWithEmail);
+      // 이미 email 파라미터가 있으면 교체, 없으면 추가
+      let finalUrl = redirectUrl;
+      const url = new URL(redirectUrl, window.location.origin);
+      url.searchParams.set('email', email);
+      finalUrl = url.pathname + url.search;
+      router.push(finalUrl);
     } catch (err: unknown) {
       const error = err as { code?: string };
       if (error.code === 'auth/email-already-in-use') {
@@ -100,11 +102,12 @@ function LoginForm() {
     try {
       const user = await signInWithGoogle();
       // 로그인한 이메일을 URL에 추가해서 리다이렉트
+      // 이미 email 파라미터가 있으면 교체, 없으면 추가
       const userEmail = user.email || '';
-      const urlWithEmail = redirectUrl.includes('?')
-        ? `${redirectUrl}&email=${encodeURIComponent(userEmail)}`
-        : `${redirectUrl}?email=${encodeURIComponent(userEmail)}`;
-      router.push(urlWithEmail);
+      const url = new URL(redirectUrl, window.location.origin);
+      url.searchParams.set('email', userEmail);
+      const finalUrl = url.pathname + url.search;
+      router.push(finalUrl);
     } catch (err) {
       setError('Google 로그인에 실패했습니다.');
     } finally {
