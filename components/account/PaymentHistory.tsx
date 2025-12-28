@@ -11,9 +11,10 @@ interface Payment {
   amount: number;
   plan: string;
   status: 'done' | 'completed' | 'canceled' | 'failed' | 'refunded';
-  type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund';
+  type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund' | 'subscription' | 'cancel_refund' | 'downgrade_refund';
   previousPlan?: string;
   refundReason?: string;
+  cancelReason?: string;
   paidAt?: Date | string;
   createdAt: Date | string;
   cardCompany?: string;
@@ -54,9 +55,12 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
 
   // 환불 레코드를 원결제에 병합
   const mergedPayments = useMemo(() => {
+    // 환불 타입들 (cancel_refund, downgrade_refund, refund 등)
+    const refundTypes = ['refund', 'cancel_refund', 'downgrade_refund'];
+
     // 환불 레코드와 원결제 분리
-    const refundRecords = payments.filter(p => p.type === 'refund');
-    const originalPayments = payments.filter(p => p.type !== 'refund');
+    const refundRecords = payments.filter(p => refundTypes.includes(p.type || ''));
+    const originalPayments = payments.filter(p => !refundTypes.includes(p.type || ''));
 
     // 원결제에 환불 정보 병합
     const merged: MergedPayment[] = originalPayments.map(payment => {
@@ -67,7 +71,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
       const refunds = relatedRefunds.map(r => ({
         amount: Math.abs(r.amount),
         date: r.paidAt || r.createdAt,
-        reason: r.refundReason,
+        reason: r.refundReason || r.cancelReason,
       }));
 
       // 결제 문서 자체에 refundedAmount가 있는 경우 (관리자 환불)
