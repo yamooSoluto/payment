@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
-import { Shield, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group } from 'iconoir-react';
+import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group } from 'iconoir-react';
 
 interface Admin {
   id: string;
@@ -272,7 +272,7 @@ export default function AdminsPage() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
-          <Shield className="w-8 h-8 text-blue-600" />
+          <UserCrown className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">운영진 관리</h1>
         </div>
         {activeTab === 'list' && (

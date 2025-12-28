@@ -146,12 +146,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-500">
-            마지막 업데이트: {new Date().toLocaleString('ko-KR')}
-          </p>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
           <button
             onClick={fetchDashboardData}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -160,6 +157,9 @@ export default function AdminDashboard() {
             <RefreshDouble className="w-5 h-5 text-gray-500" />
           </button>
         </div>
+        <p className="text-sm text-gray-500">
+          마지막 업데이트: {new Date().toLocaleString('ko-KR')}
+        </p>
       </div>
 
       {/* 통계 카드 */}

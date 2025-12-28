@@ -534,25 +534,25 @@ export default function PlansPage() {
           <Package className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">상품 관리</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* 미리보기 버튼 */}
           <button
             onClick={() => setShowPreview(true)}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             title="요금제 페이지 미리보기"
           >
             <Eye className="w-4 h-4 text-gray-600" />
-            <span className="text-sm text-gray-700">미리보기</span>
+            <span className="hidden sm:inline text-sm text-gray-700">미리보기</span>
           </button>
           {/* 그리드 열 수 선택 */}
           <div className="relative">
             <button
               onClick={() => setShowGridSelector(!showGridSelector)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               title="그리드 열 수 변경"
             >
               <ViewGrid className="w-4 h-4 text-gray-600" />
-              <span className="text-sm text-gray-700">{gridCols}열</span>
+              <span className="hidden sm:inline text-sm text-gray-700">{gridCols}열</span>
             </button>
             {showGridSelector && (
               <>
@@ -584,10 +584,10 @@ export default function PlansPage() {
           </div>
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            플랜 추가
+            <span className="hidden sm:inline">플랜 추가</span>
           </button>
         </div>
       </div>

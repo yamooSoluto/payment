@@ -156,52 +156,35 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
       <h2 className="text-xl font-bold text-gray-900 mb-6">구독 내역</h2>
 
       {subscriptionPeriods.length > 0 ? (
-        <div className="overflow-x-auto">
-          {/* 테이블 헤더 */}
-          <div className="hidden sm:grid sm:grid-cols-4 gap-4 px-4 py-3 bg-gray-50 rounded-t-lg text-sm font-medium text-gray-500">
-            <div>플랜</div>
-            <div>구독 시작</div>
-            <div>구독 종료</div>
-            <div>상태</div>
-          </div>
-
-          {/* 테이블 바디 */}
-          <div className="divide-y divide-gray-100">
-            {subscriptionPeriods.map((period) => (
-              <div
-                key={period.id}
-                className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-4 px-4 py-4"
-              >
-                {/* 플랜 */}
-                <div className="flex items-center justify-between sm:justify-start">
-                  <span className="text-sm text-gray-500 sm:hidden">플랜</span>
-                  <span className="font-medium text-gray-900">{getPlanName(period.plan)}</span>
-                </div>
-
-                {/* 구독 시작 */}
-                <div className="flex items-center justify-between sm:justify-start">
-                  <span className="text-sm text-gray-500 sm:hidden">구독 시작</span>
-                  <span className="text-gray-700">{formatDate(period.startDate)}</span>
-                </div>
-
-                {/* 구독 종료 */}
-                <div className="flex items-center justify-between sm:justify-start">
-                  <span className="text-sm text-gray-500 sm:hidden">구독 종료</span>
-                  <span className="text-gray-700">
+        <div className="overflow-x-auto -mx-6 px-6">
+          <table className="w-full min-w-[400px]">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">플랜</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">구독 시작</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">구독 종료</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">상태</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {subscriptionPeriods.map((period) => (
+                <tr key={period.id}>
+                  <td className="px-4 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                    {getPlanName(period.plan)}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">
+                    {formatDate(period.startDate)}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">
                     {period.endDate ? formatDate(period.endDate) : '-'}
-                  </span>
-                </div>
-
-                {/* 상태 */}
-                <div className="flex items-center justify-between sm:justify-start">
-                  <span className="text-sm text-gray-500 sm:hidden">상태</span>
-                  <span className={`font-medium ${getStatusStyle(period.status)}`}>
+                  </td>
+                  <td className={`px-4 py-4 text-sm font-medium whitespace-nowrap ${getStatusStyle(period.status)}`}>
                     {getStatusText(period.status)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="text-center py-8 text-gray-500">

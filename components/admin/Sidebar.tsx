@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
-  Dashboard,
+  HomeAltSlim,
   Group,
   UserCrown,
   Package,
@@ -30,7 +30,7 @@ const menuItems = [
   {
     name: '대시보드',
     href: '/admin',
-    icon: Dashboard,
+    icon: HomeAltSlim,
     permission: null,
   },
   {
