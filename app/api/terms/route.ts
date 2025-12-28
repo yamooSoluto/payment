@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { defaultTermsOfService, defaultPrivacyPolicy } from '@/lib/default-terms';
 
-// GET: 공개 약관 조회 (인증 불필요)
+// GET: 공개 약관 조회 (배포된 버전 + 히스토리)
 export async function GET() {
   try {
     const db = initializeFirebaseAdmin();
@@ -11,23 +11,49 @@ export async function GET() {
       return NextResponse.json({
         termsOfService: defaultTermsOfService,
         privacyPolicy: defaultPrivacyPolicy,
+        history: [],
       });
     }
 
-    const doc = await db.collection('settings').doc('terms').get();
+    // 배포된 버전 조회
+    const doc = await db.collection('settings').doc('terms-published').get();
 
-    if (!doc.exists) {
-      // Firestore에 데이터가 없으면 기본값 반환
-      return NextResponse.json({
-        termsOfService: defaultTermsOfService,
-        privacyPolicy: defaultPrivacyPolicy,
-      });
+    let termsOfService = defaultTermsOfService;
+    let privacyPolicy = defaultPrivacyPolicy;
+    let currentPublishedAt = null;
+
+    if (doc.exists) {
+      const data = doc.data();
+      termsOfService = data?.termsOfService || defaultTermsOfService;
+      privacyPolicy = data?.privacyPolicy || defaultPrivacyPolicy;
+      currentPublishedAt = data?.publishedAt?.toDate?.() || data?.publishedAt || null;
     }
 
-    const data = doc.data();
+    // 과거 버전 히스토리 조회
+    const historySnapshot = await db
+      .collection('settings')
+      .doc('terms-published')
+      .collection('history')
+      .orderBy('publishedAt', 'desc')
+      .limit(20)
+      .get();
+
+    const history = historySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        termsOfService: data.termsOfService,
+        privacyPolicy: data.privacyPolicy,
+        publishedAt: data.publishedAt?.toDate?.() || data.publishedAt,
+        version: data.version,
+      };
+    });
+
     return NextResponse.json({
-      termsOfService: data?.termsOfService || defaultTermsOfService,
-      privacyPolicy: data?.privacyPolicy || defaultPrivacyPolicy,
+      termsOfService,
+      privacyPolicy,
+      publishedAt: currentPublishedAt,
+      history,
     });
   } catch (error) {
     console.error('Get public terms error:', error);
@@ -35,6 +61,7 @@ export async function GET() {
     return NextResponse.json({
       termsOfService: defaultTermsOfService,
       privacyPolicy: defaultPrivacyPolicy,
+      history: [],
     });
   }
 }

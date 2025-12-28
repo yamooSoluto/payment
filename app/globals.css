@@ -63,3 +63,44 @@ body {
 .card-hover {
   @apply transition-all duration-200 hover:shadow-xl hover:-translate-y-1;
 }
+
+/* TipTap Editor Styles */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror h2 {
+  @apply text-xl font-bold mt-6 mb-3;
+}
+
+.ProseMirror h3 {
+  @apply text-base font-bold mt-4 mb-2;
+}
+
+.ProseMirror p {
+  @apply mb-0.5;
+}
+
+.ProseMirror strong {
+  @apply font-bold;
+}
+
+.ProseMirror em {
+  @apply italic;
+}
+
+.ProseMirror u {
+  @apply underline;
+}
+
+.ProseMirror ul {
+  @apply list-disc pl-5 space-y-1 mb-2;
+}
+
+.ProseMirror ol {
+  @apply list-decimal pl-5 space-y-1 mb-2;
+}
+
+.ProseMirror section {
+  @apply mb-6;
+}

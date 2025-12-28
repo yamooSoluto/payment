@@ -1,8 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Xmark } from 'iconoir-react';
+import { Xmark, NavArrowLeft } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
+
+interface HistoryItem {
+  id: string;
+  termsOfService: string;
+  privacyPolicy: string;
+  publishedAt: string;
+  version: number;
+}
 
 interface DynamicTermsModalProps {
   type: 'terms' | 'privacy';
@@ -10,10 +18,12 @@ interface DynamicTermsModalProps {
 }
 
 export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalProps) {
-  const [content, setContent] = useState<string>('');
+  const [currentContent, setCurrentContent] = useState<string>('');
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewingHistory, setViewingHistory] = useState<HistoryItem | null>(null);
 
-  const title = type === 'terms' ? 'YAMOO 서비스이용약관' : '개인정보처리방침';
+  const baseTitle = type === 'terms' ? 'YAMOO 서비스이용약관' : '개인정보처리방침';
 
   useEffect(() => {
     const fetchTerms = async () => {
@@ -21,11 +31,12 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
         const response = await fetch('/api/terms');
         if (response.ok) {
           const data = await response.json();
-          setContent(type === 'terms' ? data.termsOfService : data.privacyPolicy);
+          setCurrentContent(type === 'terms' ? data.termsOfService : data.privacyPolicy);
+          setHistory(data.history || []);
         }
       } catch (error) {
         console.error('Failed to load terms:', error);
-        setContent('내용을 불러오는데 실패했습니다.');
+        setCurrentContent('내용을 불러오는데 실패했습니다.');
       } finally {
         setLoading(false);
       }
@@ -34,6 +45,20 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
     fetchTerms();
   }, [type]);
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+  };
+
+  const displayContent = viewingHistory
+    ? (type === 'terms' ? viewingHistory.termsOfService : viewingHistory.privacyPolicy)
+    : currentContent;
+
+  const title = viewingHistory
+    ? `${baseTitle} (${formatDate(viewingHistory.publishedAt)} 시행)`
+    : baseTitle;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -41,7 +66,18 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold">{title}</h2>
+          <div className="flex items-center gap-2">
+            {viewingHistory && (
+              <button
+                onClick={() => setViewingHistory(null)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                title="현재 약관으로 돌아가기"
+              >
+                <NavArrowLeft width={20} height={20} strokeWidth={1.5} />
+              </button>
+            )}
+            <h2 className="text-xl font-bold">{title}</h2>
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -50,16 +86,37 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto text-sm text-gray-700">
+        <div className="p-6 overflow-y-auto text-sm text-gray-700 flex-1">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
             </div>
           ) : (
-            <div
-              className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: content }}
-            />
+            <>
+              <div
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: displayContent }}
+              />
+
+              {/* 과거 약관 목록 - 현재 약관 보기 상태일 때만 표시 */}
+              {!viewingHistory && history.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">과거 약관 보기</h3>
+                  <ul className="space-y-2">
+                    {history.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          onClick={() => setViewingHistory(item)}
+                          className="text-sm text-yamoo-dark hover:underline"
+                        >
+                          {formatDate(item.publishedAt)} 시행 약관
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
         </div>
 

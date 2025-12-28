@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, Menu, Xmark } from 'iconoir-react';
+import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
 import { useState } from 'react';
+import { auth } from '@/lib/firebase';
 
 export default function Header() {
   const { user, loading, signOut } = useAuth();
@@ -15,6 +16,36 @@ export default function Header() {
       await signOut();
     } catch (error) {
       console.error('로그아웃 실패:', error);
+    }
+  };
+
+  const handlePortalClick = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
+
+        // POST 방식으로 토큰 전송 (URL에 노출 안됨)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://app.yamoo.ai.kr/api/auth/sso';
+        form.target = '_blank';
+
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = 'token';
+        tokenInput.value = idToken;
+
+        form.appendChild(tokenInput);
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+      } else {
+        window.open('https://app.yamoo.ai.kr', '_blank');
+      }
+    } catch (error) {
+      console.error('포탈 이동 실패:', error);
+      window.open('https://app.yamoo.ai.kr', '_blank');
     }
   };
 
@@ -52,6 +83,13 @@ export default function Header() {
               <>
                 {user ? (
                   <>
+                    <button
+                      onClick={handlePortalClick}
+                      className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium"
+                    >
+                      포탈
+                      <OpenNewWindow width={14} height={14} strokeWidth={2} />
+                    </button>
                     <Link
                       href={`/account?email=${encodeURIComponent(user.email || '')}`}
                       className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium"
@@ -123,6 +161,16 @@ export default function Header() {
               </Link>
               {!loading && user && (
                 <>
+                  <button
+                    onClick={() => {
+                      handlePortalClick();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium py-2 text-left"
+                  >
+                    포탈
+                    <OpenNewWindow width={14} height={14} strokeWidth={2} />
+                  </button>
                   <Link
                     href={`/account?email=${encodeURIComponent(user.email || '')}`}
                     className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"

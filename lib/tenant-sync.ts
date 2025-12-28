@@ -30,17 +30,28 @@ export async function syncSubscriptionToTenant(
 
   try {
     const tenantsRef = db.collection('tenants');
-    const snapshot = await tenantsRef.where('tenantId', '==', tenantId).get();
 
-    if (snapshot.empty) {
-      console.log(`[TenantSync] No tenant found for tenantId: ${tenantId}`);
-      return false;
+    // 먼저 문서 ID로 직접 조회 시도
+    const docById = await tenantsRef.doc(tenantId).get();
+
+    let docRef;
+    if (docById.exists) {
+      docRef = docById.ref;
+    } else {
+      // 문서 ID로 찾지 못하면 tenantId 필드로 검색
+      const snapshot = await tenantsRef.where('tenantId', '==', tenantId).get();
+      if (snapshot.empty) {
+        console.log(`[TenantSync] No tenant found for tenantId: ${tenantId}`);
+        return false;
+      }
+      docRef = snapshot.docs[0].ref;
     }
 
     const updateData: Record<string, unknown> = {};
 
     if (subscription.plan !== undefined) {
       updateData['subscription.plan'] = subscription.plan;
+      updateData['plan'] = subscription.plan; // 최상위 plan 필드도 업데이트
     }
     if (subscription.renewsAt !== undefined) {
       updateData['subscription.renewsAt'] = subscription.renewsAt;
@@ -50,10 +61,9 @@ export async function syncSubscriptionToTenant(
     }
     if (subscription.status !== undefined) {
       updateData['subscription.status'] = subscription.status;
+      updateData['status'] = subscription.status; // 최상위 status 필드도 업데이트
     }
 
-    // 첫 번째 매칭되는 문서만 업데이트 (tenantId는 고유해야 함)
-    const docRef = snapshot.docs[0].ref;
     await docRef.update(updateData);
 
     console.log(`[TenantSync] Synced subscription for tenantId: ${tenantId}`);
