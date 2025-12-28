@@ -49,9 +49,16 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     // 현재 구독 추가 - SubscriptionCard와 동일한 로직 사용
     const currentStart = subscription.currentPeriodStart || subscription.planChangedAt || subscription.startDate || subscription.createdAt;
 
-    // 종료일 계산: active 상태일 때는 nextBillingDate - 1일 (SubscriptionCard와 동일)
+    // 종료일 계산
+    // - expired (즉시 해지): currentPeriodEnd 사용 (해지 시점)
+    // - canceled (예약 해지): currentPeriodEnd 사용 (기간 종료일)
+    // - active: nextBillingDate - 1일
     let currentEndDate: Date | string | null = null;
-    if (subscription.status === 'canceled') {
+    if (subscription.status === 'expired') {
+      // 즉시 해지: currentPeriodEnd가 해지 시점으로 설정됨
+      currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
+    } else if (subscription.status === 'canceled') {
+      // 예약 해지: 기간 종료일까지 이용 가능
       currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
     } else if (subscription.nextBillingDate) {
       const endDate = new Date(subscription.nextBillingDate);
@@ -59,12 +66,20 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
       currentEndDate = endDate.toISOString();
     }
 
+    // 상태 매핑
+    let periodStatus: 'active' | 'completed' | 'canceled' = 'active';
+    if (subscription.status === 'expired') {
+      periodStatus = 'canceled';  // 즉시 해지 완료
+    } else if (subscription.status === 'canceled') {
+      periodStatus = 'canceled';  // 예약 해지
+    }
+
     subscriptionPeriods.push({
       id: 'current',
       plan: subscription.plan,
       startDate: currentStart || new Date(),
       endDate: currentEndDate,
-      status: subscription.status === 'active' ? 'active' : 'canceled',
+      status: periodStatus,
     });
 
     // 결제 내역에서 이전 구독 기간 추출
