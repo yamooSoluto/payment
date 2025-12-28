@@ -86,15 +86,59 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           phone: firstTenantData.phone || '',
         };
 
-        // 모든 tenant 데이터 수집
+        // 모든 tenant 데이터 수집 (trial/subscription 정보 포함)
         const tenantDataList = tenantsSnapshot.docs.map((doc) => {
           const data = doc.data();
+
+          // 체험 종료일 확인
+          const trialEndsAtRaw = data.trialEndsAt || data.subscription?.trialEndsAt;
+          let trialEndsAtDate: Date | null = null;
+          if (trialEndsAtRaw) {
+            if (typeof trialEndsAtRaw === 'object' && 'toDate' in trialEndsAtRaw) {
+              trialEndsAtDate = trialEndsAtRaw.toDate();
+            } else if (typeof trialEndsAtRaw === 'object' && '_seconds' in trialEndsAtRaw) {
+              trialEndsAtDate = new Date(trialEndsAtRaw._seconds * 1000);
+            } else if (typeof trialEndsAtRaw === 'string') {
+              trialEndsAtDate = new Date(trialEndsAtRaw);
+            }
+          }
+
+          // 구독 상태 결정 로직
+          let effectiveStatus = data.subscription?.status || data.status;
+          const effectivePlan = data.subscription?.plan || data.plan;
+
+          // 명시적 구독 상태가 없는 경우 체험 기간으로 판단
+          if (!effectiveStatus || effectiveStatus === 'active') {
+            if (effectivePlan === 'trial' || !effectivePlan) {
+              // trial 플랜인 경우: 체험 종료일 확인
+              if (trialEndsAtDate) {
+                const now = new Date();
+                if (trialEndsAtDate > now) {
+                  effectiveStatus = 'trial';
+                } else {
+                  effectiveStatus = 'expired';
+                }
+              } else {
+                // 체험 종료일이 없으면 기본값 trial
+                effectiveStatus = 'trial';
+              }
+            }
+          }
+
           return {
             id: doc.id,
             tenantId: data.tenantId || doc.id,
             brandName: data.brandName || '이름 없음',
             email: data.email,
             createdAt: serializeTimestamp(data.createdAt),
+            // tenants 컬렉션의 구독/체험 정보 (fallback용)
+            tenantSubscription: {
+              plan: effectivePlan || 'trial',
+              status: effectiveStatus,
+              trialEndsAt: serializeTimestamp(trialEndsAtRaw),
+              startedAt: serializeTimestamp(data.subscription?.startedAt),
+              renewsAt: serializeTimestamp(data.subscription?.renewsAt),
+            },
           };
         });
 
@@ -128,11 +172,40 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           }
         });
 
-        // 최종 결과 조합
-        tenants = tenantDataList.map((tenant) => ({
-          ...tenant,
-          subscription: subscriptionMap.get(tenant.tenantId) || null,
-        }));
+        // 최종 결과 조합 (subscriptions 없으면 tenants의 정보 사용)
+        tenants = tenantDataList.map((tenant) => {
+          const subFromCollection = subscriptionMap.get(tenant.tenantId);
+
+          // subscriptions 컬렉션에 있으면 그것 사용
+          if (subFromCollection) {
+            return {
+              id: tenant.id,
+              tenantId: tenant.tenantId,
+              brandName: tenant.brandName,
+              email: tenant.email,
+              createdAt: tenant.createdAt,
+              subscription: subFromCollection,
+            };
+          }
+
+          // 없으면 tenants 컬렉션의 subscription 정보 사용 (trial 등)
+          const tenantSub = tenant.tenantSubscription;
+          return {
+            id: tenant.id,
+            tenantId: tenant.tenantId,
+            brandName: tenant.brandName,
+            email: tenant.email,
+            createdAt: tenant.createdAt,
+            subscription: {
+              plan: tenantSub.plan,
+              status: tenantSub.status,
+              amount: 0,
+              nextBillingDate: tenantSub.renewsAt,
+              currentPeriodEnd: tenantSub.trialEndsAt || tenantSub.renewsAt,
+              canceledAt: null,
+            },
+          };
+        });
       }
     } catch (error) {
       console.error('Failed to fetch tenants:', error);
