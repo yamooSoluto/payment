@@ -9,24 +9,27 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 토큰 기반 인증(포탈 SSO)인 경우 Firebase Auth 체크 스킵
+  // 토큰 또는 이메일 기반 인증(포탈 SSO)인 경우 Firebase Auth 체크 스킵
   const hasToken = searchParams.get('token');
+  const hasEmail = searchParams.get('email');
+  const skipFirebaseAuth = hasToken || hasEmail;
 
   useEffect(() => {
-    // 토큰이 있으면 포탈 SSO 인증이므로 Firebase Auth 체크 스킵
-    if (hasToken) return;
+    // 토큰이나 이메일이 있으면 포탈 SSO 인증이므로 Firebase Auth 체크 스킵
+    if (skipFirebaseAuth) return;
 
     // 로딩 중이면 대기
     if (loading) return;
 
-    // Firebase Auth 로그아웃 상태면 로그인 페이지로 리다이렉트
+    // Firebase Auth 로그아웃 상태면 로그인 페이지로 리다이렉트 (현재 URL 유지)
     if (!user) {
-      router.replace('/login');
+      const currentPath = window.location.pathname;
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
     }
-  }, [user, loading, hasToken, router]);
+  }, [user, loading, skipFirebaseAuth, router]);
 
-  // 토큰 인증이면 바로 렌더링
-  if (hasToken) {
+  // 토큰 또는 이메일 인증이면 바로 렌더링
+  if (skipFirebaseAuth) {
     return <>{children}</>;
   }
 
