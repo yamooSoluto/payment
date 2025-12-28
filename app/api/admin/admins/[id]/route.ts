@@ -90,6 +90,14 @@ export async function PUT(
       );
     }
 
+    // 소유자의 비밀번호는 본인만 변경 가능
+    if (targetAdmin?.role === 'owner' && password && admin.adminId !== id) {
+      return NextResponse.json(
+        { error: '소유자의 비밀번호는 본인만 변경할 수 있습니다.' },
+        { status: 403 }
+      );
+    }
+
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
       updatedBy: admin.adminId,
