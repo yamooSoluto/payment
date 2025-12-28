@@ -9,6 +9,7 @@ interface Subscription {
   email: string;
   memberName: string;
   brandName: string;
+  phone: string;
   plan: string;
   status: string;
   amount: number;
@@ -43,6 +44,9 @@ export default function SubscriptionsPage() {
   const [editModal, setEditModal] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const [editForm, setEditForm] = useState({
+    brandName: '',
+    name: '',
+    phone: '',
     plan: '',
     status: '',
     currentPeriodStart: '',
@@ -135,6 +139,9 @@ export default function SubscriptionsPage() {
     // 종료일은 nextBillingDate - 1로 표시 (마이페이지와 동일)
     const endDate = getEndDateFromNextBilling(subscription.nextBillingDate);
     setEditForm({
+      brandName: subscription.brandName || '',
+      name: subscription.memberName || '',
+      phone: subscription.phone || '',
       plan: subscription.plan || '',
       status: subscription.status || '',
       currentPeriodStart: formatDateForInput(subscription.currentPeriodStart),
@@ -161,6 +168,9 @@ export default function SubscriptionsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: editingSubscription.tenantId,
+          brandName: editForm.brandName || null,
+          name: editForm.name || null,
+          phone: editForm.phone || null,
           plan: editForm.plan,
           status: editForm.status,
           currentPeriodStart: editForm.currentPeriodStart || null,
@@ -349,17 +359,53 @@ export default function SubscriptionsPage() {
 
             <h3 className="text-lg font-bold text-gray-900 mb-4">구독 정보 수정</h3>
 
-            {/* 구독자 정보 */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">매장명</span>
-                <span className="font-medium">{editingSubscription.brandName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">이메일</span>
-                <span className="font-medium">{editingSubscription.email || '-'}</span>
-              </div>
+            {/* 이메일 (읽기 전용) */}
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+              <span className="text-gray-500">이메일: </span>
+              <span className="font-medium">{editingSubscription.email || '-'}</span>
             </div>
+
+            {/* 매장 정보 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                매장명
+              </label>
+              <input
+                type="text"
+                value={editForm.brandName}
+                onChange={(e) => setEditForm(prev => ({ ...prev, brandName: e.target.value }))}
+                placeholder="매장명 입력"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                담당자 이름
+              </label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="담당자 이름 입력"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                전화번호
+              </label>
+              <input
+                type="tel"
+                value={editForm.phone}
+                onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="전화번호 입력"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <hr className="my-4 border-gray-200" />
 
             {/* 플랜 선택 */}
             <div className="mb-4">

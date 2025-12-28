@@ -80,12 +80,19 @@ export async function GET(request: NextRequest) {
     const nextBillingDate = new Date(now);
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
-    // tenant 정보 조회 (매장명 가져오기)
+    // tenant 정보 조회 (매장명, 이름, 전화번호 가져오기)
     let tenantName = '';
+    let brandName = '';
+    let ownerName = '';
+    let phone = '';
     try {
       const tenantDoc = await db.collection('tenants').doc(tenantId).get();
       if (tenantDoc.exists) {
-        tenantName = tenantDoc.data()?.name || '';
+        const tenantData = tenantDoc.data();
+        brandName = tenantData?.brandName || '';
+        ownerName = tenantData?.name || '';
+        phone = tenantData?.phone || '';
+        tenantName = brandName || ownerName || '';
       }
     } catch {
       // 무시
@@ -99,6 +106,9 @@ export async function GET(request: NextRequest) {
       const subscriptionRef = db.collection('subscriptions').doc(tenantId);
       transaction.set(subscriptionRef, {
         tenantId,
+        brandName: brandName || null,  // 한글 매장명
+        name: ownerName || null,        // 담당자 이름
+        phone: phone || null,           // 전화번호
         email,
         plan,
         billingKey,

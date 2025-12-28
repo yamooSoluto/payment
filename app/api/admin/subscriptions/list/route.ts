@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       brandName: string;
       name: string;
       email: string;
+      phone: string;
     }>();
 
     tenantsSnapshot.docs.forEach(doc => {
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
         brandName: data.brandName || data.businessName || '이름 없음',
         name: data.name || data.ownerName || '',
         email: data.email || '',
+        phone: data.phone || '',
       });
     });
 
@@ -55,6 +57,7 @@ export async function GET(request: NextRequest) {
       email: string;
       memberName: string;
       brandName: string;
+      phone: string;
       plan: string;
       status: string;
       amount: number;
@@ -74,8 +77,10 @@ export async function GET(request: NextRequest) {
         id: doc.id,
         tenantId,
         email: data.email || tenantInfo?.email || '',
-        memberName: tenantInfo?.name || '',
-        brandName: tenantInfo?.brandName || '(매장 정보 없음)',
+        // subscription에 있으면 먼저 쓰고, 없으면 tenant에서 가져옴
+        memberName: data.name || tenantInfo?.name || '',
+        brandName: data.brandName || tenantInfo?.brandName || '(매장 정보 없음)',
+        phone: data.phone || tenantInfo?.phone || '',
         plan: data.plan || '',
         status: data.status || '',
         amount: data.amount || 0,
@@ -160,7 +165,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { tenantId, plan, currentPeriodStart, currentPeriodEnd, nextBillingDate, status } = body;
+    const { tenantId, plan, currentPeriodStart, currentPeriodEnd, nextBillingDate, status, brandName, name, phone } = body;
 
     if (!tenantId) {
       return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
@@ -187,6 +192,17 @@ export async function PUT(request: NextRequest) {
 
     if (status !== undefined) {
       updateData.status = status;
+    }
+
+    // 매장 정보 업데이트
+    if (brandName !== undefined) {
+      updateData.brandName = brandName;
+    }
+    if (name !== undefined) {
+      updateData.name = name;
+    }
+    if (phone !== undefined) {
+      updateData.phone = phone;
     }
 
     if (currentPeriodStart !== undefined) {
