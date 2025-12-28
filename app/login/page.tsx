@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle } from 'iconoir-react';
@@ -18,6 +18,10 @@ export default function LoginPage() {
 
   const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 로그인 후 리다이렉트할 URL (없으면 /pricing)
+  const redirectUrl = searchParams.get('redirect') || '/pricing';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +71,11 @@ export default function LoginPage() {
       } else {
         await signIn(email, password);
       }
-      router.push('/pricing');
+      // 로그인한 이메일을 URL에 추가해서 리다이렉트
+      const urlWithEmail = redirectUrl.includes('?')
+        ? `${redirectUrl}&email=${encodeURIComponent(email)}`
+        : `${redirectUrl}?email=${encodeURIComponent(email)}`;
+      router.push(urlWithEmail);
     } catch (err: unknown) {
       const error = err as { code?: string };
       if (error.code === 'auth/email-already-in-use') {
@@ -91,8 +99,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithGoogle();
-      router.push('/pricing');
+      const user = await signInWithGoogle();
+      // 로그인한 이메일을 URL에 추가해서 리다이렉트
+      const userEmail = user.email || '';
+      const urlWithEmail = redirectUrl.includes('?')
+        ? `${redirectUrl}&email=${encodeURIComponent(userEmail)}`
+        : `${redirectUrl}?email=${encodeURIComponent(userEmail)}`;
+      router.push(urlWithEmail);
     } catch (err) {
       setError('Google 로그인에 실패했습니다.');
     } finally {

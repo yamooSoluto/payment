@@ -18,7 +18,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<User>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
 }
@@ -82,10 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCachedAuthState(result.user);
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (): Promise<User> => {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
     setCachedAuthState(result.user);
+    return result.user;
   }, []);
 
   const signOut = useCallback(async () => {

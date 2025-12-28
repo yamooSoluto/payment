@@ -57,7 +57,9 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   }
 
   if (!email) {
-    redirect('/login');
+    // 로그인 후 이 페이지로 돌아올 수 있도록 redirect 파라미터 추가
+    const returnUrl = `/account/${tenantId}`;
+    redirect(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   }
 
   const db = adminDb || initializeFirebaseAdmin();
