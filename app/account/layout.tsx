@@ -22,8 +22,14 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     // 로딩 중이면 대기
     if (loading) return;
 
-    // Firebase Auth 로그인 상태면 OK
+    // Firebase Auth 로그인 상태면 이메일 일치 여부 확인
     if (user) {
+      // URL의 email 파라미터와 로그인한 사용자의 이메일이 다르면 로그인 페이지로
+      if (hasEmail && user.email && user.email.toLowerCase() !== hasEmail.toLowerCase()) {
+        const currentPath = window.location.pathname;
+        router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+        return;
+      }
       setAuthChecked(true);
       return;
     }
@@ -60,6 +66,11 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
 
   // 로그아웃 상태면 아무것도 표시하지 않음 (리다이렉트 중)
   if (!user) {
+    return null;
+  }
+
+  // 이메일 불일치면 아무것도 표시하지 않음 (리다이렉트 중)
+  if (hasEmail && user.email && user.email.toLowerCase() !== hasEmail.toLowerCase()) {
     return null;
   }
 
