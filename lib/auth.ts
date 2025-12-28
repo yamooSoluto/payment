@@ -431,3 +431,80 @@ export async function getPlans(): Promise<Array<{
     return DEFAULT_PLANS;
   }
 }
+
+// 특정 플랜 정보 조회 (checkout, billing 등에서 사용)
+export async function getPlanById(planId: string): Promise<{
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  refundPolicy?: string;
+} | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    // Firestore 없을 때 기본값 반환
+    const defaultPlan = DEFAULT_PLANS.find(p => p.id === planId);
+    if (defaultPlan) {
+      return {
+        id: defaultPlan.id,
+        name: defaultPlan.name,
+        price: defaultPlan.priceNumber,
+        description: defaultPlan.description,
+        features: defaultPlan.features,
+      };
+    }
+    return null;
+  }
+
+  try {
+    const doc = await db.collection('plans').doc(planId).get();
+    if (!doc.exists) {
+      // Firestore에 없으면 기본값 반환
+      const defaultPlan = DEFAULT_PLANS.find(p => p.id === planId);
+      if (defaultPlan) {
+        return {
+          id: defaultPlan.id,
+          name: defaultPlan.name,
+          price: defaultPlan.priceNumber,
+          description: defaultPlan.description,
+          features: defaultPlan.features,
+        };
+      }
+      return null;
+    }
+
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data?.name || planId,
+      price: data?.price || 0,
+      description: data?.description || '',
+      features: data?.features || [],
+      refundPolicy: data?.refundPolicy,
+    };
+  } catch (error) {
+    console.error('Failed to get plan:', error);
+    return null;
+  }
+}
+
+// 플랜 표시 설정 조회 (public - 요금제 페이지용)
+export async function getPlanSettings(): Promise<{ gridCols: number }> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    return { gridCols: 4 };
+  }
+
+  try {
+    const doc = await db.collection('settings').doc('plans').get();
+    if (!doc.exists) {
+      return { gridCols: 4 };
+    }
+    const data = doc.data();
+    return { gridCols: data?.gridCols || 4 };
+  } catch (error) {
+    console.error('Failed to get plan settings:', error);
+    return { gridCols: 4 };
+  }
+}

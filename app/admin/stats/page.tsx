@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { BarChart3, Users, CreditCard, TrendingUp, Calendar, Loader2 } from 'lucide-react';
+import { StatsUpSquare, Group, CreditCard, GraphUp, Calendar, RefreshDouble } from 'iconoir-react';
 
 interface Summary {
   totalMembers: number;
@@ -83,7 +83,7 @@ export default function StatsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <BarChart3 className="w-8 h-8 text-blue-600" />
+          <StatsUpSquare className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">통계</h1>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default function StatsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
         </div>
       ) : data ? (
         <>
@@ -143,7 +143,7 @@ export default function StatsPage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-blue-100 rounded-lg">
-                  <Users className="w-5 h-5 text-blue-600" />
+                  <Group className="w-5 h-5 text-blue-600" />
                 </div>
                 <span className="text-sm text-gray-500">전체 회원</span>
               </div>
@@ -153,7 +153,7 @@ export default function StatsPage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-green-100 rounded-lg">
-                  <Users className="w-5 h-5 text-green-600" />
+                  <Group className="w-5 h-5 text-green-600" />
                 </div>
                 <span className="text-sm text-gray-500">활성 구독</span>
               </div>
@@ -163,7 +163,7 @@ export default function StatsPage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-orange-100 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-orange-600" />
+                  <GraphUp className="w-5 h-5 text-orange-600" />
                 </div>
                 <span className="text-sm text-gray-500">신규 가입</span>
               </div>

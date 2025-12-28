@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Menu, LogOut, User, ChevronDown } from 'lucide-react';
+import { Menu, LogOut, User, NavArrowDown } from 'iconoir-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 interface AdminHeaderProps {
@@ -64,7 +64,7 @@ export default function AdminHeader({ onMenuClick }: AdminHeaderProps) {
             <p className="text-sm font-medium text-gray-900">{admin?.name}</p>
             <p className="text-xs text-gray-500">{admin?.role ? roleLabels[admin.role] : ''}</p>
           </div>
-          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+          <NavArrowDown className={`w-4 h-4 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
         </button>
 
         {/* 드롭다운 메뉴 */}

@@ -104,6 +104,50 @@ export function getPlanAmount(plan: string): number {
   return PLAN_PRICES[plan] ?? 0;
 }
 
+// 가격 정책 타입
+export type PricePolicy = 'grandfathered' | 'protected_until' | 'standard';
+
+export const PRICE_POLICY_LABELS: Record<PricePolicy, string> = {
+  grandfathered: '가격 보호 (영구)',
+  protected_until: '기간 한정 가격 보호',
+  standard: '일반 (최신 가격 적용)',
+};
+
+// 구독자의 실제 결제 금액 계산
+export function getEffectiveAmount(
+  subscription: {
+    plan: string;
+    amount?: number;
+    pricePolicy?: PricePolicy;
+    priceProtectedUntil?: Date | string;
+  }
+): number {
+  const currentPlanPrice = PLAN_PRICES[subscription.plan] ?? 0;
+  const subscriberAmount = subscription.amount ?? currentPlanPrice;
+
+  // 가격 정책에 따른 결제 금액 결정
+  switch (subscription.pricePolicy) {
+    case 'grandfathered':
+      // 영구 가격 보호: 항상 구독 시점 금액
+      return subscriberAmount;
+
+    case 'protected_until':
+      // 기간 한정 보호: 보호 기간 내면 구독 시점 금액, 이후 최신 가격
+      if (subscription.priceProtectedUntil) {
+        const protectedUntil = new Date(subscription.priceProtectedUntil);
+        if (new Date() < protectedUntil) {
+          return subscriberAmount;
+        }
+      }
+      return currentPlanPrice;
+
+    case 'standard':
+    default:
+      // 일반: 최신 플랜 가격
+      return currentPlanPrice;
+  }
+}
+
 export function getPlanName(plan: string): string {
   const names: Record<string, string> = {
     trial: 'Trial',

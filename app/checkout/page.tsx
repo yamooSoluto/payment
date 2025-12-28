@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo } from '@/lib/auth';
-import { getPlanAmount, getPlanName } from '@/lib/toss';
+import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo, getPlanById } from '@/lib/auth';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
 import { NavArrowLeft, Shield, Lock, Sofa, WarningCircle } from 'iconoir-react';
 import Link from 'next/link';
@@ -59,20 +58,26 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   // 병렬로 데이터 조회 (성능 최적화)
   // mode=immediate인 경우 특정 tenant의 구독 정보를 조회
-  const [subscription, tenantInfo] = await Promise.all([
+  const [subscription, tenantInfo, planInfo] = await Promise.all([
     (mode === 'immediate' && tenantId)
       ? getSubscriptionByTenantId(tenantId, email)
       : getSubscription(email),
     tenantId ? getTenantInfo(tenantId) : Promise.resolve(null),
+    getPlanById(plan),
   ]);
+
+  // 플랜 정보가 없으면 에러
+  if (!planInfo) {
+    redirect('/error?message=invalid_plan');
+  }
 
   // 이미 같은 플랜을 사용 중인 경우
   if (subscription?.plan === plan && subscription?.status === 'active') {
     redirect(`/account?${authParam}`);
   }
 
-  const fullAmount = getPlanAmount(plan);
-  const planName = getPlanName(plan);
+  const fullAmount = planInfo.price;
+  const planName = planInfo.name;
 
   // 즉시 업그레이드인 경우 일할 계산
   let amount = fullAmount;
@@ -82,8 +87,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   if (mode === 'immediate' && subscription?.status === 'active') {
     isUpgradeMode = true;
-    currentPlanName = getPlanName(subscription.plan);
-    const currentAmount = getPlanAmount(subscription.plan) || 0;
+    const currentPlanInfo = await getPlanById(subscription.plan);
+    currentPlanName = currentPlanInfo?.name || subscription.plan;
+    const currentAmount = currentPlanInfo?.price || 0;
 
     // 다음 결제일까지 남은 일수 계산
     let daysLeft = 30;
@@ -106,8 +112,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect(`/checkout/trial?email=${encodeURIComponent(email)}`);
   }
 
-  // 유효하지 않은 플랜 (trial, basic, business 외)
-  if (fullAmount === undefined || (plan !== 'trial' && fullAmount === 0)) {
+  // 무료 플랜인 경우 (trial 이외) 에러 처리
+  if (fullAmount === 0) {
     redirect('/error?message=invalid_plan');
   }
 

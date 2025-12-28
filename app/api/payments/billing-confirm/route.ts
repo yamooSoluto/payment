@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { issueBillingKey, payWithBillingKey, getPlanName, getPlanAmount } from '@/lib/toss';
+import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
+import { getPlanById } from '@/lib/auth';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -44,13 +45,22 @@ export async function GET(request: NextRequest) {
 
     console.log('Billing key issued:', billingKey?.slice(0, 10) + '...');
 
-    // 2. 결제 금액 확인
-    const paymentAmount = amount ? parseInt(amount) : getPlanAmount(plan);
+    // 2. 플랜 정보 조회 (Firestore에서 동적으로)
+    const planInfo = await getPlanById(plan);
+    if (!planInfo) {
+      const authQuery = authParam ? `&${authParam}` : '';
+      return NextResponse.redirect(
+        new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=invalid_plan`, request.url)
+      );
+    }
+
+    // 3. 결제 금액 확인 (URL에서 전달된 금액이 있으면 사용, 없으면 플랜 가격)
+    const paymentAmount = amount ? parseInt(amount) : planInfo.price;
     const email = customerKey;
 
-    // 3. 첫 결제 수행
+    // 4. 첫 결제 수행
     const orderId = `SUB_${Date.now()}_${tenantId}`;
-    const orderName = `YAMOO ${getPlanName(plan)} 플랜 - 첫 결제`;
+    const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
 
     console.log('Processing first payment:', { orderId, paymentAmount, tenantId });
 
@@ -111,6 +121,7 @@ export async function GET(request: NextRequest) {
         paymentKey: paymentResponse.paymentKey,
         amount: paymentAmount,
         plan,
+        type: 'subscription',  // 신규 구독
         status: 'done',
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,

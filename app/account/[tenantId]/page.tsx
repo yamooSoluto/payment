@@ -4,6 +4,8 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
 import CardList from '@/components/account/CardList';
+import AccountTabs from '@/components/account/AccountTabs';
+import SubscriptionHistory from '@/components/account/SubscriptionHistory';
 import Link from 'next/link';
 import { NavArrowLeft, NavArrowRight, Sofa } from 'iconoir-react';
 
@@ -132,24 +134,36 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       </div>
 
       {/* Content */}
-      <div className="space-y-6">
+      <div>
         {subscription ? (
-          <>
-            <SubscriptionCard
-              subscription={subscription}
-              authParam={authParam}
-              tenantId={tenantId}
-            />
-            <CardList
-              tenantId={tenantId}
-              email={email}
-              authParam={authParam}
-            />
-            <PaymentHistory
-              payments={payments as Parameters<typeof PaymentHistory>[0]['payments']}
-              tenantName={tenantData.brandName}
-            />
-          </>
+          <AccountTabs
+            subscriptionContent={
+              <SubscriptionCard
+                subscription={subscription}
+                authParam={authParam}
+                tenantId={tenantId}
+              />
+            }
+            cardsContent={
+              <CardList
+                tenantId={tenantId}
+                email={email}
+                authParam={authParam}
+              />
+            }
+            paymentsContent={
+              <PaymentHistory
+                payments={payments as Parameters<typeof PaymentHistory>[0]['payments']}
+                tenantName={tenantData.brandName}
+              />
+            }
+            historyContent={
+              <SubscriptionHistory
+                subscription={subscription}
+                payments={payments}
+              />
+            }
+          />
         ) : (
           /* 구독이 없을 때 */
           <div className="bg-white rounded-xl shadow-lg p-8 text-center">

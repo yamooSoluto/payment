@@ -35,6 +35,7 @@ interface PricingClientProps {
   isLoggedIn: boolean;
   initialTenantId?: string | null;
   initialTenants?: Tenant[];
+  gridCols?: number;
 }
 
 export default function PricingClient({
@@ -45,6 +46,7 @@ export default function PricingClient({
   isLoggedIn,
   initialTenantId,
   initialTenants = [],
+  gridCols = 4,
 }: PricingClientProps) {
   const { user } = useAuth();
   // 서버에서 받은 매장 목록 사용 (추가 API 호출 불필요)
@@ -113,9 +115,14 @@ export default function PricingClient({
   const effectiveTenantId = selectedTenantId || initialTenantId;
   const finalAuthParam = authParam || (userEmail ? `email=${encodeURIComponent(userEmail)}` : '');
 
+  // 그리드 열 수에 따른 클래스 (Tailwind CSS는 동적 클래스를 지원하지 않으므로 미리 정의)
+  const gridColsClass = gridCols === 3
+    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12'
+    : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12';
+
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+      <div className={gridColsClass}>
         {plans.map((plan) => (
           <PricingCard
             key={plan.id}

@@ -1,4 +1,4 @@
-import { verifyToken, getSubscription, getTenantsByEmail, getPlans } from '@/lib/auth';
+import { verifyToken, getSubscription, getTenantsByEmail, getPlans, getPlanSettings } from '@/lib/auth';
 import PricingClient from '@/components/pricing/PricingClient';
 import ComparisonTable from '@/components/pricing/ComparisonTable';
 
@@ -26,11 +26,12 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
   // 비로그인 상태에서도 요금제 페이지는 볼 수 있음 (선택 시 로그인 유도)
   const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
 
-  // 병렬로 플랜, 구독 정보, 매장 목록 조회 (성능 최적화)
-  const [plans, subscription, tenants] = await Promise.all([
+  // 병렬로 플랜, 구독 정보, 매장 목록, 설정 조회 (성능 최적화)
+  const [plans, subscription, tenants, planSettings] = await Promise.all([
     getPlans(),
     email ? getSubscription(email) : Promise.resolve(null),
     email ? getTenantsByEmail(email) : Promise.resolve([]),
+    getPlanSettings(),
   ]);
 
   return (
@@ -54,6 +55,7 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
         isLoggedIn={!!email}
         initialTenantId={tenantId}
         initialTenants={tenants}
+        gridCols={planSettings.gridCols}
       />
 
       {/* Comparison Table */}

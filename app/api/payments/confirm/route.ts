@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { issueBillingKey, payWithBillingKey, getPlanAmount, getPlanName } from '@/lib/toss';
+import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
+import { getPlanById } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -26,10 +27,18 @@ export async function GET(request: NextRequest) {
     const billingData = await issueBillingKey(authKey, customerKey);
     const { billingKey, card } = billingData;
 
-    // 2. 첫 결제 진행
-    const amount = getPlanAmount(plan);
+    // 2. 플랜 정보 조회 (Firestore에서 동적으로)
+    const planInfo = await getPlanById(plan);
+    if (!planInfo) {
+      return NextResponse.redirect(
+        `${request.nextUrl.origin}/fail?error=invalid_plan`
+      );
+    }
+
+    // 3. 첫 결제 진행
+    const amount = planInfo.price;
     const orderId = `ORDER_${Date.now()}`;
-    const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
+    const orderName = `YAMOO ${planInfo.name} 플랜`;
 
     const paymentResponse = await payWithBillingKey(
       billingKey,
@@ -68,6 +77,7 @@ export async function GET(request: NextRequest) {
       paymentKey: paymentResponse.paymentKey,
       amount,
       plan,
+      type: 'subscription',  // 신규 구독
       status: 'done',
       method: paymentResponse.method,
       cardCompany: card.company,

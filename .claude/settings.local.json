@@ -28,7 +28,11 @@
       "Bash(timeout:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(npm show:*)"
+      "Bash(npm show:*)",
+      "Bash(grep:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npx next lint:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

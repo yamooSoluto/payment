@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Lock, User, WarningCircle, Eye, EyeClosed } from 'iconoir-react';
 import Image from 'next/image';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
@@ -56,7 +56,7 @@ export default function AdminLoginPage() {
             {/* Error Message */}
             {error && (
               <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                <WarningCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
@@ -104,7 +104,7 @@ export default function AdminLoginPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
                 >
                   {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
+                    <EyeClosed className="w-5 h-5" />
                   ) : (
                     <Eye className="w-5 h-5" />
                   )}

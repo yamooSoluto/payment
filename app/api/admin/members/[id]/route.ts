@@ -73,6 +73,9 @@ export async function GET(
       amount: number;
       nextBillingDate: string | null;
       currentPeriodEnd: string | null;
+      pricePolicy: string | null;
+      priceProtectedUntil: string | null;
+      originalAmount: number | null;
     }>();
 
     subscriptionDocs.forEach((doc) => {
@@ -84,6 +87,9 @@ export async function GET(
           amount: data?.amount || 0,
           nextBillingDate: data?.nextBillingDate?.toDate?.()?.toISOString() || null,
           currentPeriodEnd: data?.currentPeriodEnd?.toDate?.()?.toISOString() || null,
+          pricePolicy: data?.pricePolicy || null,
+          priceProtectedUntil: data?.priceProtectedUntil?.toDate?.()?.toISOString() || null,
+          originalAmount: data?.originalAmount || null,
         });
       }
     });

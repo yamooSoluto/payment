@@ -32,6 +32,9 @@ type AdminRole = 'owner' | 'super' | 'admin' | 'viewer';
 
 // 권한 정의 (owner는 모든 권한 보유)
 export const PERMISSIONS: Record<string, AdminRole[]> = {
+  // 대시보드
+  'dashboard:read': ['owner', 'super', 'admin', 'viewer'],
+
   // 회원 관리
   'members:read': ['owner', 'super', 'admin', 'viewer'],
   'members:write': ['owner', 'super', 'admin'],
@@ -49,7 +52,12 @@ export const PERMISSIONS: Record<string, AdminRole[]> = {
 
   // 주문 내역
   'orders:read': ['owner', 'super', 'admin', 'viewer'],
+  'orders:write': ['owner', 'super', 'admin'],
   'orders:export': ['owner', 'super', 'admin'],
+
+  // 구독 관리
+  'subscriptions:read': ['owner', 'super', 'admin', 'viewer'],
+  'subscriptions:write': ['owner', 'super', 'admin'],
 
   // 통계
   'stats:read': ['owner', 'super', 'admin', 'viewer'],
@@ -65,6 +73,69 @@ export const PERMISSIONS: Record<string, AdminRole[]> = {
 };
 
 export type Permission = keyof typeof PERMISSIONS;
+
+// DB에서 가져온 권한 설정 캐시
+let cachedRolePermissions: Record<string, string[]> | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL = 60 * 1000; // 1분 캐시
+
+// DB에서 권한 설정 로드
+export async function loadRolePermissions(): Promise<Record<string, string[]>> {
+  const now = Date.now();
+
+  // 캐시가 유효하면 캐시된 값 반환
+  if (cachedRolePermissions && (now - cacheTimestamp) < CACHE_TTL) {
+    return cachedRolePermissions;
+  }
+
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    // DB 연결 실패 시 기본 권한 반환
+    return getDefaultRolePermissions();
+  }
+
+  try {
+    const settingsDoc = await db.collection('settings').doc('role_permissions').get();
+
+    let permissions: Record<string, string[]>;
+    if (settingsDoc.exists) {
+      const data = settingsDoc.data();
+      permissions = data?.permissions || getDefaultRolePermissions();
+    } else {
+      permissions = getDefaultRolePermissions();
+    }
+
+    cachedRolePermissions = permissions;
+    cacheTimestamp = now;
+    return permissions;
+  } catch (error) {
+    console.error('Failed to load role permissions:', error);
+    return getDefaultRolePermissions();
+  }
+}
+
+// 기본 권한 설정 (PERMISSIONS 객체 기반)
+function getDefaultRolePermissions(): Record<string, string[]> {
+  const permissions: Record<string, string[]> = {
+    super: [],
+    admin: [],
+    viewer: [],
+  };
+
+  for (const [permission, roles] of Object.entries(PERMISSIONS)) {
+    if (roles.includes('super')) permissions.super.push(permission);
+    if (roles.includes('admin')) permissions.admin.push(permission);
+    if (roles.includes('viewer')) permissions.viewer.push(permission);
+  }
+
+  return permissions;
+}
+
+// 권한 캐시 무효화
+export function invalidatePermissionsCache(): void {
+  cachedRolePermissions = null;
+  cacheTimestamp = 0;
+}
 
 // 비밀번호 해싱
 export function hashPassword(password: string): string {
@@ -176,10 +247,37 @@ export async function getAdminFromCookies(): Promise<AdminSession | null> {
   return verifyAdminSession(sessionToken);
 }
 
-// 권한 확인
+// 권한 확인 (기본 권한 - 동기적)
 export function hasPermission(admin: AdminSession, permission: Permission): boolean {
+  // owner는 항상 모든 권한 보유
+  if (admin.role === 'owner') {
+    return true;
+  }
+
   const allowedRoles = PERMISSIONS[permission];
+  if (!allowedRoles) {
+    console.error(`Permission not defined: ${permission}`);
+    return false;
+  }
   return allowedRoles.includes(admin.role);
+}
+
+// 권한 확인 (DB 기반 - 비동기)
+export async function hasPermissionAsync(admin: AdminSession, permission: string): Promise<boolean> {
+  // owner는 항상 모든 권한 보유
+  if (admin.role === 'owner') {
+    return true;
+  }
+
+  try {
+    const rolePermissions = await loadRolePermissions();
+    const permissions = rolePermissions[admin.role] || [];
+    return permissions.includes(permission);
+  } catch (error) {
+    console.error('Permission check error:', error);
+    // 에러 시 기본 권한으로 폴백
+    return hasPermission(admin, permission as Permission);
+  }
 }
 
 // 로그인 ID로 관리자 찾기 (username 또는 loginId 필드 모두 지원)

@@ -1,20 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, Sliders } from 'lucide-react';
+import { Page, Settings } from 'iconoir-react';
 
 const settingsMenus = [
   {
     name: '일반',
     description: '기본 설정을 관리합니다.',
     href: '/admin/settings/general',
-    icon: Sliders,
+    icon: Settings,
   },
   {
     name: '약관',
     description: '이용약관 및 개인정보처리방침을 관리합니다.',
     href: '/admin/settings/terms',
-    icon: FileText,
+    icon: Page,
   },
 ];
 

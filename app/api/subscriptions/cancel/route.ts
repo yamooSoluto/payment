@@ -128,8 +128,9 @@ export async function POST(request: NextRequest) {
             orderId: `CANCEL_REFUND_${Date.now()}_${tenantId}`,
             amount: -refundAmount,
             plan: subscription.plan,
-            type: 'refund',
+            type: 'cancel_refund',  // 구독 해지 환불
             status: 'done',
+            cancelReason: reason || 'User requested',
             refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,
             originalPaymentId: latestPaymentId,  // 원결제 ID 연결
             paidAt: now,

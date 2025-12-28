@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
             console.log('Payment marked as canceled:', paymentKey);
 
             // 구독 상태도 업데이트 (취소된 경우)
-            if (status === 'CANCELED' || eventType.includes('CANCELED')) {
+            if (status === 'CANCELED' || (typeof eventType === 'string' && eventType.includes('CANCELED'))) {
               const subscriptionDoc = await db.collection('subscriptions').doc(email).get();
 
               if (subscriptionDoc.exists) {

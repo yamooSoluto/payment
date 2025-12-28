@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Plus, Edit2, Trash2, Loader2, X, Zap } from 'lucide-react';
+import { Bell, Plus, EditPencil, Trash, RefreshDouble, Xmark, Flash } from 'iconoir-react';
 
 interface Template {
   id: string;
@@ -183,7 +183,7 @@ export default function NotificationsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
         ) : templates.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
@@ -214,7 +214,7 @@ export default function NotificationsPage() {
                     <td className="px-6 py-4 text-sm">
                       {template.triggerEvent ? (
                         <span className="flex items-center gap-1 text-blue-600">
-                          <Zap className="w-4 h-4" />
+                          <Flash className="w-4 h-4" />
                           {getTriggerLabel(template.triggerEvent)}
                         </span>
                       ) : (
@@ -240,14 +240,14 @@ export default function NotificationsPage() {
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                           title="수정"
                         >
-                          <Edit2 className="w-4 h-4 text-gray-500" />
+                          <EditPencil className="w-4 h-4 text-gray-500" />
                         </button>
                         <button
                           onClick={() => handleDelete(template)}
                           className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                           title="삭제"
                         >
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <Trash className="w-4 h-4 text-red-500" />
                         </button>
                       </div>
                     </td>
@@ -271,7 +271,7 @@ export default function NotificationsPage() {
                 onClick={handleCloseModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
-                <X className="w-5 h-5" />
+                <Xmark className="w-5 h-5" />
               </button>
             </div>
 
@@ -379,7 +379,7 @@ export default function NotificationsPage() {
                 disabled={saving}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {saving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
+                {saving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
               </button>
             </div>
           </div>

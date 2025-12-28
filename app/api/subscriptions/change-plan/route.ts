@@ -162,10 +162,38 @@ export async function POST(request: NextRequest) {
               amount: -refundAmount, // 음수로 표시
               plan: newPlan,
               previousPlan: subscription.plan,
-              type: 'refund',
+              type: 'downgrade_refund',  // 다운그레이드 환불
               status: 'done',
               refundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
               originalPaymentId: latestPaymentId,  // 원결제 ID 연결
+              paidAt: now,
+              createdAt: now,
+            });
+
+            // 원결제 문서에도 환불 정보 업데이트 (PaymentHistory에서 직접 확인 가능)
+            if (latestPaymentId) {
+              const originalPaymentRef = db.collection('payments').doc(latestPaymentId);
+              const existingRefunded = latestPayment?.refundedAmount || 0;
+              transaction.update(originalPaymentRef, {
+                refundedAmount: existingRefunded + refundAmount,
+                lastRefundAt: now,
+                lastRefundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
+                updatedAt: now,
+              });
+            }
+          } else {
+            // 환불 없는 다운그레이드도 플랜 변경 내역 저장 (구독 내역에 표시)
+            const paymentDocId = `DOWNGRADE_${Date.now()}_${tenantId}`;
+            const paymentRef = db.collection('payments').doc(paymentDocId);
+            transaction.set(paymentRef, {
+              tenantId,
+              email,
+              orderId: `DOWNGRADE_${Date.now()}_${tenantId}`,
+              amount: 0,
+              plan: newPlan,
+              previousPlan: subscription.plan,
+              type: 'downgrade',
+              status: 'done',
               paidAt: now,
               createdAt: now,
             });

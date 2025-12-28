@@ -89,7 +89,8 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   const subscription = serializeData(rawSubscription);
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
   const currentPlan = subscription.plan;
-  const currentAmount = PLAN_PRICES[currentPlan] || 0;
+  // 구독자가 결제한 금액 사용 (플랜 가격이 변경되어도 기존 금액 유지)
+  const currentAmount = subscription.amount || PLAN_PRICES[currentPlan] || 0;
   const nextBillingDate = subscription.nextBillingDate;
   const currentPeriodStart = subscription.currentPeriodStart;
 

@@ -4,18 +4,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
-  LayoutDashboard,
-  Users,
-  UserCog,
+  Dashboard,
+  Group,
+  UserCrown,
   Package,
-  ShoppingCart,
-  BarChart3,
+  Cart,
+  RefreshDouble,
+  StatsUpSquare,
   Bell,
   Settings,
-  X,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+  Xmark,
+  NavArrowLeft,
+  NavArrowRight,
+} from 'iconoir-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 interface SidebarProps {
@@ -29,19 +30,19 @@ const menuItems = [
   {
     name: '대시보드',
     href: '/admin',
-    icon: LayoutDashboard,
+    icon: Dashboard,
     permission: null,
   },
   {
     name: '회원',
     href: '/admin/members',
-    icon: Users,
+    icon: Group,
     permission: 'members:read',
   },
   {
     name: '운영진',
     href: '/admin/admins',
-    icon: UserCog,
+    icon: UserCrown,
     permission: 'admins:read',
     roles: ['owner', 'super'],
   },
@@ -52,15 +53,21 @@ const menuItems = [
     permission: 'plans:read',
   },
   {
-    name: '주문',
+    name: '결제',
     href: '/admin/orders',
-    icon: ShoppingCart,
+    icon: Cart,
     permission: 'orders:read',
+  },
+  {
+    name: '구독',
+    href: '/admin/subscriptions',
+    icon: RefreshDouble,
+    permission: 'subscriptions:read',
   },
   {
     name: '통계',
     href: '/admin/stats',
-    icon: BarChart3,
+    icon: StatsUpSquare,
     permission: 'stats:read',
   },
   {
@@ -126,7 +133,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
             onClick={onClose}
             className="lg:hidden p-1 text-gray-400 hover:text-white"
           >
-            <X className="w-5 h-5" />
+            <Xmark className="w-5 h-5" />
           </button>
         </div>
 
@@ -165,9 +172,9 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           className="hidden lg:flex absolute bottom-16 left-0 right-0 mx-auto w-8 h-8 items-center justify-center bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-full transition-colors"
         >
           {collapsed ? (
-            <ChevronRight className="w-4 h-4" />
+            <NavArrowRight className="w-4 h-4" />
           ) : (
-            <ChevronLeft className="w-4 h-4" />
+            <NavArrowLeft className="w-4 h-4" />
           )}
         </button>
 

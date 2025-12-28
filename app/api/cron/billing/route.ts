@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { payWithBillingKey, getPlanName } from '@/lib/toss';
+import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
 import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
@@ -214,10 +214,18 @@ export async function GET(request: NextRequest) {
         const orderId = `AUTO_${Date.now()}_${tenantId}`;
         const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 정기결제`;
 
+        // 가격 정책에 따른 실제 결제 금액 계산
+        const effectiveAmount = getEffectiveAmount({
+          plan: subscription.plan,
+          amount: subscription.amount,
+          pricePolicy: subscription.pricePolicy,
+          priceProtectedUntil: subscription.priceProtectedUntil?.toDate?.() || subscription.priceProtectedUntil,
+        });
+
         const response = await payWithBillingKey(
           subscription.billingKey,
           email,
-          subscription.amount,
+          effectiveAmount,
           orderId,
           orderName,
           email
@@ -243,7 +251,7 @@ export async function GET(request: NextRequest) {
             email,
             orderId,
             paymentKey: response.paymentKey,
-            amount: subscription.amount,
+            amount: effectiveAmount,
             plan: subscription.plan,
             status: 'done',
             method: response.method,
@@ -251,6 +259,15 @@ export async function GET(request: NextRequest) {
             paidAt: new Date(),
             createdAt: new Date(),
           });
+
+          // 가격 정책이 'protected_until'이고 보호 기간이 지났으면 subscription.amount도 업데이트
+          if (subscription.pricePolicy === 'protected_until' && effectiveAmount !== subscription.amount) {
+            await db.collection('subscriptions').doc(tenantId).update({
+              amount: effectiveAmount,
+              pricePolicy: 'standard', // 보호 기간 종료 후 일반으로 변경
+              updatedAt: new Date(),
+            });
+          }
 
           // tenants 컬렉션에 결제 성공 동기화
           await syncPaymentSuccess(tenantId, nextBillingDate);
@@ -266,7 +283,7 @@ export async function GET(request: NextRequest) {
                   tenantId,
                   email,
                   plan: subscription.plan,
-                  amount: subscription.amount,
+                  amount: effectiveAmount,
                 }),
               });
             } catch {

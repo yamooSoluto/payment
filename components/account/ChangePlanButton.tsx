@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Flash, Calendar, Xmark, CheckCircle, WarningCircle } from 'iconoir-react';
+import { getPlanName } from '@/lib/toss';
 
 interface ChangePlanButtonProps {
   newPlan: string;
@@ -35,6 +36,7 @@ export default function ChangePlanButton({
   newPlan,
   newPlanName,
   newAmount,
+  currentPlan,
   currentAmount,
   isUpgrade,
   priceDiff,
@@ -197,16 +199,20 @@ export default function ChangePlanButton({
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900 mb-1">즉시 변경</h4>
                     <p className="text-sm text-gray-600 mb-3">
-                      지금 바로 새 플랜을 이용합니다. 현재 플랜의 남은 기간은 일할 환불됩니다.
+                      지금 바로 새 플랜을 이용합니다. 새 플랜은 기존 플랜의 만료일({nextBillingDate ? (() => {
+                        const endDate = new Date(nextBillingDate);
+                        endDate.setDate(endDate.getDate() - 1);
+                        return formatDate(endDate.toISOString());
+                      })() : '-'})까지 이용 가능합니다.
                     </p>
                     <div className="bg-gray-50 rounded-lg p-3 text-sm">
                       <div className="flex justify-between mb-1">
-                        <span className="text-gray-500">현재 플랜 환불 ({daysLeft}일)</span>
-                        <span className="text-green-600">+{formatPrice(refundAmount)}원</span>
+                        <span className="text-gray-500">새 플랜 비용 ({newPlanName})</span>
+                        <span className="text-gray-900">+{formatPrice(proratedNewAmount)}원</span>
                       </div>
                       <div className="flex justify-between mb-1">
-                        <span className="text-gray-500">새 플랜 비용 ({daysLeft}일)</span>
-                        <span className="text-gray-900">-{formatPrice(proratedNewAmount)}원</span>
+                        <span className="text-gray-500">현재 플랜 환불 ({getPlanName(currentPlan)})</span>
+                        <span className="text-green-600">-{formatPrice(refundAmount)}원</span>
                       </div>
                       <div className="flex justify-between pt-2 border-t mt-2 font-semibold">
                         <span className="text-gray-900">
@@ -224,7 +230,7 @@ export default function ChangePlanButton({
                 </div>
               </div>
 
-              {/* 예약 변경 옵션 */}
+              {/* 변경 예약 옵션 */}
               <div
                 className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
                   selectedMode === 'scheduled'
@@ -238,9 +244,9 @@ export default function ChangePlanButton({
                     <Calendar width={20} height={20} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 mb-1">예약 변경</h4>
+                    <h4 className="font-semibold text-gray-900 mb-1">변경 예약</h4>
                     <p className="text-sm text-gray-600 mb-3">
-                      다음 결제일부터 새 플랜이 적용됩니다. 현재 플랜은 기간 끝까지 유지됩니다.
+                      다음 결제일부터 새 플랜이 적용됩니다. 현재 플랜은 만료일까지 유지됩니다.
                     </p>
                     <div className="bg-gray-50 rounded-lg p-3 text-sm">
                       <div className="flex justify-between mb-1">
@@ -257,7 +263,11 @@ export default function ChangePlanButton({
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      * 현재 플랜({formatPrice(currentAmount)}원)은 {nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}까지 유지
+                      * 현재 플랜({formatPrice(currentAmount)}원)은 {nextBillingDate ? (() => {
+                        const endDate = new Date(nextBillingDate);
+                        endDate.setDate(endDate.getDate() - 1);
+                        return formatDate(endDate.toISOString());
+                      })() : '만료일'}까지 유지
                     </p>
                   </div>
                 </div>

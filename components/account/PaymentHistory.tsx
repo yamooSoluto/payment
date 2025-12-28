@@ -3,14 +3,14 @@
 import { useState, useMemo } from 'react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { getPlanName } from '@/lib/toss';
-import { NavArrowDown, NavArrowUp, Journal, CheckCircle, XmarkCircle, Page, MinusCircle, Filter, Download } from 'iconoir-react';
+import { NavArrowDown, NavArrowUp, Journal, CheckCircle, XmarkCircle, Page, Filter, Download } from 'iconoir-react';
 
 interface Payment {
   id: string;
   orderId: string;
   amount: number;
   plan: string;
-  status: 'done' | 'canceled' | 'failed';
+  status: 'done' | 'completed' | 'canceled' | 'failed' | 'refunded';
   type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund';
   previousPlan?: string;
   refundReason?: string;
@@ -19,6 +19,21 @@ interface Payment {
   cardCompany?: string;
   cardNumber?: string;
   receiptUrl?: string;
+  // 환불 관련 필드
+  originalPaymentId?: string;
+  refundedAmount?: number;
+  lastRefundAt?: Date | string;
+}
+
+// 환불 정보가 병합된 결제 내역
+interface MergedPayment extends Payment {
+  refunds: {
+    amount: number;
+    date: Date | string;
+    reason?: string;
+  }[];
+  totalRefundedAmount: number;
+  hasRefund: boolean;
 }
 
 interface PaymentHistoryProps {
@@ -27,7 +42,7 @@ interface PaymentHistoryProps {
 }
 
 type FilterPeriod = 'all' | 'month' | '3months' | 'custom';
-type FilterStatus = 'all' | 'done' | 'refund' | 'canceled';
+type FilterStatus = 'all' | 'done' | 'refunded' | 'canceled';
 
 export default function PaymentHistory({ payments, tenantName }: PaymentHistoryProps) {
   const [showAll, setShowAll] = useState(false);
@@ -37,9 +52,49 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
+  // 환불 레코드를 원결제에 병합
+  const mergedPayments = useMemo(() => {
+    // 환불 레코드와 원결제 분리
+    const refundRecords = payments.filter(p => p.type === 'refund');
+    const originalPayments = payments.filter(p => p.type !== 'refund');
+
+    // 원결제에 환불 정보 병합
+    const merged: MergedPayment[] = originalPayments.map(payment => {
+      // 이 결제에 연관된 환불들 찾기
+      const relatedRefunds = refundRecords.filter(r => r.originalPaymentId === payment.id);
+
+      // 환불 정보 구성
+      const refunds = relatedRefunds.map(r => ({
+        amount: Math.abs(r.amount),
+        date: r.paidAt || r.createdAt,
+        reason: r.refundReason,
+      }));
+
+      // 결제 문서 자체에 refundedAmount가 있는 경우 (관리자 환불)
+      if (payment.refundedAmount && payment.refundedAmount > 0 && refunds.length === 0) {
+        refunds.push({
+          amount: payment.refundedAmount,
+          date: payment.lastRefundAt || payment.createdAt,
+          reason: undefined,
+        });
+      }
+
+      const totalRefundedAmount = refunds.reduce((sum, r) => sum + r.amount, 0);
+
+      return {
+        ...payment,
+        refunds,
+        totalRefundedAmount,
+        hasRefund: totalRefundedAmount > 0,
+      };
+    });
+
+    return merged;
+  }, [payments]);
+
   // 필터링된 결제 내역
   const filteredPayments = useMemo(() => {
-    let result = [...payments];
+    let result = [...mergedPayments];
 
     // 기간 필터
     if (periodFilter !== 'all') {
@@ -76,15 +131,15 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
 
     // 상태 필터
     if (statusFilter !== 'all') {
-      if (statusFilter === 'refund') {
-        result = result.filter((p) => p.type === 'refund');
+      if (statusFilter === 'refunded') {
+        result = result.filter((p) => p.hasRefund);
       } else {
-        result = result.filter((p) => p.status === statusFilter && p.type !== 'refund');
+        result = result.filter((p) => p.status === statusFilter && !p.hasRefund);
       }
     }
 
     return result;
-  }, [payments, periodFilter, statusFilter, customStartDate, customEndDate]);
+  }, [mergedPayments, periodFilter, statusFilter, customStartDate, customEndDate]);
 
   const hasActiveFilters = periodFilter !== 'all' || statusFilter !== 'all' || customStartDate || customEndDate;
 
@@ -93,19 +148,23 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
   // CSV 다운로드 함수
   const downloadCSV = () => {
     // CSV 헤더
-    const headers = ['매장명', '결제일', '플랜', '금액', '상태', '결제유형', '카드정보'];
+    const headers = ['매장명', '결제일', '플랜', '결제금액', '환불금액', '실결제금액', '상태', '결제유형', '카드정보'];
 
     // CSV 데이터
     const rows = filteredPayments.map((p) => {
       const date = p.paidAt || p.createdAt;
       const formattedDate = new Date(date).toLocaleDateString('ko-KR');
       const planName = getPlanName(p.plan);
-      const amount = p.type === 'refund' ? `-${Math.abs(p.amount)}` : String(p.amount);
-      const status = p.type === 'refund' ? '환불' : p.status === 'done' ? '완료' : p.status === 'canceled' ? '취소' : '실패';
-      const type = p.type === 'upgrade' ? '업그레이드' : p.type === 'downgrade' ? '다운그레이드' : p.type === 'refund' ? '환불' : '정기결제';
+      const amount = String(p.amount);
+      const refundAmount = p.totalRefundedAmount > 0 ? `-${p.totalRefundedAmount}` : '';
+      const netAmount = String(p.amount - p.totalRefundedAmount);
+      const status = p.hasRefund
+        ? (p.totalRefundedAmount >= p.amount ? '전액환불' : '부분환불')
+        : (p.status === 'done' || p.status === 'completed' ? '완료' : p.status === 'canceled' ? '취소' : '실패');
+      const type = p.type === 'upgrade' ? '업그레이드' : p.type === 'downgrade' ? '다운그레이드' : '정기결제';
       const card = p.cardCompany ? `${p.cardCompany}카드 ${p.cardNumber || ''}` : '';
 
-      return [tenantName || '', formattedDate, planName, amount, status, type, card];
+      return [tenantName || '', formattedDate, planName, amount, refundAmount, netAmount, status, type, card];
     });
 
     // CSV 문자열 생성
@@ -130,12 +189,19 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
     URL.revokeObjectURL(url);
   };
 
-  const getStatusIcon = (status: string, type?: string) => {
-    if (type === 'refund') {
-      return <MinusCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
+  const getStatusIcon = (payment: MergedPayment) => {
+    if (payment.hasRefund) {
+      if (payment.totalRefundedAmount >= payment.amount) {
+        // 전액 환불
+        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
+      } else {
+        // 부분 환불
+        return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-orange-500" />;
+      }
     }
-    switch (status) {
+    switch (payment.status) {
       case 'done':
+      case 'completed':
         return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-green-500" />;
       case 'canceled':
         return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-gray-400" />;
@@ -146,16 +212,43 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
+  const getStatusText = (payment: MergedPayment) => {
+    if (payment.hasRefund) {
+      if (payment.totalRefundedAmount >= payment.amount) {
+        return '전액환불';
+      } else {
+        return '부분환불';
+      }
+    }
+    switch (payment.status) {
       case 'done':
+      case 'completed':
         return '완료';
       case 'canceled':
         return '취소됨';
       case 'failed':
         return '실패';
       default:
-        return status;
+        return payment.status;
+    }
+  };
+
+  const getStatusStyle = (payment: MergedPayment) => {
+    if (payment.hasRefund) {
+      if (payment.totalRefundedAmount >= payment.amount) {
+        return 'text-red-600 bg-red-50';
+      } else {
+        return 'text-orange-600 bg-orange-50';
+      }
+    }
+    switch (payment.status) {
+      case 'done':
+      case 'completed':
+        return 'text-green-600 bg-green-50';
+      case 'canceled':
+        return 'text-gray-400 bg-gray-50';
+      default:
+        return 'text-red-600 bg-red-50';
     }
   };
 
@@ -260,7 +353,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
               {[
                 { value: 'all' as const, label: '전체' },
                 { value: 'done' as const, label: '완료' },
-                { value: 'refund' as const, label: '환불' },
+                { value: 'refunded' as const, label: '환불' },
                 { value: 'canceled' as const, label: '취소' },
               ].map((option) => (
                 <button
@@ -303,18 +396,17 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
       <div className="divide-y">
         {displayPayments.map((payment) => (
           <div key={payment.id} className="py-4 first:pt-0 last:pb-0">
+            {/* 원결제 내역 */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5">
-                  {getStatusIcon(payment.status, payment.type)}
+                  {getStatusIcon(payment)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-gray-900 text-sm sm:text-base">
-                    {payment.type === 'refund' && payment.previousPlan
-                      ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 다운그레이드`
-                      : payment.type === 'upgrade' && payment.previousPlan
-                        ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 업그레이드`
-                        : `${getPlanName(payment.plan)} 플랜`}
+                    {payment.type === 'upgrade' && payment.previousPlan
+                      ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 업그레이드`
+                      : `${getPlanName(payment.plan)} 플랜`}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-500">
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
@@ -324,22 +416,19 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
               </div>
               <div className="flex items-center gap-2 ml-7 sm:ml-0">
                 <span className={`font-semibold text-sm sm:text-base ${
-                  payment.type === 'refund' ? 'text-red-600' :
-                  payment.status === 'canceled' ? 'text-gray-400 line-through' :
-                  'text-gray-900'
+                  payment.hasRefund && payment.totalRefundedAmount >= payment.amount
+                    ? 'text-gray-400 line-through'
+                    : payment.status === 'canceled'
+                      ? 'text-gray-400 line-through'
+                      : 'text-gray-900'
                 }`}>
-                  {payment.type === 'refund' ? `-${formatPrice(Math.abs(payment.amount))}원` : `${formatPrice(payment.amount)}원`}
+                  {formatPrice(payment.amount)}원
                 </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                  payment.type === 'refund' ? 'text-red-600 bg-red-50' :
-                  payment.status === 'done' ? 'text-green-600 bg-green-50' :
-                  payment.status === 'canceled' ? 'text-gray-400 bg-gray-50' :
-                  'text-red-600 bg-red-50'
-                }`}>
-                  {payment.type === 'refund' ? '환불' : getStatusText(payment.status)}
+                <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusStyle(payment)}`}>
+                  {getStatusText(payment)}
                 </span>
-                {/* 영수증/인보이스 버튼 - 완료된 결제 또는 환불에 표시 */}
-                {payment.status === 'done' && (
+                {/* 영수증/인보이스 버튼 */}
+                {(payment.status === 'done' || payment.status === 'completed') && (
                   payment.receiptUrl ? (
                     <a
                       href={payment.receiptUrl}
@@ -356,7 +445,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                      title={payment.type === 'refund' ? '환불 확인서' : '인보이스'}
+                      title={payment.hasRefund ? '영수증 (환불 포함)' : '인보이스'}
                     >
                       <Page width={14} height={14} strokeWidth={1.5} />
                     </a>
@@ -364,6 +453,35 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                 )}
               </div>
             </div>
+
+            {/* 환불 내역 - 원결제 아래에 하위 행으로 표시 */}
+            {payment.hasRefund && payment.refunds.map((refund, index) => (
+              <div key={index} className="mt-2 ml-7 pl-3 border-l-2 border-red-200">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm text-gray-500">
+                      └ {formatDate(refund.date)} 환불
+                      {refund.reason && <span className="text-gray-400"> · {refund.reason}</span>}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-red-600">
+                      -{formatPrice(refund.amount)}원
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* 실결제 금액 표시 (환불이 있는 경우) */}
+            {payment.hasRefund && payment.totalRefundedAmount < payment.amount && (
+              <div className="mt-2 ml-7 pl-3 text-right">
+                <span className="text-xs text-gray-500">실결제: </span>
+                <span className="text-sm font-semibold text-gray-900">
+                  {formatPrice(payment.amount - payment.totalRefundedAmount)}원
+                </span>
+              </div>
+            )}
           </div>
         ))}
       </div>

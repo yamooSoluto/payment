@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || ''; // subscription, cancellation
     const startDate = searchParams.get('startDate') || '';
     const endDate = searchParams.get('endDate') || '';
+    const search = searchParams.get('search') || '';
 
     // 결제 내역 조회
     let query = db.collection('payments').orderBy('createdAt', 'desc');
@@ -194,6 +195,45 @@ export async function GET(request: NextRequest) {
         const totalRefundedAmount = storedRefundedAmount + linkedRefundAmount;
         const remainingAmount = Math.max(0, amount - totalRefundedAmount);
 
+        // 기존 데이터의 type 추론 (레거시 데이터 지원)
+        let inferredType = data.type || null;
+
+        // 안전한 문자열 추출
+        let refundReasonText = '';
+        let cancelReasonText = '';
+        try {
+          refundReasonText = typeof data.refundReason === 'string' ? data.refundReason : '';
+          cancelReasonText = typeof data.cancelReason === 'string' ? data.cancelReason : '';
+        } catch (e) {
+          console.error('Error extracting reason text for doc:', doc.id, e);
+        }
+
+        // type이 'refund'이거나 없는 경우, refundReason/cancelReason으로 추론
+        try {
+          if (inferredType === 'refund' || (!inferredType && amount < 0)) {
+            if (refundReasonText && refundReasonText.includes('다운그레이드') || refundReasonText && refundReasonText.includes('→')) {
+              inferredType = 'downgrade_refund';
+            } else if ((refundReasonText && refundReasonText.includes('해지')) ||
+                       (cancelReasonText && cancelReasonText.includes('해지')) ||
+                       (refundReasonText && refundReasonText.includes('취소')) ||
+                       (typeof data.orderId === 'string' && data.orderId.includes('CANCEL_REFUND'))) {
+              inferredType = 'cancel_refund';
+            }
+          }
+        } catch (e) {
+          console.error('Error inferring type for doc:', doc.id, 'data:', JSON.stringify({
+            type: data.type,
+            refundReason: typeof data.refundReason,
+            cancelReason: typeof data.cancelReason,
+            orderId: typeof data.orderId,
+          }), e);
+        }
+
+        // type이 없고 양수 금액이면 구독으로 추론
+        if (!inferredType && amount > 0) {
+          inferredType = 'subscription';
+        }
+
         return {
           id: doc.id,
           ...data,
@@ -201,13 +241,15 @@ export async function GET(request: NextRequest) {
           refundedAmount: totalRefundedAmount,
           remainingAmount,
           originalPaymentId: data.originalPaymentId || null,
-          type: data.type || null,
+          type: inferredType,
           plan: data.plan || data.planId || '',
           isTest: data.isTest || false,
           memberInfo,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
           paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
           canceledAt: data.canceledAt?.toDate?.()?.toISOString() || null,
+          cancelReason: data.cancelReason || null,
+          refundReason: data.refundReason || null,
         };
       })
     );
@@ -228,6 +270,19 @@ export async function GET(request: NextRequest) {
       orders = orders.filter(o => o.status === 'completed' && !o.canceledAt);
     } else if (type === 'cancellation') {
       orders = orders.filter(o => o.status === 'refunded' || o.canceledAt);
+    }
+
+    // 검색 필터 (회원명, 이메일)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      orders = orders.filter(o => {
+        const ownerName = (o.memberInfo?.ownerName || '').toLowerCase();
+        const email = (o.memberInfo?.email || o.email || '').toLowerCase();
+        const businessName = (o.memberInfo?.businessName || '').toLowerCase();
+        return ownerName.includes(searchLower) ||
+               email.includes(searchLower) ||
+               businessName.includes(searchLower);
+      });
     }
 
     // 페이지네이션

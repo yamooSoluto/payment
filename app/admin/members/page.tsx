@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ChevronLeft, ChevronRight, Users, Loader2, Plus, X } from 'lucide-react';
+import { Search, NavArrowLeft, NavArrowRight, Group, RefreshDouble, Plus, Xmark } from 'iconoir-react';
 
 interface TenantInfo {
   tenantId: string;
@@ -157,7 +157,7 @@ export default function MembersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Users className="w-8 h-8 text-blue-600" />
+          <Group className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">회원 관리</h1>
           <span className="text-sm text-gray-500">총 {pagination.total}명</span>
         </div>
@@ -209,7 +209,7 @@ export default function MembersPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
         ) : members.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
@@ -293,7 +293,7 @@ export default function MembersPage() {
                 disabled={pagination.page === 1}
                 className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <NavArrowLeft className="w-5 h-5" />
               </button>
               <span className="text-sm text-gray-600">
                 {pagination.page} / {pagination.totalPages}
@@ -303,7 +303,7 @@ export default function MembersPage() {
                 disabled={pagination.page === pagination.totalPages}
                 className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronRight className="w-5 h-5" />
+                <NavArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -320,7 +320,7 @@ export default function MembersPage() {
                 onClick={handleCloseModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
-                <X className="w-5 h-5" />
+                <Xmark className="w-5 h-5" />
               </button>
             </div>
 
@@ -421,7 +421,7 @@ export default function MembersPage() {
                 disabled={saving}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {saving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : '등록'}
+                {saving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '등록'}
               </button>
             </div>
           </div>

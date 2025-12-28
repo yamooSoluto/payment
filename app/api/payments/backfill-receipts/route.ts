@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getPayment } from '@/lib/toss';
 
-// 기존 결제 내역에 영수증 URL 추가
+// 기존 결제 내역에 영수증 URL 및 환불 금액 동기화
 // 관리자만 호출 가능
 export async function POST(request: NextRequest) {
   // 간단한 인증 (CRON_SECRET 재활용)
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // receiptUrl이 없는 완료된 결제 내역 조회
+    // 완료된 결제 내역 조회 (환불 레코드 제외)
     const paymentsSnapshot = await db
       .collection('payments')
       .where('status', '==', 'done')
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       paymentId: string;
       status: 'updated' | 'skipped' | 'error';
       receiptUrl?: string;
+      refundedAmount?: number;
       error?: string;
     }
 
@@ -38,12 +39,8 @@ export async function POST(request: NextRequest) {
     for (const doc of paymentsSnapshot.docs) {
       const payment = doc.data();
 
-      // 이미 receiptUrl이 있으면 스킵
-      if (payment.receiptUrl) {
-        results.push({
-          paymentId: doc.id,
-          status: 'skipped',
-        });
+      // 환불 레코드는 스킵
+      if (payment.type === 'refund') {
         skippedCount++;
         continue;
       }
@@ -63,23 +60,55 @@ export async function POST(request: NextRequest) {
         // Toss API로 결제 정보 조회
         const tossPayment = await getPayment(payment.paymentKey);
 
-        if (tossPayment.receipt?.url) {
-          // receiptUrl 업데이트
-          await db.collection('payments').doc(doc.id).update({
-            receiptUrl: tossPayment.receipt.url,
-          });
+        // 업데이트할 필드
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateFields: Record<string, any> = {};
+        let needsUpdate = false;
+
+        // 영수증 URL 업데이트
+        if (!payment.receiptUrl && tossPayment.receipt?.url) {
+          updateFields.receiptUrl = tossPayment.receipt.url;
+          needsUpdate = true;
+        }
+
+        // 취소 금액 계산 (cancels 배열에서)
+        if (tossPayment.cancels && Array.isArray(tossPayment.cancels) && tossPayment.cancels.length > 0) {
+          const totalCancelAmount = tossPayment.cancels.reduce(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (sum: number, cancel: any) => sum + (cancel.cancelAmount || 0),
+            0
+          );
+
+          // 기존 refundedAmount와 다르면 업데이트
+          if (payment.refundedAmount !== totalCancelAmount && totalCancelAmount > 0) {
+            updateFields.refundedAmount = totalCancelAmount;
+            // 가장 최근 취소 정보
+            const lastCancel = tossPayment.cancels[tossPayment.cancels.length - 1];
+            if (lastCancel.canceledAt) {
+              updateFields.lastRefundAt = new Date(lastCancel.canceledAt);
+            }
+            if (lastCancel.cancelReason) {
+              updateFields.lastRefundReason = lastCancel.cancelReason;
+            }
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate) {
+          updateFields.updatedAt = new Date();
+          await db.collection('payments').doc(doc.id).update(updateFields);
 
           results.push({
             paymentId: doc.id,
             status: 'updated',
-            receiptUrl: tossPayment.receipt.url,
+            receiptUrl: updateFields.receiptUrl,
+            refundedAmount: updateFields.refundedAmount,
           });
           updatedCount++;
         } else {
           results.push({
             paymentId: doc.id,
             status: 'skipped',
-            error: 'No receipt URL in Toss response',
           });
           skippedCount++;
         }

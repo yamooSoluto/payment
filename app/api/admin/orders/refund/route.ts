@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { paymentId, paymentKey, tenantId, refundAmount, refundReason } = body;
+    const { paymentId, paymentKey, tenantId, refundAmount, refundReason, cancelSubscription } = body;
 
     if (!paymentId || !refundAmount) {
       return NextResponse.json(
@@ -96,12 +96,12 @@ export async function POST(request: NextRequest) {
     // 결제 정보 업데이트
     await db.collection('payments').doc(paymentId).update({
       refundedAmount: newRefundedAmount,
-      status: isFullyRefunded ? 'refunded' : 'completed',
+      status: isFullyRefunded ? 'refunded' : (paymentData?.status || 'done'),
       lastRefundAt: now,
       lastRefundAmount: refundAmount,
       lastRefundReason: refundReason || '관리자 요청 환불',
       updatedAt: now,
-      updatedBy: admin.adminId,
+      updatedBy: admin?.adminId || 'unknown',
     });
 
     // 환불 내역 기록 (별도 문서)
@@ -112,22 +112,72 @@ export async function POST(request: NextRequest) {
       email: paymentData?.email,
       plan: paymentData?.plan,
       amount: -refundAmount, // 음수로 기록
-      status: 'completed',
+      status: 'done',
       refundReason: refundReason || '관리자 요청 환불',
       createdAt: now,
       paidAt: now,
-      createdBy: admin.adminId,
+      createdBy: admin?.adminId || 'unknown',
     });
+
+    // 구독 취소 옵션이 선택된 경우에만 구독 상태 업데이트
+    let subscriptionCanceled = false;
+    if (cancelSubscription === true) {
+      const subscriptionTenantId = tenantId || paymentData?.tenantId;
+      const subscriptionEmail = paymentData?.email;
+
+      // tenantId로 먼저 구독 찾기
+      if (subscriptionTenantId) {
+        const subscriptionDoc = await db.collection('subscriptions').doc(subscriptionTenantId).get();
+        if (subscriptionDoc.exists) {
+          await db.collection('subscriptions').doc(subscriptionTenantId).update({
+            status: 'expired',
+            canceledAt: now,
+            cancelReason: refundReason || '관리자 요청 환불',
+            updatedAt: now,
+            updatedBy: admin?.adminId || 'unknown',
+          });
+          subscriptionCanceled = true;
+
+          // tenants 컬렉션도 업데이트
+          try {
+            await db.collection('tenants').doc(subscriptionTenantId).update({
+              subscriptionStatus: 'expired',
+              subscriptionPlan: null,
+              updatedAt: now,
+            });
+          } catch {
+            // tenants 업데이트 실패해도 무시
+          }
+        }
+      }
+
+      // tenantId로 못 찾았으면 email로 시도
+      if (!subscriptionCanceled && subscriptionEmail) {
+        const subscriptionDoc = await db.collection('subscriptions').doc(subscriptionEmail).get();
+        if (subscriptionDoc.exists) {
+          await db.collection('subscriptions').doc(subscriptionEmail).update({
+            status: 'expired',
+            canceledAt: now,
+            cancelReason: refundReason || '관리자 요청 환불',
+            updatedAt: now,
+            updatedBy: admin?.adminId || 'unknown',
+          });
+          subscriptionCanceled = true;
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
       refundedAmount: refundAmount,
       remainingAmount: remainingAmount - refundAmount,
+      subscriptionCanceled,
     });
   } catch (error) {
     console.error('Refund error:', error);
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
     return NextResponse.json(
-      { error: '환불 처리 중 오류가 발생했습니다.' },
+      { error: `환불 처리 중 오류가 발생했습니다: ${errorMessage}` },
       { status: 500 }
     );
   }

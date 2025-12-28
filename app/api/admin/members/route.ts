@@ -26,26 +26,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || ''; // active, canceled, trial
 
-    // 모든 tenants 조회
-    const snapshot = await db.collection('tenants').orderBy('createdAt', 'desc').get();
-
-    // 구독 정보 조회
-    const tenantIds = snapshot.docs.map(doc => doc.data().tenantId || doc.id);
-    const subscriptionRefs = tenantIds.map(id => db.collection('subscriptions').doc(id));
-    const subscriptionDocs = subscriptionRefs.length > 0 ? await db.getAll(...subscriptionRefs) : [];
-
-    const subscriptionMap = new Map<string, { plan: string; status: string }>();
-    subscriptionDocs.forEach((doc) => {
-      if (doc.exists) {
-        const data = doc.data();
-        subscriptionMap.set(doc.id, {
-          plan: data?.plan || '',
-          status: data?.status || '',
-        });
-      }
-    });
-
-    // 이메일별로 그룹화
+    // 이메일별로 그룹화할 인터페이스
     interface TenantInfo {
       tenantId: string;
       brandName: string;
@@ -65,7 +46,32 @@ export async function GET(request: NextRequest) {
 
     const memberMap = new Map<string, MemberData>();
 
-    snapshot.docs.forEach(doc => {
+    // 1. tenants 컬렉션에서 조회
+    const tenantsSnapshot = await db.collection('tenants').get();
+
+    // 2. subscriptions 컬렉션 전체 조회 (tenants에 없는 구독도 포함)
+    const subscriptionsSnapshot = await db.collection('subscriptions').get();
+
+    // 구독 정보 맵 생성
+    const subscriptionMap = new Map<string, {
+      plan: string;
+      status: string;
+      email: string;
+      createdAt: Date | null;
+    }>();
+
+    subscriptionsSnapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      subscriptionMap.set(doc.id, {
+        plan: data?.plan || '',
+        status: data?.status || '',
+        email: data?.email || '',
+        createdAt: data?.createdAt?.toDate?.() || null,
+      });
+    });
+
+    // 3. tenants 컬렉션 처리
+    tenantsSnapshot.docs.forEach(doc => {
       const data = doc.data();
       const email = data.email || '';
       if (!email) return;
@@ -82,17 +88,60 @@ export async function GET(request: NextRequest) {
 
       if (memberMap.has(email)) {
         const member = memberMap.get(email)!;
-        member.tenants.push(tenantInfo);
-        member.tenantCount = member.tenants.length;
+        // 중복 tenantId 체크
+        if (!member.tenants.some(t => t.tenantId === tenantId)) {
+          member.tenants.push(tenantInfo);
+          member.tenantCount = member.tenants.length;
+        }
       } else {
         memberMap.set(email, {
-          id: encodeURIComponent(email),  // URL-safe ID
+          id: encodeURIComponent(email),
           email,
           name: data.name || data.ownerName || '',
           phone: data.phone || '',
           tenants: [tenantInfo],
           tenantCount: 1,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        });
+      }
+    });
+
+    // 4. subscriptions에는 있지만 tenants에는 없는 회원 추가
+    subscriptionsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const email = data?.email || '';
+      if (!email) return;
+
+      const tenantId = doc.id;
+
+      // 이미 memberMap에 있는지 확인
+      if (memberMap.has(email)) {
+        const member = memberMap.get(email)!;
+        // 해당 tenantId가 이미 있는지 확인
+        if (!member.tenants.some(t => t.tenantId === tenantId)) {
+          member.tenants.push({
+            tenantId,
+            brandName: '(구독만 존재)',
+            plan: data?.plan || '',
+            status: data?.status || '',
+          });
+          member.tenantCount = member.tenants.length;
+        }
+      } else {
+        // tenants에 없는 새 회원
+        memberMap.set(email, {
+          id: encodeURIComponent(email),
+          email,
+          name: '',
+          phone: '',
+          tenants: [{
+            tenantId,
+            brandName: '(구독만 존재)',
+            plan: data?.plan || '',
+            status: data?.status || '',
+          }],
+          tenantCount: 1,
+          createdAt: data?.createdAt?.toDate?.()?.toISOString() || null,
         });
       }
     });
