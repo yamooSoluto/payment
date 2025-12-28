@@ -56,7 +56,7 @@ export default function AccountTabs({
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
-                ? 'bg-white text-yamoo-primary shadow-sm'
+                ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
