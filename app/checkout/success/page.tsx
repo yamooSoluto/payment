@@ -17,25 +17,37 @@ function getPlanName(plan: string): string {
 }
 
 
-// 이용기간 계산 (오늘 ~ 29일 후, 다음 결제일은 30일 후)
-function getSubscriptionPeriod(): { start: string; end: string; nextBilling: string } {
+// 날짜 포맷 함수
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+// 이용기간 계산 (URL 파라미터 우선, 없으면 현재 시점 기준으로 계산)
+function getSubscriptionPeriod(startParam?: string | null, endParam?: string | null): { start: string; end: string; nextBilling: string } {
+  // URL 파라미터가 있으면 사용
+  if (startParam && endParam) {
+    const startDate = new Date(startParam);
+    const billingDate = new Date(endParam);
+    const endDate = new Date(billingDate);
+    endDate.setDate(endDate.getDate() - 1);
+
+    return {
+      start: formatDate(startDate),
+      end: formatDate(endDate),
+      nextBilling: formatDate(billingDate),
+    };
+  }
+
+  // URL 파라미터가 없으면 현재 시점 기준 (폴백)
   const today = new Date();
-
-  // 다음 결제일 (30일 후)
   const billingDate = new Date(today);
-  billingDate.setDate(billingDate.getDate() + 30);
-
-  // 이용 기간 종료일 = 다음 결제일 - 1일
+  billingDate.setMonth(billingDate.getMonth() + 1);
   const endDate = new Date(billingDate);
   endDate.setDate(endDate.getDate() - 1);
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
 
   return {
     start: formatDate(today),
@@ -52,6 +64,11 @@ function SuccessContent() {
   const tenantName = searchParams.get('tenantName') || '';
   const token = searchParams.get('token');
   const email = searchParams.get('email');
+  const startParam = searchParams.get('start');
+  const endParam = searchParams.get('end');
+
+  // 이용 기간 계산 (URL 파라미터 사용)
+  const period = getSubscriptionPeriod(startParam, endParam);
 
   // 인증 파라미터 생성
   const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
@@ -90,13 +107,13 @@ function SuccessContent() {
           <div className="flex justify-between items-center">
             <span className="text-gray-500 text-sm">이용 기간</span>
             <span className="text-gray-900 text-sm">
-              {getSubscriptionPeriod().start} ~ {getSubscriptionPeriod().end}
+              {period.start} ~ {period.end}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-500 text-sm">다음 결제일</span>
             <span className="text-gray-900 text-sm">
-              {getSubscriptionPeriod().nextBilling}
+              {period.nextBilling}
             </span>
           </div>
           {orderId && (

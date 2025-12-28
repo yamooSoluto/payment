@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
           status: 'expired',
           canceledAt: now,
           expiredAt: now,
+          currentPeriodEnd: now,  // 실제 종료일을 현재로 설정
           cancelReason: reason || 'User requested',
           cancelMode: 'immediate',
           refundAmount: refundAmount || 0,

@@ -153,11 +153,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 성공 페이지로 리다이렉트
+    // 성공 페이지로 리다이렉트 (실제 이용 기간 전달)
     const authQuery = authParam ? `&${authParam}` : '';
     const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
+    const periodStart = now.toISOString();
+    const periodEnd = nextBillingDate.toISOString();
     return NextResponse.redirect(
-      new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&orderId=${orderId}${tenantNameQuery}${authQuery}`, request.url)
+      new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&orderId=${orderId}&start=${encodeURIComponent(periodStart)}&end=${encodeURIComponent(periodEnd)}${tenantNameQuery}${authQuery}`, request.url)
     );
   } catch (error) {
     console.error('Billing confirm failed:', error);
