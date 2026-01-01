@@ -10,7 +10,7 @@ interface CheckoutPageProps {
     token?: string;
     email?: string;
     tenantId?: string;  // 매장 ID
-    mode?: string;      // 'immediate' for upgrade
+    mode?: string;      // 'immediate' for upgrade, 'reserve' for trial reservation
     refund?: string;    // 현재 플랜 환불액
     newTenant?: string; // 신규 매장 (매장 없이 결제)
     error?: string;     // 결제 실패 에러
@@ -82,10 +82,25 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   // 즉시 업그레이드인 경우 일할 계산
   let amount = fullAmount;
   let isUpgradeMode = false;
+  let isReserveMode = false;
   let currentPlanName = '';
   let nextBillingDateStr: string | undefined;
+  let trialEndDateStr: string | undefined;
 
-  if (mode === 'immediate' && subscription?.status === 'active') {
+  // Trial 예약 모드
+  if (mode === 'reserve' && subscription?.status === 'trial') {
+    isReserveMode = true;
+    currentPlanName = '무료체험';
+    if (subscription.trialEndDate) {
+      const trialEndDate = subscription.trialEndDate.toDate
+        ? subscription.trialEndDate.toDate()
+        : new Date(subscription.trialEndDate);
+      trialEndDateStr = trialEndDate.toISOString();
+      nextBillingDateStr = trialEndDateStr; // 무료체험 종료일 = 첫 결제일
+    }
+  }
+  // 즉시 업그레이드
+  else if (mode === 'immediate' && subscription?.status === 'active') {
     isUpgradeMode = true;
     const currentPlanInfo = await getPlanById(subscription.plan);
     currentPlanName = currentPlanInfo?.name || subscription.plan;
@@ -131,11 +146,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {isUpgradeMode ? '플랜 업그레이드' : '결제하기'}
+          {isUpgradeMode ? '플랜 업그레이드' : isReserveMode ? '플랜 예약' : '결제하기'}
         </h1>
         <p className="text-gray-600">
           {isUpgradeMode
             ? `${currentPlanName} → ${planName} 플랜으로 업그레이드`
+            : isReserveMode
+            ? `무료체험 종료 후 ${planName} 플랜이 자동 시작됩니다`
             : `${planName} 플랜을 구독합니다`}
         </p>
       </div>
@@ -184,10 +201,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           amount={amount}
           tenantId={tenantId}
           isUpgrade={isUpgradeMode}
+          isReserve={isReserveMode}
           fullAmount={fullAmount}
           isNewTenant={isNewTenant}
           authParam={authParam}
           nextBillingDate={nextBillingDateStr}
+          trialEndDate={trialEndDateStr}
         />
       </div>
 

@@ -29,22 +29,30 @@ interface TossPaymentWidgetProps {
   amount: number;
   tenantId?: string;
   isUpgrade?: boolean;
+  isReserve?: boolean;  // Trial 예약 모드
   fullAmount?: number;
   isNewTenant?: boolean;
   authParam?: string;
   nextBillingDate?: string; // 업그레이드 시 다음 결제일
+  trialEndDate?: string;    // Trial 종료일 (예약 모드)
 }
 
 // 이용기간 계산 (종료일 = 다음 결제일 하루 전)
-function getSubscriptionPeriod(nextBillingDate?: string): { start: string; end: string; nextBilling: string } {
+function getSubscriptionPeriod(nextBillingDate?: string, isReserve?: boolean, trialEndDate?: string): { start: string; end: string; nextBilling: string } {
   const today = new Date();
 
-  // 다음 결제일: 오늘 + 1개월 (달력 기준)
+  // 예약 모드: Trial 종료일부터 시작
+  let startDate = today;
+  if (isReserve && trialEndDate) {
+    startDate = new Date(trialEndDate);
+  }
+
+  // 다음 결제일: 시작일 + 1개월 (달력 기준)
   let billingDate: Date;
   if (nextBillingDate) {
     billingDate = new Date(nextBillingDate);
   } else {
-    billingDate = new Date(today);
+    billingDate = new Date(startDate);
     billingDate.setMonth(billingDate.getMonth() + 1);
   }
 
@@ -61,7 +69,7 @@ function getSubscriptionPeriod(nextBillingDate?: string): { start: string; end: 
   };
 
   return {
-    start: formatDate(today),
+    start: formatDate(startDate),
     end: formatDate(endDate),
     nextBilling: formatDate(billingDate),
   };
@@ -74,10 +82,12 @@ export default function TossPaymentWidget({
   amount,
   tenantId,
   isUpgrade = false,
+  isReserve = false,
   fullAmount,
   isNewTenant = false,
   authParam = '',
   nextBillingDate,
+  trialEndDate,
 }: TossPaymentWidgetProps) {
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -140,7 +150,7 @@ export default function TossPaymentWidget({
           throw new Error(data.error || '업그레이드에 실패했습니다.');
         }
       } else {
-        // 신규 결제: 빌링키 발급
+        // 신규 결제 or 예약: 빌링키 발급
         if (!sdkReady) {
           setError('결제 SDK가 준비되지 않았습니다.');
           return;
@@ -150,9 +160,10 @@ export default function TossPaymentWidget({
 
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
         const authQuery = authParam ? `&${authParam}` : '';
+        const reserveQuery = isReserve ? `&mode=reserve` : '';
         await tossPayments.requestBillingAuth('카드', {
           customerKey: email,
-          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}`,
+          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}`,
           failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,
         });
@@ -163,6 +174,8 @@ export default function TossPaymentWidget({
       setIsProcessing(false);
     }
   };
+
+  const period = getSubscriptionPeriod(nextBillingDate, isReserve, trialEndDate);
 
   return (
     <div className="space-y-6">
@@ -200,13 +213,13 @@ export default function TossPaymentWidget({
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-600">이용 기간</span>
           <span className="text-sm text-gray-900 whitespace-nowrap">
-            {getSubscriptionPeriod(nextBillingDate).start}~{getSubscriptionPeriod(nextBillingDate).end}
+            {period.start}~{period.end}
           </span>
         </div>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-gray-600">다음 결제일</span>
+          <span className="text-gray-600">{isReserve ? '첫 결제일' : '다음 결제일'}</span>
           <span className="text-sm text-gray-900">
-            {getSubscriptionPeriod(nextBillingDate).nextBilling}
+            {period.nextBilling}
           </span>
         </div>
         {isUpgrade && fullAmount ? (
@@ -224,6 +237,13 @@ export default function TossPaymentWidget({
               </span>
             </div>
           </>
+        ) : isReserve ? (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-600">예약 후 결제 금액</span>
+            <span className="text-xl font-bold text-gray-900">
+              {formatPrice(amount)}원 / 월
+            </span>
+          </div>
         ) : (
           <div className="flex justify-between items-center">
             <span className="text-gray-600">결제 금액</span>
@@ -237,11 +257,13 @@ export default function TossPaymentWidget({
       {/* 안내 */}
       <div className="bg-blue-50 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">
-          {isUpgrade ? '플랜 업그레이드 결제' : '정기결제 카드 등록'}
+          {isUpgrade ? '플랜 업그레이드 결제' : isReserve ? '무료체험 종료 후 자동 시작' : '정기결제 카드 등록'}
         </h3>
         <p className="text-sm text-blue-700">
           {isUpgrade
             ? '등록된 카드로 차액이 즉시 결제됩니다. 다음 결제일부터 새 플랜 금액이 정기 결제됩니다.'
+            : isReserve
+            ? `무료체험이 종료되면 자동으로 ${planName} 플랜이 시작되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
             : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
         </p>
       </div>
@@ -262,6 +284,8 @@ export default function TossPaymentWidget({
             <p className="text-sm text-gray-500 mt-1">
               {isUpgrade && fullAmount
                 ? `지금 ${formatPrice(amount)}원이 결제되고, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`
+                : isReserve
+                ? `무료체험 종료일인 ${period.nextBilling}부터 매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`
                 : `매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`}
               {' '}구독 해지 시 다음 결제일부터 결제가 중단되며, 이미 결제된 금액은 환불되지 않습니다.
             </p>
@@ -294,6 +318,8 @@ export default function TossPaymentWidget({
           </span>
         ) : isUpgrade ? (
           `${formatPrice(amount)}원 결제하기`
+        ) : isReserve ? (
+          '카드 등록하고 예약하기'
         ) : (
           '카드 등록하고 결제하기'
         )}
@@ -305,6 +331,12 @@ export default function TossPaymentWidget({
           <>
             <li>• 등록된 카드로 즉시 결제됩니다.</li>
             <li>• 업그레이드 후 새 플랜 기능을 바로 이용할 수 있습니다.</li>
+          </>
+        ) : isReserve ? (
+          <>
+            <li>• 무료체험 종료 후 자동으로 유료 플랜이 시작됩니다.</li>
+            <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
+            <li>• 무료체험 기간 동안에는 결제되지 않습니다.</li>
           </>
         ) : (
           <>

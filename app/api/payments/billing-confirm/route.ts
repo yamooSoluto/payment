@@ -15,11 +15,13 @@ export async function GET(request: NextRequest) {
   const tenantId = searchParams.get('tenantId');
   const token = searchParams.get('token');
   const emailParam = searchParams.get('email');
+  const mode = searchParams.get('mode'); // 'reserve' for trial reservation
 
   // 인증 파라미터 생성 (리다이렉트 시 사용)
   const authParam = token ? `token=${token}` : emailParam ? `email=${encodeURIComponent(emailParam)}` : '';
+  const isReserveMode = mode === 'reserve';
 
-  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, hasToken: !!token });
+  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, mode, hasToken: !!token });
 
   // 필수 파라미터 검증
   if (!authKey || !customerKey || !plan || !tenantId) {
@@ -58,28 +60,6 @@ export async function GET(request: NextRequest) {
     const paymentAmount = amount ? parseInt(amount) : planInfo.price;
     const email = customerKey;
 
-    // 4. 첫 결제 수행
-    const orderId = `SUB_${Date.now()}_${tenantId}`;
-    const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
-
-    console.log('Processing first payment:', { orderId, paymentAmount, tenantId });
-
-    const paymentResponse = await payWithBillingKey(
-      billingKey,
-      customerKey,
-      paymentAmount,
-      orderId,
-      orderName,
-      email
-    );
-
-    console.log('First payment completed:', paymentResponse.status);
-
-    // 4. 구독 정보 저장 (tenantId를 document ID로 사용)
-    const now = new Date();
-    const nextBillingDate = new Date(now);
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-
     // tenant 정보 조회 (매장명, 이름, 전화번호 가져오기)
     let tenantName = '';
     let brandName = '';
@@ -98,7 +78,72 @@ export async function GET(request: NextRequest) {
       // 무시
     }
 
-    // 4-5. 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
+    // 예약 모드: 빌링키만 저장하고 결제하지 않음
+    if (isReserveMode) {
+      console.log('Reserve mode: registering billing key without payment');
+
+      const now = new Date();
+
+      // 기존 trial subscription 조회
+      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      const subscriptionDoc = await subscriptionRef.get();
+
+      if (!subscriptionDoc.exists) {
+        const authQuery = authParam ? `&${authParam}` : '';
+        return NextResponse.redirect(
+          new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent('Trial subscription not found')}`, request.url)
+        );
+      }
+
+      const subscriptionData = subscriptionDoc.data();
+
+      // Trial 종료일 (첫 결제일)
+      const trialEndDate = subscriptionData?.trialEndDate?.toDate?.() || subscriptionData?.trialEndDate;
+      const pendingChangeAt = trialEndDate ? new Date(trialEndDate) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      // subscription 업데이트: pendingPlan 추가
+      await subscriptionRef.update({
+        billingKey,
+        cardInfo: billingResponse.card || null,
+        pendingPlan: plan,
+        pendingAmount: paymentAmount,
+        pendingChangeAt,
+        updatedAt: now,
+      });
+
+      console.log('✅ Billing key registered, pending plan set:', { plan, pendingChangeAt: pendingChangeAt.toISOString() });
+
+      // 성공 페이지로 리다이렉트 (예약 모드)
+      const authQuery = authParam ? `&${authParam}` : '';
+      const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
+      return NextResponse.redirect(
+        new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&reserved=true&start=${encodeURIComponent(pendingChangeAt.toISOString())}${tenantNameQuery}${authQuery}`, request.url)
+      );
+    }
+
+    // 일반 모드: 첫 결제 수행
+    const orderId = `SUB_${Date.now()}_${tenantId}`;
+    const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
+
+    console.log('Processing first payment:', { orderId, paymentAmount, tenantId });
+
+    const paymentResponse = await payWithBillingKey(
+      billingKey,
+      customerKey,
+      paymentAmount,
+      orderId,
+      orderName,
+      email
+    );
+
+    console.log('First payment completed:', paymentResponse.status);
+
+    // 구독 정보 저장 (tenantId를 document ID로 사용)
+    const now = new Date();
+    const nextBillingDate = new Date(now);
+    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+    // 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
     const paymentDocId = `${orderId}_${Date.now()}`;
 
     await db.runTransaction(async (transaction) => {
@@ -141,10 +186,10 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // 6. tenants 컬렉션에 구독 정보 동기화
+    // tenants 컬렉션에 구독 정보 동기화
     await syncNewSubscription(tenantId, plan, nextBillingDate);
 
-    // 7. n8n 웹훅 호출 (구독 성공 알림)
+    // n8n 웹훅 호출 (구독 성공 알림)
     if (process.env.N8N_WEBHOOK_URL) {
       try {
         await fetch(process.env.N8N_WEBHOOK_URL, {

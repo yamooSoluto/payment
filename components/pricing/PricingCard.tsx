@@ -54,11 +54,11 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
       const finalAuthParam = authParam || (user?.email ? `email=${encodeURIComponent(user.email)}` : '');
       const checkoutUrl = `/checkout?plan=${plan.id}&${finalAuthParam}&tenantId=${tenantId}`;
 
-      // 무료체험 이력이 없으면 팝업 표시
-      if (!trialApplied && onCheckTrialBeforeSubscribe) {
+      // 무료체험 이력이 없고, 현재 trial 상태가 아닐 때만 팝업 표시
+      if (!trialApplied && subscriptionStatus !== 'trial' && onCheckTrialBeforeSubscribe) {
         onCheckTrialBeforeSubscribe(plan.id, checkoutUrl);
       } else {
-        // 무료체험 이력이 있거나 핸들러가 없으면 바로 결제 진행
+        // 무료체험 이력이 있거나 현재 trial 상태이거나 핸들러가 없으면 바로 결제 진행
         window.location.href = checkoutUrl;
       }
     }

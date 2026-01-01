@@ -93,6 +93,7 @@ export async function POST(request: Request) {
 
     // n8n webhook 호출
     const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    let tenantId: string | null = null;
 
     if (n8nWebhookUrl) {
       try {
@@ -114,7 +115,12 @@ export async function POST(request: Request) {
         if (!n8nResponse.ok) {
           console.error('n8n webhook 호출 실패:', n8nResponse.status);
         } else {
-          console.log('n8n webhook 호출 성공');
+          const n8nData = await n8nResponse.json();
+          console.log('n8n webhook 호출 성공:', n8nData);
+          // n8n에서 tenantId 반환 시 저장
+          if (n8nData.tenantId) {
+            tenantId = n8nData.tenantId;
+          }
         }
       } catch (error) {
         console.error('n8n webhook 호출 오류:', error);
@@ -146,6 +152,31 @@ export async function POST(request: Request) {
       });
     }
 
+    // tenantId가 있으면 trial subscription 생성
+    if (tenantId) {
+      const now = new Date();
+      const trialEndDate = new Date(now);
+      trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
+
+      // subscription 생성 (trial 상태)
+      await db.collection('subscriptions').doc(tenantId).set({
+        tenantId,
+        brandName,
+        name,
+        phone,
+        email,
+        plan: 'trial',
+        status: 'trial',
+        trialEndDate,
+        currentPeriodStart: now,
+        currentPeriodEnd: trialEndDate,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      console.log(`Trial subscription 생성됨: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);
+    }
+
     // 알림톡/SMS 발송
     try {
       const portalUrl = 'https://app.yamoo.ai.kr';
@@ -170,10 +201,13 @@ export async function POST(request: Request) {
           );
           console.log('알림톡 발송 완료');
         } else {
-          // 템플릿 승인 전: SMS만 발송
-          const { sendLMS } = await import('@/lib/bizm');
-          await sendLMS(phone, message, '[YAMOO] 무료체험 신청');
-          console.log('SMS 발송 완료 (알림톡 비활성화)');
+          // 템플릿 승인 전: SMS만 발송 (NCP SENS)
+          const { sendLMS } = await import('@/lib/ncp-sens');
+          const smsResult = await sendLMS(phone, message, '[YAMOO] 무료체험 신청');
+          console.log('NCP SMS 발송 결과:', smsResult);
+          if (smsResult.statusCode !== '202') {
+            console.error('NCP SMS 발송 실패:', smsResult);
+          }
         }
       } else {
         // 기존 사용자: 포탈 링크만
@@ -193,10 +227,13 @@ export async function POST(request: Request) {
           );
           console.log('알림톡 발송 완료');
         } else {
-          // 템플릿 승인 전: SMS만 발송
-          const { sendLMS } = await import('@/lib/bizm');
-          await sendLMS(phone, message, '[YAMOO] 무료체험 신청');
-          console.log('SMS 발송 완료 (알림톡 비활성화)');
+          // 템플릿 승인 전: SMS만 발송 (NCP SENS)
+          const { sendLMS } = await import('@/lib/ncp-sens');
+          const smsResult = await sendLMS(phone, message, '[YAMOO] 무료체험 신청');
+          console.log('NCP SMS 발송 결과:', smsResult);
+          if (smsResult.statusCode !== '202') {
+            console.error('NCP SMS 발송 실패:', smsResult);
+          }
         }
       }
     } catch (error) {
@@ -208,6 +245,7 @@ export async function POST(request: Request) {
       success: true,
       message: '무료체험 신청이 완료되었습니다.',
       userExists,
+      tenantId,
     });
 
   } catch (error) {

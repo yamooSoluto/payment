@@ -331,11 +331,13 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               <div className="flex items-center gap-2 text-blue-700">
                 <Clock width={20} height={20} strokeWidth={1.5} />
                 <div>
-                  <span className="font-medium">예약된 플랜 변경</span>
+                  <span className="font-medium">{isTrial ? '예약된 유료 플랜' : '예약된 플랜 변경'}</span>
                   <p className="text-sm text-blue-600 mt-0.5">
+                    {isTrial && '무료체험 종료 후 '}
                     {subscription.pendingChangeAt ? formatDate(subscription.pendingChangeAt) : '다음 결제일'}부터{' '}
                     <span className="font-semibold">{getPlanName(subscription.pendingPlan)}</span> 플랜
                     {subscription.pendingAmount && ` (${formatPrice(subscription.pendingAmount)}원/월)`}
+                    {isTrial && '이 자동으로 시작됩니다'}
                   </p>
                 </div>
               </div>
