@@ -184,7 +184,7 @@ export async function POST(request: Request) {
 
       if (!userExists && tempPassword) {
         // 신규 사용자: 임시 비밀번호 포함
-        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n임시 비밀번호: ${tempPassword}\n\n포탈: ${portalUrl}\n\n담당자가 곧 연락드리겠습니다.`;
+        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n임시 비밀번호: ${tempPassword}\n\n포탈: ${portalUrl}\n\n위 포탈에서 ID/PW 접속 후 이용해 주세요.`;
 
         if (useAlimtalk) {
           const templateCode = process.env.BIZM_TRIAL_TEMPLATE_CODE || 'TRIAL_WELCOME';
@@ -211,7 +211,7 @@ export async function POST(request: Request) {
         }
       } else {
         // 기존 사용자: 포탈 링크만
-        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n기존 계정(${email})으로 포탈에 로그인해주세요.\n\n포탈: ${portalUrl}\n\n담당자가 곧 연락드리겠습니다.`;
+        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n\n포탈: ${portalUrl}\n\n위 포탈에서 ID/PW 접속 후 이용해 주세요.`;
 
         if (useAlimtalk) {
           const templateCode = process.env.BIZM_TRIAL_EXISTING_TEMPLATE_CODE || 'TRIAL_EXISTING';
