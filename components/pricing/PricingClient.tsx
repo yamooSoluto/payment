@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import PricingCard from './PricingCard';
 import TenantSelectModal from './TenantSelectModal';
 import EnterpriseModal from './EnterpriseModal';
+import TrialSuggestionModal from './TrialSuggestionModal';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface Plan {
@@ -59,10 +60,14 @@ export default function PricingClient({
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEnterpriseModalOpen, setIsEnterpriseModalOpen] = useState(false);
+  const [isTrialSuggestionOpen, setIsTrialSuggestionOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
+  const [trialApplied, setTrialApplied] = useState<boolean>(false);
+  const [pendingCheckoutData, setPendingCheckoutData] = useState<{ plan: string; url: string } | null>(null);
 
   // 중복 fetch 방지용 ref
   const hasFetchedRef = useRef(initialTenants.length > 0 || isLoggedIn);
+  const hasFetchedUserRef = useRef(false);
 
   // 서버 또는 클라이언트 인증 상태 확인
   const isAuthenticated = isLoggedIn || !!user;
@@ -102,6 +107,29 @@ export default function PricingClient({
     fetchTenants();
   }, [userEmail]);
 
+  // 사용자 데이터 조회 (trialApplied 확인용)
+  useEffect(() => {
+    if (hasFetchedUserRef.current || !userEmail) {
+      return;
+    }
+
+    hasFetchedUserRef.current = true;
+
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`/api/users/${encodeURIComponent(userEmail)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setTrialApplied(data.trialApplied || false);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, [userEmail]);
+
   const handleSelectWithoutTenant = (planId: string) => {
     setSelectedPlan(planId);
     setIsModalOpen(true);
@@ -109,6 +137,30 @@ export default function PricingClient({
 
   const handleSelectTenant = (tenantId: string) => {
     setSelectedTenantId(tenantId);
+  };
+
+  // 유료 구독 전 무료체험 체크
+  const handleCheckTrialBeforeSubscribe = (planId: string, checkoutUrl: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (plan) {
+      setSelectedPlan(planId);
+      setPendingCheckoutData({ plan: planId, url: checkoutUrl });
+      setIsTrialSuggestionOpen(true);
+    }
+  };
+
+  // 무료체험 먼저하기
+  const handleGoToTrial = () => {
+    setIsTrialSuggestionOpen(false);
+    window.location.href = '/trial';
+  };
+
+  // 바로 구독하기
+  const handleProceedAnyway = () => {
+    setIsTrialSuggestionOpen(false);
+    if (pendingCheckoutData) {
+      window.location.href = pendingCheckoutData.url;
+    }
   };
 
   // 현재 선택된 tenantId (URL에서 받은 것 또는 자동 선택된 것)
@@ -133,8 +185,10 @@ export default function PricingClient({
             isLoggedIn={isAuthenticated}
             tenantId={effectiveTenantId}
             tenantCount={tenants.length}
+            trialApplied={trialApplied}
             onSelectWithoutTenant={handleSelectWithoutTenant}
             onEnterpriseClick={() => setIsEnterpriseModalOpen(true)}
+            onCheckTrialBeforeSubscribe={handleCheckTrialBeforeSubscribe}
           />
         ))}
       </div>
@@ -146,12 +200,22 @@ export default function PricingClient({
         selectedPlan={selectedPlan}
         authParam={finalAuthParam}
         email={userEmail || ''}
+        trialApplied={trialApplied}
         onSelectTenant={handleSelectTenant}
+        onCheckTrialBeforeSubscribe={handleCheckTrialBeforeSubscribe}
       />
 
       <EnterpriseModal
         isOpen={isEnterpriseModalOpen}
         onClose={() => setIsEnterpriseModalOpen(false)}
+      />
+
+      <TrialSuggestionModal
+        isOpen={isTrialSuggestionOpen}
+        onClose={() => setIsTrialSuggestionOpen(false)}
+        onGoToTrial={handleGoToTrial}
+        onProceedAnyway={handleProceedAnyway}
+        planName={plans.find(p => p.id === selectedPlan)?.name || ''}
       />
     </>
   );

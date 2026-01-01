@@ -74,6 +74,12 @@ export default function Header() {
               소개
             </Link>
             <Link
+              href="/trial"
+              className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium"
+            >
+              무료체험
+            </Link>
+            <Link
               href={user ? `/pricing?email=${encodeURIComponent(user.email || '')}` : '/pricing'}
               className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium"
             >
@@ -151,6 +157,13 @@ export default function Header() {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 소개
+              </Link>
+              <Link
+                href="/trial"
+                className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                무료체험
               </Link>
               <Link
                 href={user ? `/pricing?email=${encodeURIComponent(user.email || '')}` : '/pricing'}

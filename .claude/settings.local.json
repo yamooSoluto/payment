@@ -32,7 +32,8 @@
       "Bash(grep:*)",
       "Bash(npx eslint:*)",
       "Bash(npx next lint:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

@@ -24,7 +24,9 @@ interface TenantSelectModalProps {
   selectedPlan: string;
   authParam: string;
   email: string;
+  trialApplied?: boolean;
   onSelectTenant: (tenantId: string) => void;
+  onCheckTrialBeforeSubscribe?: (planId: string, checkoutUrl: string) => void;
 }
 
 interface AlertModalState {
@@ -58,7 +60,9 @@ export default function TenantSelectModal({
   selectedPlan,
   authParam,
   email,
+  trialApplied = false,
   onSelectTenant,
+  onCheckTrialBeforeSubscribe,
 }: TenantSelectModalProps) {
   const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
@@ -73,12 +77,18 @@ export default function TenantSelectModal({
   const hasTenants = tenants.length > 0;
 
   const handleTrialClick = () => {
-    window.location.href = '/about#free-trial-form';
+    window.location.href = '/trial';
   };
 
   const handleDirectPayment = () => {
     const url = `/checkout?plan=${selectedPlan}&${authParam}&newTenant=true`;
-    window.location.href = url;
+
+    // 무료체험 이력이 없으면 팝업 표시 (trial 플랜 제외)
+    if (selectedPlan !== 'trial' && !trialApplied && onCheckTrialBeforeSubscribe) {
+      onCheckTrialBeforeSubscribe(selectedPlan, url);
+    } else {
+      window.location.href = url;
+    }
   };
 
   const handleSelectTenant = (tenant: Tenant) => {
@@ -110,10 +120,16 @@ export default function TenantSelectModal({
       }
     }
 
-    // 미구독 → 결제 진행
+    // 미구독 → 결제 진행 (무료체험 체크)
     onSelectTenant(tenant.tenantId);
     const url = `/checkout?plan=${selectedPlan}&${authParam}&tenantId=${tenant.tenantId}`;
-    window.location.href = url;
+
+    // 무료체험 이력이 없으면 팝업 표시 (trial 플랜 제외)
+    if (selectedPlan !== 'trial' && !trialApplied && onCheckTrialBeforeSubscribe) {
+      onCheckTrialBeforeSubscribe(selectedPlan, url);
+    } else {
+      window.location.href = url;
+    }
   };
 
   const handleAlertConfirm = () => {

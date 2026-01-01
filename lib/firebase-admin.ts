@@ -1,8 +1,10 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getAuth, Auth } from 'firebase-admin/auth';
 
 let app: App | null = null;
 let adminDb: Firestore | null = null;
+let adminAuth: Auth | null = null;
 
 function initializeFirebaseAdmin() {
   if (adminDb) return adminDb;
@@ -29,6 +31,7 @@ function initializeFirebaseAdmin() {
       app = getApps()[0];
     }
     adminDb = getFirestore(app!);
+    adminAuth = getAuth(app!);
     return adminDb;
   } catch (error) {
     console.error('Firebase Admin initialization error:', error);
@@ -36,7 +39,14 @@ function initializeFirebaseAdmin() {
   }
 }
 
+// Auth 초기화 함수 (필요할 때만 호출)
+function getAdminAuth(): Auth | null {
+  if (adminAuth) return adminAuth;
+  initializeFirebaseAdmin();
+  return adminAuth;
+}
+
 // 초기화 실행
 initializeFirebaseAdmin();
 
-export { adminDb, initializeFirebaseAdmin };
+export { adminDb, adminAuth, initializeFirebaseAdmin, getAdminAuth };

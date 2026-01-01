@@ -27,7 +27,6 @@
 - **Icons**:
   - **Iconoir React** ^7.11.0 (메인)
   - Lucide React ^0.468.0 (서브)
-  - Phosphor Icons (@phosphor-icons/react ^2.1.10) (미사용)
 - **Components**:
   - Radix UI (Dialog, Slot)
   - Tiptap (Rich Text Editor)

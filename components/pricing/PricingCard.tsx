@@ -21,11 +21,13 @@ interface PricingCardProps {
   isLoggedIn: boolean;
   tenantId?: string | null;
   tenantCount?: number;
+  trialApplied?: boolean;
   onSelectWithoutTenant?: (planId: string) => void;
   onEnterpriseClick?: () => void;
+  onCheckTrialBeforeSubscribe?: (planId: string, checkoutUrl: string) => void;
 }
 
-export default function PricingCard({ plan, currentPlan, subscriptionStatus, authParam, isLoggedIn, tenantId, tenantCount = 0, onSelectWithoutTenant, onEnterpriseClick }: PricingCardProps) {
+export default function PricingCard({ plan, currentPlan, subscriptionStatus, authParam, isLoggedIn, tenantId, tenantCount = 0, trialApplied = false, onSelectWithoutTenant, onEnterpriseClick, onCheckTrialBeforeSubscribe }: PricingCardProps) {
   const { user } = useAuth();
   const isCurrentPlan = currentPlan === plan.id;
   const isEnterprise = plan.id === 'enterprise';
@@ -39,8 +41,8 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
     if (isEnterprise) {
       onEnterpriseClick?.();
     } else if (isTrial) {
-      // 무료체험은 about 페이지 신청폼으로 이동
-      window.location.href = '/about#free-trial-form';
+      // 무료체험은 trial 페이지로 이동
+      window.location.href = '/trial';
     } else if (!isAuthenticated) {
       // 비로그인 상태면 로그인 페이지로
       window.location.href = `/login?redirect=/pricing`;
@@ -48,9 +50,17 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
       // 매장이 없거나 여러 개면 모달 표시 (매장 선택)
       onSelectWithoutTenant?.(plan.id);
     } else {
-      // 매장이 1개면 결제 페이지로
+      // 유료 플랜: 무료체험 이력 체크
       const finalAuthParam = authParam || (user?.email ? `email=${encodeURIComponent(user.email)}` : '');
-      window.location.href = `/checkout?plan=${plan.id}&${finalAuthParam}&tenantId=${tenantId}`;
+      const checkoutUrl = `/checkout?plan=${plan.id}&${finalAuthParam}&tenantId=${tenantId}`;
+
+      // 무료체험 이력이 없으면 팝업 표시
+      if (!trialApplied && onCheckTrialBeforeSubscribe) {
+        onCheckTrialBeforeSubscribe(plan.id, checkoutUrl);
+      } else {
+        // 무료체험 이력이 있거나 핸들러가 없으면 바로 결제 진행
+        window.location.href = checkoutUrl;
+      }
     }
   };
 
