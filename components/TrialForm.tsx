@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
@@ -20,12 +19,9 @@ function validatePhone(phone: string): boolean {
 interface TrialFormProps {
   /** 폼 카드 스타일 (about 페이지용) */
   cardStyle?: boolean;
-  /** 성공 후 이동할 경로 (기본: /pricing) */
-  successRedirect?: string;
 }
 
-export default function TrialForm({ cardStyle = true, successRedirect }: TrialFormProps) {
-  const router = useRouter();
+export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   const { user } = useAuth();
 
   // 폼 상태
@@ -282,45 +278,34 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
       <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
         <div className="text-center py-6 sm:py-8">
           <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">🎉</div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">신청이 완료되었습니다!</h3>
-          <p className="text-gray-600 mb-4 text-sm sm:text-base">
-            <span className="font-semibold text-[#ffbf03]">{formData.phone}</span>으로<br />
-            알림톡을 발송했습니다.
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">무료체험 신청이 완료되었습니다!</h3>
+
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <p className="text-gray-600 text-sm sm:text-base mb-2">서비스 이용을 위한 정보가</p>
+            <p className="text-gray-600 text-sm sm:text-base mb-3">
+              <span className="font-semibold text-[#ffbf03]">{formData.phone}</span>으로 발송되었습니다.
+            </p>
+            <p className="text-gray-500 text-sm">
+              📱 아이디: <strong>{formData.email}</strong>
+            </p>
+            <p className="text-gray-500 text-sm">
+              🔑 임시 비밀번호 및 포탈 링크
+            </p>
+          </div>
+
+          <p className="text-gray-500 text-xs sm:text-sm mb-6">
+            카카오톡을 확인해 주세요.<br />
+            <span className="text-gray-400">(카카오톡 미사용 시 문자를 확인해 주세요)</span>
           </p>
-          <p className="text-gray-500 text-sm sm:text-base mb-2">
-            📱 <strong>아이디</strong>: {formData.email}
-          </p>
-          <p className="text-gray-500 text-sm sm:text-base mb-6">
-            🔑 임시 비밀번호와 포탈 링크가 전송되었습니다!
-          </p>
-          {successRedirect ? (
-            <button
-              onClick={() => router.push(successRedirect)}
-              className="bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-8 rounded-lg transition-colors"
-            >
-              요금제 페이지로 이동
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setIsSuccess(false);
-                setFormData({
-                  name: '',
-                  phone: '',
-                  email: '',
-                  brandName: '',
-                  industry: '',
-                  agreeTerms: false
-                });
-                setIsPhoneVerified(false);
-                setVerificationSent(false);
-                setVerificationCode('');
-              }}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              새로운 신청하기
-            </button>
-          )}
+
+          <a
+            href="https://app.yamoo.ai.kr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-8 rounded-lg transition-colors"
+          >
+            포탈 이동
+          </a>
         </div>
       </div>
     );

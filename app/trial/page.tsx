@@ -36,7 +36,7 @@ export default function TrialPage() {
         </div>
 
         {/* 폼 카드 */}
-        <TrialForm successRedirect="/pricing" />
+        <TrialForm />
       </div>
     </div>
   );

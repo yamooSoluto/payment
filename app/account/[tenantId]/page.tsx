@@ -84,9 +84,29 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
     redirect('/account?error=unauthorized');
   }
 
-  // 구독 정보 조회
+  // 구독 정보 조회 (subscriptions 컬렉션 우선, 없으면 tenants 컬렉션의 subscription 사용)
   const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
-  const rawSubscription = subscriptionDoc.exists ? subscriptionDoc.data() : null;
+  let rawSubscription = subscriptionDoc.exists ? subscriptionDoc.data() : null;
+
+  // subscriptions 컬렉션에 없으면 tenants의 subscription 정보 사용
+  if (!rawSubscription && tenantData.subscription) {
+    // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
+    rawSubscription = {
+      tenantId,
+      email: tenantData.email || email,
+      brandName: tenantData.brandName,
+      name: tenantData.name,
+      phone: tenantData.phone,
+      plan: tenantData.subscription.plan || tenantData.plan || 'trial',
+      status: tenantData.subscription.status === 'trialing' ? 'trial' : tenantData.subscription.status,
+      trialEndDate: tenantData.trial?.trialEndsAt,
+      currentPeriodStart: tenantData.subscription.startedAt,
+      currentPeriodEnd: tenantData.trial?.trialEndsAt || tenantData.subscription.renewsAt,
+      nextBillingDate: tenantData.subscription.renewsAt,
+      createdAt: tenantData.createdAt,
+      updatedAt: tenantData.updatedAt,
+    };
+  }
 
   // 결제 내역 조회 (인덱스 없이 클라이언트에서 정렬)
   const paymentsSnapshot = await db
