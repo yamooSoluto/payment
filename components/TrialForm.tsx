@@ -123,7 +123,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
       }
 
       setVerificationSent(true);
-      setResendTimer(180); // 3분
+      setResendTimer(60); // 1분 (백엔드 재발송 제한과 일치)
       setSubmitError('');
       setShowErrorModal(false);
     } catch (error: any) {
