@@ -325,7 +325,6 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               이름<span className="text-red-500">*</span>
-              {user && <span className="text-xs text-gray-500 ml-2">(자동입력)</span>}
             </label>
             <input
               type="text"
@@ -333,9 +332,10 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               value={formData.name}
               onChange={handleInputChange}
               placeholder="홍길동"
+              disabled={!!user && !!formData.name}
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                 errors.name ? 'border-red-500' : 'border-gray-300'
-              }`}
+              } ${user && formData.name ? 'bg-gray-100 cursor-not-allowed' : ''}`}
             />
             {errors.name && (
               <p className="text-red-500 text-xs mt-1">이름을 2자 이상 입력해주세요</p>
@@ -346,7 +346,6 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               연락처<span className="text-red-500">*</span>
-              {user && <span className="text-xs text-gray-500 ml-2">(자동입력)</span>}
             </label>
             <div className="flex gap-1 sm:gap-2">
               <input
@@ -355,10 +354,10 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
                 value={formData.phone}
                 onChange={handleInputChange}
                 placeholder="010-1234-5678"
-                disabled={isPhoneVerified}
+                disabled={isPhoneVerified || (!!user && !!formData.phone)}
                 className={`flex-1 px-2 sm:px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                   errors.phone ? 'border-red-500' : 'border-gray-300'
-                } ${isPhoneVerified ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                } ${isPhoneVerified || (user && formData.phone) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               />
               {!isPhoneVerified && (
                 <button
@@ -412,7 +411,6 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               이메일 (ID)<span className="text-red-500">*</span>
-              {user && <span className="text-xs text-gray-500 ml-2">(자동입력)</span>}
             </label>
             <input
               type="email"
@@ -420,9 +418,10 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               value={formData.email}
               onChange={handleInputChange}
               placeholder="company@example.com"
+              disabled={!!user && !!formData.email}
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                 errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
+              } ${user && formData.email ? 'bg-gray-100 cursor-not-allowed' : ''}`}
             />
             {errors.email && (
               <p className="text-red-500 text-xs mt-1">올바른 이메일 주소를 입력해주세요</p>

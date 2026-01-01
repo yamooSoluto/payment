@@ -91,6 +91,27 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   // subscriptions 컬렉션에 없으면 tenants의 subscription 정보 사용
   if (!rawSubscription && tenantData.subscription) {
     // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
+
+    // trial 날짜: trialEndsAt는 tenantData.trialEndsAt 또는 subscription.trial.trialEndsAt
+    let trialEndDate = tenantData.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt;
+
+    // 시작일: subscription.startedAt만 사용
+    let startDate = tenantData.subscription.startedAt;
+
+    // startDate를 Date 객체로 변환 (값이 있을 때만)
+    if (startDate && startDate.toDate) {
+      startDate = startDate.toDate();
+    } else if (startDate && startDate._seconds) {
+      startDate = new Date(startDate._seconds * 1000);
+    }
+
+    // trialEndDate를 Date 객체로 변환 (값이 있을 때만)
+    if (trialEndDate && trialEndDate.toDate) {
+      trialEndDate = trialEndDate.toDate();
+    } else if (trialEndDate && trialEndDate._seconds) {
+      trialEndDate = new Date(trialEndDate._seconds * 1000);
+    }
+
     rawSubscription = {
       tenantId,
       email: tenantData.email || email,
@@ -99,9 +120,9 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       phone: tenantData.phone,
       plan: tenantData.subscription.plan || tenantData.plan || 'trial',
       status: tenantData.subscription.status === 'trialing' ? 'trial' : tenantData.subscription.status,
-      trialEndDate: tenantData.trial?.trialEndsAt,
-      currentPeriodStart: tenantData.subscription.startedAt,
-      currentPeriodEnd: tenantData.trial?.trialEndsAt || tenantData.subscription.renewsAt,
+      trialEndDate,
+      currentPeriodStart: startDate,
+      currentPeriodEnd: trialEndDate || tenantData.subscription.renewsAt,
       nextBillingDate: tenantData.subscription.renewsAt,
       createdAt: tenantData.createdAt,
       updatedAt: tenantData.updatedAt,

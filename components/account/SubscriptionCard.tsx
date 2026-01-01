@@ -282,18 +282,35 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         </div>
 
         {/* Trial Info */}
-        {isTrial && subscription.trialEndDate && (
-          <div className="bg-blue-50 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-2 text-blue-700">
-              <Calendar width={20} height={20} strokeWidth={1.5} />
-              <span className="font-medium">
-                무료체험 {calculateDaysLeft(subscription.trialEndDate)}일 남음
-              </span>
+        {isTrial && (
+          <>
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center gap-3 text-gray-600">
+                <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">이용기간</p>
+                  <p className="font-medium">
+                    {subscription.currentPeriodStart && subscription.trialEndDate
+                      ? `${formatDate(subscription.currentPeriodStart)} ~ ${formatDate(subscription.trialEndDate)}`
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+              {subscription.trialEndDate && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Calendar width={20} height={20} strokeWidth={1.5} />
+                    <span className="font-medium">
+                      무료체험 {calculateDaysLeft(subscription.trialEndDate)}일 남음
+                    </span>
+                  </div>
+                  <p className="text-sm text-blue-600 mt-1">
+                    체험 종료일: {formatDate(subscription.trialEndDate)}
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-sm text-blue-600 mt-1">
-              체험 종료일: {formatDate(subscription.trialEndDate)}
-            </p>
-          </div>
+          </>
         )}
 
         {/* Active Subscription Info */}
@@ -396,12 +413,20 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
           {isTrial && (
-            <a
-              href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
-              className="btn-primary"
-            >
-              유료 전환하기
-            </a>
+            <>
+              <a
+                href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
+                className="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+              >
+                플랜 예약
+              </a>
+              <a
+                href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}&immediate=true`}
+                className="btn-primary"
+              >
+                즉시 구매
+              </a>
+            </>
           )}
           {isActive && (
             <a

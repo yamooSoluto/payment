@@ -97,6 +97,7 @@ export async function POST(request: Request) {
 
     if (n8nWebhookUrl) {
       try {
+        const timestamp = new Date().toISOString();
         const n8nResponse = await fetch(n8nWebhookUrl, {
           method: 'POST',
           headers: {
@@ -108,7 +109,8 @@ export async function POST(request: Request) {
             phone,
             brandName,
             industry,
-            createdAt: new Date().toISOString(),
+            timestamp, // n8n용
+            createdAt: timestamp, // 기존 호환성용
           }),
         });
 
@@ -142,6 +144,7 @@ export async function POST(request: Request) {
         updatedAt: now,
         trialApplied: true,
         trialAppliedAt: now,
+        tempPassword: !userExists, // 신규 사용자만 임시 비밀번호 플래그 true
       });
     } else {
       // 기존 사용자: trialApplied 플래그 업데이트
