@@ -331,8 +331,8 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
       <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
         <div className="text-center mb-4 sm:mb-6">
           <span className="text-3xl sm:text-4xl">🚀</span>
-          <h3 className="text-lg sm:text-2xl font-bold text-gray-900 mt-2">AI 야무지니 무료 체험</h3>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">10분이면 시작 가능! 바로 체험해보세요</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">AI 야무지니 무료 체험</h3>
+          <p className="text-gray-500 text-sm sm:text-base mt-1">10분이면 시작 가능! 바로 체험해보세요</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -363,7 +363,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
               연락처<span className="text-red-500">*</span>
               {user && <span className="text-xs text-gray-500 ml-2">(자동입력)</span>}
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-1 sm:gap-2">
               <input
                 type="tel"
                 name="phone"
@@ -371,7 +371,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
                 onChange={handleInputChange}
                 placeholder="010-1234-5678"
                 disabled={isPhoneVerified}
-                className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
+                className={`flex-1 px-2 sm:px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                   errors.phone ? 'border-red-500' : 'border-gray-300'
                 } ${isPhoneVerified ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               />
@@ -398,12 +398,12 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
 
             {/* 인증번호 입력 */}
             {verificationSent && !isPhoneVerified && (
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex gap-1 sm:gap-2">
                 <input
                   type="text"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none"
+                  className="flex-1 px-2 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none"
                   placeholder="인증번호 6자리"
                   maxLength={6}
                 />
