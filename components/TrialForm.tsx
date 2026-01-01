@@ -380,7 +380,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
                   type="button"
                   onClick={handleSendVerification}
                   disabled={verificationLoading || !validatePhone(formData.phone) || resendTimer > 0}
-                  className="px-4 py-3 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="px-2 sm:px-4 py-3 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   {verificationSent && resendTimer > 0
                     ? `${Math.floor(resendTimer / 60)}:${(resendTimer % 60).toString().padStart(2, '0')}`
@@ -390,7 +390,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
                 </button>
               )}
               {isPhoneVerified && (
-                <span className="px-4 py-3 bg-green-100 text-green-700 text-sm font-medium rounded-lg whitespace-nowrap">
+                <span className="px-2 sm:px-4 py-3 bg-green-100 text-green-700 text-sm font-medium rounded-lg whitespace-nowrap">
                   인증완료
                 </span>
               )}
@@ -411,7 +411,7 @@ export default function TrialForm({ cardStyle = true, successRedirect }: TrialFo
                   type="button"
                   onClick={handleVerifyCode}
                   disabled={verificationLoading || verificationCode.length !== 6}
-                  className="px-4 py-3 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 sm:px-4 py-3 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   확인
                 </button>
