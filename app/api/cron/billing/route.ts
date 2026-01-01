@@ -21,13 +21,14 @@ export async function GET(request: NextRequest) {
   today.setHours(0, 0, 0, 0);
 
   try {
-    // ========== 1. Trial 만료 처리 ==========
+    // ========== 1. Trial 만료 및 자동 전환 처리 ==========
     const expiredTrials: { tenantId: string; email: string }[] = [];
+    const convertedTrials: { tenantId: string; plan: string }[] = [];
 
-    // trial 플랜이면서 trialEndDate가 오늘 이전인 구독 찾기
+    // trial 상태인 구독 조회
     const trialSubscriptions = await db
       .collection('subscriptions')
-      .where('plan', '==', 'trial')
+      .where('status', '==', 'trial')
       .get();
 
     for (const doc of trialSubscriptions.docs) {
@@ -36,36 +37,107 @@ export async function GET(request: NextRequest) {
       const trialEndDate = subscription.trialEndDate?.toDate?.() || subscription.trialEndDate;
 
       if (trialEndDate && new Date(trialEndDate) <= today) {
-        // Trial 만료 처리
-        await db.collection('subscriptions').doc(tenantId).update({
-          status: 'expired',
-          expiredAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-        // tenants 컬렉션 동기화
-        await syncTrialExpired(tenantId);
-
-        // N8N 웹훅 알림
-        if (process.env.N8N_WEBHOOK_URL) {
+        // pendingPlan이 있으면 자동 전환
+        if (subscription.pendingPlan && subscription.billingKey) {
           try {
-            await fetch(process.env.N8N_WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'trial_expired',
-                tenantId,
-                email: subscription.email,
-                trialEndDate: trialEndDate,
-              }),
-            });
-          } catch {
-            // 웹훅 실패 무시
-          }
-        }
+            const plan = subscription.pendingPlan;
+            const amount = subscription.pendingAmount || 0;
+            const billingKey = subscription.billingKey;
+            const email = subscription.email;
 
-        expiredTrials.push({ tenantId, email: subscription.email });
-        console.log(`Trial expired for tenant: ${tenantId}`);
+            // 첫 결제 수행
+            const orderId = `TRIAL_CONVERT_${Date.now()}_${tenantId}`;
+            const orderName = `YAMOO ${plan} 플랜 - 무료체험 전환`;
+
+            const paymentResponse = await payWithBillingKey(
+              billingKey,
+              email,
+              amount,
+              orderId,
+              orderName,
+              email
+            );
+
+            // 구독 업데이트
+            const now = new Date();
+            const nextBillingDate = new Date(now);
+            nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+            await db.runTransaction(async (transaction) => {
+              // 구독 상태 변경
+              transaction.update(doc.ref, {
+                plan,
+                status: 'active',
+                amount,
+                currentPeriodStart: now,
+                currentPeriodEnd: nextBillingDate,
+                nextBillingDate,
+                pendingPlan: null,
+                pendingAmount: null,
+                pendingChangeAt: null,
+                updatedAt: now,
+              });
+
+              // 결제 내역 저장
+              const paymentRef = db.collection('payments').doc(`${orderId}_${Date.now()}`);
+              transaction.set(paymentRef, {
+                tenantId,
+                email,
+                orderId,
+                paymentKey: paymentResponse.paymentKey,
+                amount,
+                plan,
+                type: 'trial_conversion',
+                status: 'done',
+                method: paymentResponse.method,
+                cardInfo: paymentResponse.card || null,
+                receiptUrl: paymentResponse.receipt?.url || null,
+                paidAt: now,
+                createdAt: now,
+              });
+            });
+
+            // tenants 컬렉션 동기화
+            const { syncNewSubscription } = await import('@/lib/tenant-sync');
+            await syncNewSubscription(tenantId, plan, nextBillingDate);
+
+            convertedTrials.push({ tenantId, plan });
+            console.log(`✅ Trial converted to ${plan}: ${tenantId}`);
+          } catch (error) {
+            console.error(`Trial conversion failed for ${tenantId}:`, error);
+          }
+        } else {
+          // pendingPlan 없으면 expired 상태로 변경
+          await db.collection('subscriptions').doc(tenantId).update({
+            status: 'expired',
+            expiredAt: new Date(),
+            updatedAt: new Date(),
+          });
+
+          // tenants 컬렉션 동기화
+          await syncTrialExpired(tenantId);
+
+          // N8N 웹훅 알림
+          if (process.env.N8N_WEBHOOK_URL) {
+            try {
+              await fetch(process.env.N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event: 'trial_expired',
+                  tenantId,
+                  email: subscription.email,
+                  trialEndDate: trialEndDate,
+                }),
+              });
+            } catch {
+              // 웹훅 실패 무시
+            }
+          }
+
+          expiredTrials.push({ tenantId, email: subscription.email });
+          console.log(`⏸️ Trial expired without pending plan: ${tenantId}`);
+        }
       }
     }
 
@@ -379,11 +451,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      trialConverted: convertedTrials.length,
       trialExpired: expiredTrials.length,
       cardExpiringAlerts: cardExpiringAlerts.length,
       pendingPlansApplied: appliedPendingPlans.length,
       paymentsProcessed: results.length,
       details: {
+        convertedTrials,
         expiredTrials,
         cardExpiringAlerts,
         appliedPendingPlans,
