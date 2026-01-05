@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { sendVerificationSMS } from '@/lib/ncp-sens';
 
-// 인증번호 유효시간 (5분)
-const VERIFICATION_EXPIRY_MS = 5 * 60 * 1000;
+// 인증번호 유효시간 (3분으로 변경)
+const VERIFICATION_EXPIRY_MS = 3 * 60 * 1000;
 
-// 재발송 제한 시간 (1분)
-const RESEND_LIMIT_MS = 60 * 1000;
+// 재발송 제한 시간 (30초로 변경)
+const RESEND_LIMIT_MS = 30 * 1000;
 
 /**
  * 6자리 인증번호 생성
@@ -24,7 +24,8 @@ function normalizePhone(phone: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { phone, action, code } = await request.json();
+    const { phone, action, code, purpose } = await request.json();
+    // purpose: 'signup' (회원가입), 'find-id' (아이디 찾기), 'reset-password' (비밀번호 찾기), 'change-phone' (연락처 변경)
 
     if (!phone) {
       return NextResponse.json(
@@ -48,17 +49,35 @@ export async function POST(request: Request) {
 
     // 인증번호 발송 요청
     if (action === 'send') {
-      // 연락처 중복 확인 (이미 가입된 번호인지) - users, tenants 둘 다 체크
-      const [existingUser, existingTenant] = await Promise.all([
-        db.collection('users').where('phone', '==', normalizedPhone).limit(1).get(),
-        db.collection('tenants').where('phone', '==', normalizedPhone).limit(1).get(),
-      ]);
+      // 회원가입 또는 연락처 변경일 경우 중복 확인
+      if (purpose === 'signup' || purpose === 'change-phone' || !purpose) {
+        // 연락처 중복 확인 (이미 가입된 번호인지) - users, tenants 둘 다 체크
+        const [existingUser, existingTenant] = await Promise.all([
+          db.collection('users').where('phone', '==', normalizedPhone).limit(1).get(),
+          db.collection('tenants').where('phone', '==', normalizedPhone).limit(1).get(),
+        ]);
 
-      if (!existingUser.empty || !existingTenant.empty) {
-        return NextResponse.json(
-          { error: '이미 가입된 연락처입니다.' },
-          { status: 400 }
-        );
+        if (!existingUser.empty || !existingTenant.empty) {
+          return NextResponse.json(
+            { error: '이미 사용 중인 연락처입니다.' },
+            { status: 400 }
+          );
+        }
+      }
+
+      // 아이디 찾기/비밀번호 찾기일 경우 가입된 번호인지 확인
+      if (purpose === 'find-id' || purpose === 'reset-password') {
+        const [existingUser, existingTenant] = await Promise.all([
+          db.collection('users').where('phone', '==', normalizedPhone).limit(1).get(),
+          db.collection('tenants').where('phone', '==', normalizedPhone).limit(1).get(),
+        ]);
+
+        if (existingUser.empty && existingTenant.empty) {
+          return NextResponse.json(
+            { error: '등록되지 않은 연락처입니다.' },
+            { status: 400 }
+          );
+        }
       }
 
       // 기존 인증 정보 확인 (재발송 제한)

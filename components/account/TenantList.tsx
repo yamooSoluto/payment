@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Shop } from 'iconoir-react';
-import { formatPrice } from '@/lib/utils';
 
 interface Subscription {
   plan: string;
@@ -140,11 +139,6 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
                             <span className="text-sm text-gray-500">
                               {PLAN_NAMES[tenant.subscription.plan] || tenant.subscription.plan}
                             </span>
-                            {tenant.subscription.amount > 0 && (
-                              <span className="text-sm text-gray-400">
-                                월 {formatPrice(tenant.subscription.amount)}원
-                              </span>
-                            )}
                           </>
                         )}
                       </div>

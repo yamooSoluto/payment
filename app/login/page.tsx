@@ -1,13 +1,15 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle, User, Phone } from 'iconoir-react';
+import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle, User, Phone, Refresh } from 'iconoir-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
 
+type Mode = 'login' | 'signup' | 'find-id' | 'reset-password';
+
 function LoginForm() {
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
+  const [mode, setMode] = useState<Mode>('login');
 
   // 공통 필드
   const [email, setEmail] = useState('');
@@ -15,14 +17,20 @@ function LoginForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // 회원가입 추가 필드
+  // 회원가입/아이디찾기/비밀번호찾기 추가 필드
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+
+  // SMS 인증 관련
+  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  const [expiryTimer, setExpiryTimer] = useState(0);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // 회원가입 약관
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState<'terms' | 'privacy' | null>(null);
 
@@ -32,7 +40,15 @@ function LoginForm() {
   const [showResetOption, setShowResetOption] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
+  // 아이디 찾기 결과
+  const [foundEmail, setFoundEmail] = useState('');
+
+  // 비밀번호 찾기 단계 (1: 정보입력+인증, 2: 새 비밀번호 입력)
+  const [resetPasswordStep, setResetPasswordStep] = useState(1);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -47,10 +63,23 @@ function LoginForm() {
     return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
   };
 
+  // 타이머 포맷 (mm:ss)
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   // 인증번호 발송
-  const handleSendVerification = async () => {
+  const handleSendVerification = useCallback(async () => {
     if (!phone || phone.replace(/-/g, '').length < 10) {
       setError('올바른 연락처를 입력해주세요.');
+      return;
+    }
+
+    // 아이디 찾기일 때는 이름도 필수
+    if (mode === 'find-id' && !name.trim()) {
+      setError('이름을 입력해주세요.');
       return;
     }
 
@@ -58,17 +87,22 @@ function LoginForm() {
     setError('');
 
     try {
+      const purpose = mode === 'signup' ? 'signup' : mode === 'find-id' ? 'find-id' : 'reset-password';
+
       const res = await fetch('/api/auth/sms-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.replace(/-/g, ''), action: 'send' }),
+        body: JSON.stringify({
+          phone: phone.replace(/-/g, ''),
+          action: 'send',
+          purpose
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
         setError(data.error || '인증번호 발송에 실패했습니다.');
-        // 이미 가입된 연락처인 경우 비밀번호 찾기 안내
         if (data.error?.includes('이미 가입된')) {
           setShowResetOption(true);
         }
@@ -76,30 +110,105 @@ function LoginForm() {
       }
 
       setVerificationSent(true);
+      setVerificationCode(['', '', '', '', '', '']);
       setSuccess('인증번호가 발송되었습니다.');
 
-      // 60초 타이머 시작
-      setResendTimer(60);
-      const timer = setInterval(() => {
-        setResendTimer((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      // 30초 재전송 타이머 시작
+      setResendTimer(30);
+
+      // 3분 만료 타이머 시작
+      setExpiryTimer(180);
+
+      // 첫 번째 입력창으로 포커스
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch {
       setError('인증번호 발송 중 오류가 발생했습니다.');
     } finally {
       setVerificationLoading(false);
     }
+  }, [phone, mode, name]);
+
+  // 재전송 타이머
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const timer = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendTimer]);
+
+  // 만료 타이머
+  useEffect(() => {
+    if (expiryTimer <= 0) return;
+    const timer = setInterval(() => {
+      setExpiryTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [expiryTimer]);
+
+  // 시간 연장 (3분 추가)
+  const handleExtendTime = () => {
+    setExpiryTimer((prev) => prev + 180);
+    setSuccess('인증 시간이 3분 연장되었습니다.');
+  };
+
+  // 개별 숫자 입력 처리
+  const handleCodeChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+
+    const newCode = [...verificationCode];
+    newCode[index] = value.slice(-1);
+    setVerificationCode(newCode);
+
+    // 다음 입력창으로 자동 이동
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  // 백스페이스 처리
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !verificationCode[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // 붙여넣기 처리
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const newCode = [...verificationCode];
+    for (let i = 0; i < pastedData.length; i++) {
+      newCode[i] = pastedData[i];
+    }
+    setVerificationCode(newCode);
+    // 마지막 입력된 위치로 포커스
+    const lastIndex = Math.min(pastedData.length, 5);
+    inputRefs.current[lastIndex]?.focus();
   };
 
   // 인증번호 확인
   const handleVerifyCode = async () => {
-    if (!verificationCode || verificationCode.length !== 6) {
+    const code = verificationCode.join('');
+    if (code.length !== 6) {
       setError('6자리 인증번호를 입력해주세요.');
+      return;
+    }
+
+    if (expiryTimer <= 0) {
+      setError('인증번호가 만료되었습니다. 다시 요청해주세요.');
       return;
     }
 
@@ -113,7 +222,7 @@ function LoginForm() {
         body: JSON.stringify({
           phone: phone.replace(/-/g, ''),
           action: 'verify',
-          code: verificationCode
+          code
         }),
       });
 
@@ -125,11 +234,95 @@ function LoginForm() {
       }
 
       setIsPhoneVerified(true);
-      setSuccess('연락처 인증이 완료되었습니다.');
+      setSuccess('인증이 완료되었습니다.');
+
+      // 아이디 찾기인 경우 바로 아이디 조회
+      if (mode === 'find-id') {
+        await handleFindId();
+      }
+
+      // 비밀번호 찾기인 경우 다음 단계로
+      if (mode === 'reset-password') {
+        setResetPasswordStep(2);
+        setSuccess('인증이 완료되었습니다. 새 비밀번호를 입력해주세요.');
+      }
     } catch {
       setError('인증 확인 중 오류가 발생했습니다.');
     } finally {
       setVerificationLoading(false);
+    }
+  };
+
+  // 아이디 찾기
+  const handleFindId = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/find-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          phone: phone.replace(/-/g, ''),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.found) {
+        setError(data.error || '일치하는 회원 정보가 없습니다.');
+        return;
+      }
+
+      setFoundEmail(data.email);
+      setSuccess('아이디를 찾았습니다!');
+    } catch {
+      setError('아이디 찾기 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 비밀번호 재설정
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setError('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          phone: phone.replace(/-/g, ''),
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || '비밀번호 변경에 실패했습니다.');
+        return;
+      }
+
+      setSuccess('비밀번호가 변경되었습니다. 로그인해주세요.');
+      setTimeout(() => handleModeChange('login'), 2000);
+    } catch {
+      setError('비밀번호 변경 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -138,27 +331,25 @@ function LoginForm() {
     setError('');
     setSuccess('');
 
-    // 비밀번호 재설정 모드
-    if (mode === 'reset') {
-      if (!email) {
-        setError('이메일을 입력해주세요.');
+    // 아이디 찾기 모드
+    if (mode === 'find-id') {
+      if (!isPhoneVerified) {
+        setError('연락처 인증을 완료해주세요.');
         return;
       }
-      setLoading(true);
-      try {
-        await resetPassword(email);
-        setSuccess('비밀번호 재설정 이메일을 보냈습니다. 이메일을 확인해주세요.');
-      } catch (err: unknown) {
-        const error = err as { code?: string };
-        if (error.code === 'auth/user-not-found') {
-          setError('등록되지 않은 이메일입니다.');
-        } else if (error.code === 'auth/invalid-email') {
-          setError('유효하지 않은 이메일 형식입니다.');
-        } else {
-          setError('오류가 발생했습니다. 다시 시도해주세요.');
+      await handleFindId();
+      return;
+    }
+
+    // 비밀번호 찾기 모드
+    if (mode === 'reset-password') {
+      if (resetPasswordStep === 2) {
+        await handleResetPassword();
+      } else {
+        if (!isPhoneVerified) {
+          setError('연락처 인증을 완료해주세요.');
+          return;
         }
-      } finally {
-        setLoading(false);
       }
       return;
     }
@@ -192,10 +383,8 @@ function LoginForm() {
 
     try {
       if (mode === 'signup') {
-        // 회원가입 + 사용자 정보 저장
         await signUp(email, password);
 
-        // Firestore에 사용자 정보 저장
         const saveRes = await fetch('/api/auth/save-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -219,7 +408,6 @@ function LoginForm() {
         await signIn(email, password);
       }
 
-      // 로그인한 이메일을 URL에 추가해서 리다이렉트
       const url = new URL(redirectUrl, window.location.origin);
       url.searchParams.set('email', email);
       const finalUrl = url.pathname + url.search;
@@ -253,9 +441,6 @@ function LoginForm() {
       const url = new URL(redirectUrl, window.location.origin);
       url.searchParams.set('email', userEmail);
       const finalUrl = url.pathname + url.search;
-
-      // 소셜 로그인 후 연락처 미등록 시 추가 정보 입력 페이지로
-      // TODO: 연락처 등록 여부 확인 후 분기
       router.push(finalUrl);
     } catch {
       setError('Google 로그인에 실패했습니다.');
@@ -265,32 +450,140 @@ function LoginForm() {
   };
 
   const getTitle = () => {
-    if (mode === 'reset') return '비밀번호 재설정';
+    if (mode === 'find-id') return '아이디 찾기';
+    if (mode === 'reset-password') return '비밀번호 찾기';
     if (mode === 'signup') return '회원가입';
     return '로그인';
   };
 
   const getDescription = () => {
-    if (mode === 'reset') return '가입한 이메일로 재설정 링크를 보내드립니다';
+    if (mode === 'find-id') return '가입 시 등록한 정보로 아이디를 찾습니다';
+    if (mode === 'reset-password') {
+      if (resetPasswordStep === 2) return '새로운 비밀번호를 입력해주세요';
+      return '가입 시 등록한 정보로 비밀번호를 재설정합니다';
+    }
     if (mode === 'signup') return 'YAMOO 서비스를 시작해보세요';
     return 'YAMOO 계정으로 로그인하세요';
   };
 
   // 모드 변경 시 상태 초기화
-  const handleModeChange = (newMode: 'login' | 'signup' | 'reset') => {
+  const handleModeChange = (newMode: Mode) => {
     setMode(newMode);
     setError('');
     setSuccess('');
     setShowResetOption(false);
-    if (newMode !== 'signup') {
+    setFoundEmail('');
+    setResetPasswordStep(1);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setVerificationCode(['', '', '', '', '', '']);
+    setIsPhoneVerified(false);
+    setVerificationSent(false);
+    setExpiryTimer(0);
+    setResendTimer(0);
+    if (newMode !== 'signup' && newMode !== 'find-id' && newMode !== 'reset-password') {
       setName('');
       setPhone('');
-      setVerificationCode('');
-      setIsPhoneVerified(false);
-      setVerificationSent(false);
       setAgreeToTerms(false);
     }
   };
+
+  // 6자리 인증번호 입력 UI
+  const renderVerificationCodeInput = () => (
+    <div className="bg-gray-50 rounded-xl p-6 mt-4">
+      <div className="text-center mb-4">
+        <h3 className="text-lg font-bold text-gray-900 mb-1">문자를 발송했어요</h3>
+        <p className="text-gray-600">인증번호를 입력해 주세요</p>
+      </div>
+
+      {/* 6자리 입력 박스 */}
+      <div className="flex justify-center gap-2 mb-4">
+        {verificationCode.map((digit, index) => (
+          <input
+            key={index}
+            ref={(el) => { inputRefs.current[index] = el; }}
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            onChange={(e) => handleCodeChange(index, e.target.value)}
+            onKeyDown={(e) => handleKeyDown(index, e)}
+            onPaste={handlePaste}
+            className="w-12 h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-lg focus:border-yamoo-primary focus:ring-2 focus:ring-yamoo-primary/20 outline-none transition-all"
+          />
+        ))}
+      </div>
+
+      {/* 타이머 및 버튼 */}
+      <div className="flex items-center justify-between text-sm">
+        <button
+          type="button"
+          onClick={() => {
+            if (resendTimer > 0) {
+              setError(`${resendTimer}초 후에 재전송할 수 있습니다.`);
+              return;
+            }
+            handleSendVerification();
+          }}
+          disabled={verificationLoading}
+          className="text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          재전송
+        </button>
+
+        <div className="flex items-center gap-3">
+          <span className={`${expiryTimer <= 30 ? 'text-red-500' : 'text-gray-600'}`}>
+            남은 시간 {formatTime(expiryTimer)}
+          </span>
+          <button
+            type="button"
+            onClick={handleExtendTime}
+            className="text-gray-500 hover:text-gray-700 underline flex items-center gap-1"
+          >
+            <Refresh className="w-4 h-4" />
+            시간연장
+          </button>
+        </div>
+      </div>
+
+      {/* 확인 버튼 */}
+      <button
+        type="button"
+        onClick={handleVerifyCode}
+        disabled={verificationLoading || verificationCode.join('').length !== 6}
+        className="w-full mt-4 btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {verificationLoading ? '확인 중...' : '다음'}
+      </button>
+    </div>
+  );
+
+  // 아이디 찾기 결과
+  const renderFoundEmail = () => (
+    <div className="bg-green-50 rounded-xl p-6 text-center">
+      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+      <h3 className="text-lg font-bold text-gray-900 mb-2">아이디를 찾았습니다</h3>
+      <p className="text-xl font-mono bg-white py-3 px-4 rounded-lg border border-green-200 mb-4">
+        {foundEmail}
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => handleModeChange('login')}
+          className="flex-1 btn-primary py-3"
+        >
+          로그인하기
+        </button>
+        <button
+          type="button"
+          onClick={() => handleModeChange('reset-password')}
+          className="flex-1 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          비밀번호 찾기
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
@@ -305,7 +598,7 @@ function LoginForm() {
           </div>
 
           {/* Success Message */}
-          {success && (
+          {success && !foundEmail && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
               <CheckCircle className="w-5 h-5 flex-shrink-0" />
               <span className="text-sm">{success}</span>
@@ -322,7 +615,7 @@ function LoginForm() {
               {showResetOption && (
                 <button
                   type="button"
-                  onClick={() => handleModeChange('reset')}
+                  onClick={() => handleModeChange('reset-password')}
                   className="mt-3 w-full py-2 px-4 bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium rounded-lg transition-colors"
                 >
                   비밀번호 재설정하기
@@ -331,213 +624,410 @@ function LoginForm() {
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 회원가입: 이름 */}
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이름
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
-                    placeholder="홍길동"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 회원가입: 연락처 + SMS 인증 */}
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  연락처
-                </label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {/* 아이디 찾기 결과 표시 */}
+          {mode === 'find-id' && foundEmail ? (
+            renderFoundEmail()
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* 아이디 찾기: 이름 */}
+              {mode === 'find-id' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    이름
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => {
-                        setPhone(formatPhone(e.target.value));
-                        setIsPhoneVerified(false);
-                        setVerificationSent(false);
-                      }}
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all ${
-                        isPhoneVerified ? 'border-green-500 bg-green-50' : 'border-gray-300'
-                      }`}
-                      placeholder="010-1234-5678"
-                      disabled={isPhoneVerified}
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                      placeholder="홍길동"
+                      required
+                      disabled={verificationSent}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 아이디 찾기: 연락처 + SMS 인증 */}
+              {mode === 'find-id' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      연락처
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => {
+                            setPhone(formatPhone(e.target.value));
+                            setIsPhoneVerified(false);
+                            setVerificationSent(false);
+                          }}
+                          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all ${
+                            isPhoneVerified ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          }`}
+                          placeholder="010-1234-5678"
+                          disabled={isPhoneVerified}
+                          required
+                        />
+                      </div>
+                      {!verificationSent && (
+                        <button
+                          type="button"
+                          onClick={handleSendVerification}
+                          disabled={verificationLoading || isPhoneVerified}
+                          className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          {verificationLoading ? '발송중...' : isPhoneVerified ? '인증완료' : '인증요청'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 인증번호 입력 UI */}
+                  {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
+                </>
+              )}
+
+              {/* 비밀번호 찾기 1단계: 이름 + 이메일 + 연락처 */}
+              {mode === 'reset-password' && resetPasswordStep === 1 && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이름
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="홍길동"
+                        required
+                        disabled={verificationSent}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이메일(ID)
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="email@example.com"
+                        required
+                        disabled={verificationSent}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      연락처
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => {
+                            setPhone(formatPhone(e.target.value));
+                            setIsPhoneVerified(false);
+                            setVerificationSent(false);
+                          }}
+                          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all ${
+                            isPhoneVerified ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          }`}
+                          placeholder="010-1234-5678"
+                          disabled={isPhoneVerified}
+                          required
+                        />
+                      </div>
+                      {!verificationSent && (
+                        <button
+                          type="button"
+                          onClick={handleSendVerification}
+                          disabled={verificationLoading || isPhoneVerified}
+                          className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          {verificationLoading ? '발송중...' : isPhoneVerified ? '인증완료' : '인증요청'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 인증번호 입력 UI */}
+                  {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
+                </>
+              )}
+
+              {/* 비밀번호 찾기 2단계: 새 비밀번호 입력 */}
+              {mode === 'reset-password' && resetPasswordStep === 2 && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      새 비밀번호
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="6자 이상"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeClosed width={20} height={20} strokeWidth={1.5} /> : <Eye width={20} height={20} strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      새 비밀번호 확인
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="비밀번호 재입력"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? '처리 중...' : '비밀번호 변경'}
+                  </button>
+                </>
+              )}
+
+              {/* 회원가입: 이름 */}
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    이름
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                      placeholder="홍길동"
                       required
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleSendVerification}
-                    disabled={verificationLoading || isPhoneVerified || resendTimer > 0}
-                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  >
-                    {verificationLoading ? '발송중...' : isPhoneVerified ? '인증완료' : resendTimer > 0 ? `${resendTimer}초` : verificationSent ? '재발송' : '인증요청'}
-                  </button>
                 </div>
+              )}
 
-                {/* 인증번호 입력 */}
-                {verificationSent && !isPhoneVerified && (
-                  <div className="mt-2 flex gap-2">
+              {/* 회원가입: 연락처 + SMS 인증 */}
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    연락처
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => {
+                          setPhone(formatPhone(e.target.value));
+                          setIsPhoneVerified(false);
+                          setVerificationSent(false);
+                        }}
+                        className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all ${
+                          isPhoneVerified ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                        }`}
+                        placeholder="010-1234-5678"
+                        disabled={isPhoneVerified}
+                        required
+                      />
+                    </div>
+                    {!verificationSent && (
+                      <button
+                        type="button"
+                        onClick={handleSendVerification}
+                        disabled={verificationLoading || isPhoneVerified}
+                        className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {verificationLoading ? '발송중...' : isPhoneVerified ? '인증완료' : '인증요청'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 인증번호 입력 */}
+                  {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
+                </div>
+              )}
+
+              {/* 로그인/회원가입: 이메일 */}
+              {(mode === 'login' || mode === 'signup') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    이메일(ID)
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
-                      type="text"
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
-                      placeholder="인증번호 6자리"
-                      maxLength={6}
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                      placeholder="email@example.com"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 로그인/회원가입: 비밀번호 */}
+              {(mode === 'login' || mode === 'signup') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    비밀번호
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                      placeholder="6자 이상"
+                      required
                     />
                     <button
                       type="button"
-                      onClick={handleVerifyCode}
-                      disabled={verificationLoading || verificationCode.length !== 6}
-                      className="px-4 py-3 bg-yamoo-primary hover:bg-yamoo-dark text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      확인
+                      {showPassword ? <EyeClosed width={20} height={20} strokeWidth={1.5} /> : <Eye width={20} height={20} strokeWidth={1.5} />}
                     </button>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
-            {/* 이메일 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                이메일(ID)
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-            </div>
+              {/* 회원가입: 비밀번호 확인 */}
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    비밀번호 확인
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                      placeholder="비밀번호 재입력"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
-            {/* 비밀번호 */}
-            {mode !== 'reset' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  비밀번호
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              {/* 회원가입: 이용약관 동의 */}
+              {mode === 'signup' && (
+                <div className="flex items-start gap-2 pt-2">
                   <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
-                    placeholder="6자 이상"
-                    required
+                    type="checkbox"
+                    id="agreeToTerms"
+                    checked={agreeToTerms}
+                    onChange={(e) => setAgreeToTerms(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
                   />
+                  <label htmlFor="agreeToTerms" className="text-sm text-gray-600 cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); setShowTermsModal('terms'); }}
+                      className="text-yamoo-dark hover:underline"
+                    >
+                      이용약관
+                    </button>
+                    {' '}및{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); setShowTermsModal('privacy'); }}
+                      className="text-yamoo-dark hover:underline"
+                    >
+                      개인정보처리방침
+                    </button>
+                    에 동의합니다. <span className="text-red-500">(필수)</span>
+                  </label>
+                </div>
+              )}
+
+              {/* 로그인: 아이디 찾기 / 비밀번호 찾기 링크 */}
+              {mode === 'login' && (
+                <div className="text-center text-sm">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => handleModeChange('find-id')}
+                    className="text-gray-500 hover:text-gray-700"
                   >
-                    {showPassword ? <EyeClosed width={20} height={20} strokeWidth={1.5} /> : <Eye width={20} height={20} strokeWidth={1.5} />}
+                    아이디 찾기
+                  </button>
+                  <span className="mx-2 text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange('reset-password')}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    비밀번호 찾기
                   </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 비밀번호 확인 */}
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  비밀번호 확인
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
-                    placeholder="비밀번호 재입력"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 이용약관 동의 */}
-            {mode === 'signup' && (
-              <div className="flex items-start gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="agreeToTerms"
-                  checked={agreeToTerms}
-                  onChange={(e) => setAgreeToTerms(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
-                />
-                <label htmlFor="agreeToTerms" className="text-sm text-gray-600 cursor-pointer">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); setShowTermsModal('terms'); }}
-                    className="text-yamoo-dark hover:underline"
-                  >
-                    이용약관
-                  </button>
-                  {' '}및{' '}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); setShowTermsModal('privacy'); }}
-                    className="text-yamoo-dark hover:underline"
-                  >
-                    개인정보처리방침
-                  </button>
-                  에 동의합니다. <span className="text-red-500">(필수)</span>
-                </label>
-              </div>
-            )}
-
-            {/* Forgot Password Link */}
-            {mode === 'login' && (
-              <div className="text-right">
+              {/* Submit 버튼 */}
+              {(mode === 'login' || mode === 'signup') && (
                 <button
-                  type="button"
-                  onClick={() => handleModeChange('reset')}
-                  className="text-sm text-yamoo-dark hover:underline"
+                  type="submit"
+                  disabled={loading || (mode === 'signup' && (!isPhoneVerified || !agreeToTerms))}
+                  className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  비밀번호를 잊으셨나요?
+                  {loading
+                    ? '처리 중...'
+                    : mode === 'signup'
+                    ? '회원가입'
+                    : '로그인'}
                 </button>
-              </div>
-            )}
+              )}
+            </form>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading || (mode === 'signup' && (!isPhoneVerified || !agreeToTerms))}
-              className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading
-                ? '처리 중...'
-                : mode === 'reset'
-                ? '재설정 이메일 보내기'
-                : mode === 'signup'
-                ? '회원가입'
-                : '로그인'}
-            </button>
-          </form>
-
-          {/* Divider - only show for login/signup */}
-          {mode !== 'reset' && (
+          {/* Google 로그인 - 로그인/회원가입 모드에서만 */}
+          {(mode === 'login' || mode === 'signup') && (
             <>
               <div className="my-6 flex items-center">
                 <div className="flex-1 border-t border-gray-200"></div>
@@ -545,7 +1035,6 @@ function LoginForm() {
                 <div className="flex-1 border-t border-gray-200"></div>
               </div>
 
-              {/* Google Sign In */}
               <button
                 onClick={handleGoogleSignIn}
                 disabled={loading}
@@ -574,15 +1063,31 @@ function LoginForm() {
             </>
           )}
 
-          {/* Mode Toggle */}
+          {/* 모드 전환 링크 */}
           <p className="mt-6 text-center text-gray-600">
-            {mode === 'reset' ? (
+            {mode === 'find-id' ? (
               <button
                 onClick={() => handleModeChange('login')}
                 className="text-yamoo-dark font-medium hover:underline"
               >
                 로그인으로 돌아가기
               </button>
+            ) : mode === 'reset-password' ? (
+              <>
+                <button
+                  onClick={() => handleModeChange('find-id')}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  아이디 찾기
+                </button>
+                <span className="mx-2 text-gray-300">|</span>
+                <button
+                  onClick={() => handleModeChange('login')}
+                  className="text-yamoo-dark font-medium hover:underline"
+                >
+                  로그인으로 돌아가기
+                </button>
+              </>
             ) : mode === 'signup' ? (
               <>
                 이미 계정이 있으신가요?{' '}
