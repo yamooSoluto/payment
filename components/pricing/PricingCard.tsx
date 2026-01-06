@@ -46,8 +46,8 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
     } else if (!isAuthenticated) {
       // 비로그인 상태면 로그인 페이지로
       window.location.href = `/login?redirect=/pricing`;
-    } else if (!tenantId || tenantCount > 1) {
-      // 매장이 없거나 여러 개면 모달 표시 (매장 선택)
+    } else if (!tenantId || tenantCount >= 1) {
+      // 매장이 1개 이상이면 모달 표시 (매장 선택)
       onSelectWithoutTenant?.(plan.id);
     } else {
       // 유료 플랜: 무료체험 이력 체크

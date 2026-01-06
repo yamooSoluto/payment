@@ -31,7 +31,7 @@ interface TenantSelectModalProps {
 
 interface AlertModalState {
   isOpen: boolean;
-  type: 'same-plan' | 'change-plan';
+  type: 'same-plan' | 'change-plan' | 'trial-upgrade';
   currentPlan: string;
   targetPlan: string;
   tenantId: string;
@@ -92,7 +92,13 @@ export default function TenantSelectModal({
   };
 
   const handleSelectTenant = (tenant: Tenant) => {
-    const isSubscribed = tenant.subscription?.status === 'active' || tenant.subscription?.status === 'trial' || tenant.subscription?.status === 'canceled';
+    // plan이 'trial'인 경우도 구독 중으로 처리 (데이터 불일치 대응)
+    const isTrial = tenant.subscription?.plan === 'trial' ||
+                    tenant.subscription?.status === 'trial';
+    const isSubscribed = tenant.subscription?.status === 'active' ||
+                         tenant.subscription?.status === 'trial' ||
+                         tenant.subscription?.status === 'canceled' ||
+                         tenant.subscription?.plan === 'trial';
 
     if (isSubscribed) {
       const currentPlan = tenant.subscription?.plan || '';
@@ -102,6 +108,16 @@ export default function TenantSelectModal({
         setAlertModal({
           isOpen: true,
           type: 'same-plan',
+          currentPlan,
+          targetPlan: selectedPlan,
+          tenantId: tenant.tenantId,
+        });
+        return;
+      } else if (isTrial) {
+        // 무료체험 중 → 플랜 예약/즉시 전환 선택
+        setAlertModal({
+          isOpen: true,
+          type: 'trial-upgrade',
           currentPlan,
           targetPlan: selectedPlan,
           tenantId: tenant.tenantId,
@@ -135,9 +151,17 @@ export default function TenantSelectModal({
   const handleAlertConfirm = () => {
     if (alertModal.type === 'same-plan') {
       window.location.href = `/account/${alertModal.tenantId}?${authParam}`;
+    } else if (alertModal.type === 'trial-upgrade') {
+      // 즉시 전환: 바로 결제 진행
+      window.location.href = `/checkout?plan=${alertModal.targetPlan}&${authParam}&tenantId=${alertModal.tenantId}`;
     } else {
       window.location.href = `/account/change-plan?${authParam}&tenantId=${alertModal.tenantId}`;
     }
+  };
+
+  const handleTrialSchedule = () => {
+    // 플랜 예약: 체험 종료 후 자동 전환 예약
+    window.location.href = `/checkout?plan=${alertModal.targetPlan}&${authParam}&tenantId=${alertModal.tenantId}&mode=reserve`;
   };
 
   const handleAlertClose = () => {
@@ -313,10 +337,14 @@ export default function TenantSelectModal({
                 "w-16 h-16 rounded-full flex items-center justify-center",
                 alertModal.type === 'same-plan'
                   ? "bg-amber-100"
+                  : alertModal.type === 'trial-upgrade'
+                  ? "bg-cyan-100"
                   : "bg-blue-100"
               )}>
                 {alertModal.type === 'same-plan' ? (
                   <WarningCircle width={32} height={32} strokeWidth={1.5} className="text-amber-600" />
+                ) : alertModal.type === 'trial-upgrade' ? (
+                  <Sparks width={32} height={32} strokeWidth={1.5} className="text-cyan-600" />
                 ) : (
                   <ArrowRight width={32} height={32} strokeWidth={1.5} className="text-blue-600" />
                 )}
@@ -328,6 +356,8 @@ export default function TenantSelectModal({
               <h3 className="text-lg font-bold text-gray-900 mb-2">
                 {alertModal.type === 'same-plan'
                   ? '이미 구독중인 플랜입니다'
+                  : alertModal.type === 'trial-upgrade'
+                  ? '플랜 전환 방식을 선택해주세요'
                   : '플랜을 변경하시겠습니까?'}
               </h3>
               <p className="text-gray-600 text-sm mb-6">
@@ -336,6 +366,11 @@ export default function TenantSelectModal({
                     현재 <span className="font-semibold text-gray-900">{alertModal.currentPlan}</span> 플랜을 구독중입니다.<br />
                     플랜 변경 또는 구독 해지는<br />
                     마이페이지에서 진행해주세요.
+                  </>
+                ) : alertModal.type === 'trial-upgrade' ? (
+                  <>
+                    현재 <span className="font-semibold text-cyan-600">무료체험</span> 중입니다.<br />
+                    <span className="font-semibold text-gray-900">{alertModal.targetPlan}</span> 플랜으로 전환하시겠습니까?
                   </>
                 ) : (
                   <>
@@ -346,25 +381,50 @@ export default function TenantSelectModal({
               </p>
 
               {/* Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleAlertClose}
-                  className="flex-1 py-3 px-4 rounded-lg border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  닫기
-                </button>
-                <button
-                  onClick={handleAlertConfirm}
-                  className={cn(
-                    "flex-1 py-3 px-4 rounded-lg font-semibold transition-colors",
-                    alertModal.type === 'same-plan'
-                      ? "bg-gray-900 text-white hover:bg-gray-800"
-                      : "bg-yamoo-primary text-gray-900 hover:bg-yamoo-primary/90"
-                  )}
-                >
-                  {alertModal.type === 'same-plan' ? '마이페이지로 이동' : '플랜 변경하기'}
-                </button>
-              </div>
+              {alertModal.type === 'trial-upgrade' ? (
+                <div className="space-y-3">
+                  <button
+                    onClick={handleTrialSchedule}
+                    className="w-full py-3 px-4 rounded-lg font-semibold border-2 border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="block text-base">플랜 예약</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">체험 종료 후 자동 전환</span>
+                  </button>
+                  <button
+                    onClick={handleAlertConfirm}
+                    className="w-full py-3 px-4 rounded-lg font-semibold bg-yamoo-primary text-gray-900 hover:bg-yamoo-primary/90 transition-colors"
+                  >
+                    <span className="block text-base">즉시 전환</span>
+                    <span className="block text-xs text-gray-700 mt-0.5">지금 바로 결제 진행</span>
+                  </button>
+                  <button
+                    onClick={handleAlertClose}
+                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleAlertClose}
+                    className="flex-1 py-3 px-4 rounded-lg border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+                  >
+                    닫기
+                  </button>
+                  <button
+                    onClick={handleAlertConfirm}
+                    className={cn(
+                      "flex-1 py-3 px-4 rounded-lg font-semibold transition-colors",
+                      alertModal.type === 'same-plan'
+                        ? "bg-gray-900 text-white hover:bg-gray-800"
+                        : "bg-yamoo-primary text-gray-900 hover:bg-yamoo-primary/90"
+                    )}
+                  >
+                    {alertModal.type === 'same-plan' ? '마이페이지로 이동' : '플랜 변경하기'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -41,11 +41,32 @@ interface TossPaymentWidgetProps {
 function getSubscriptionPeriod(nextBillingDate?: string, isReserve?: boolean, trialEndDate?: string): { start: string; end: string; nextBilling: string } {
   const today = new Date();
 
-  // 예약 모드: Trial 종료일부터 시작
-  let startDate = today;
+  // 컴팩트한 날짜 포맷 (YYYY-MM-DD)
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // 예약 모드: 무료체험 종료일 = 첫 결제일, 이용시작은 그 다음날
   if (isReserve && trialEndDate) {
-    startDate = new Date(trialEndDate);
+    const billingDate = new Date(trialEndDate); // 결제일 = 무료체험 종료일
+    const startDate = new Date(billingDate);
+    startDate.setDate(startDate.getDate() + 1); // 이용 시작일 = 결제일 다음날
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(endDate.getDate() - 1); // 이용 종료일 = 시작일 + 1개월 - 1일
+
+    return {
+      start: formatDate(startDate),
+      end: formatDate(endDate),
+      nextBilling: formatDate(billingDate),
+    };
   }
+
+  // 일반 모드
+  const startDate = today;
 
   // 다음 결제일: 시작일 + 1개월 (달력 기준)
   let billingDate: Date;
@@ -59,14 +80,6 @@ function getSubscriptionPeriod(nextBillingDate?: string, isReserve?: boolean, tr
   // 이용 기간 종료일 = 다음 결제일 - 1일
   const endDate = new Date(billingDate);
   endDate.setDate(endDate.getDate() - 1);
-
-  // 컴팩트한 날짜 포맷 (YYYY-MM-DD)
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   return {
     start: formatDate(startDate),

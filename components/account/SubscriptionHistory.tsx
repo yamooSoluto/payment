@@ -16,6 +16,7 @@ interface Subscription {
   previousPlan?: string;
   canceledAt?: Date | string;
   cancelReason?: string;
+  trialEndDate?: Date | string;
 }
 
 interface Payment {
@@ -50,11 +51,15 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     const currentStart = subscription.currentPeriodStart || subscription.planChangedAt || subscription.startDate || subscription.createdAt;
 
     // 종료일 계산
+    // - trial: trialEndDate 또는 currentPeriodEnd 사용
     // - expired (즉시 해지): currentPeriodEnd 사용 (해지 시점)
     // - canceled (예약 해지): currentPeriodEnd 사용 (기간 종료일)
     // - active: nextBillingDate - 1일
     let currentEndDate: Date | string | null = null;
-    if (subscription.status === 'expired') {
+    if (subscription.status === 'trial' || subscription.plan === 'trial') {
+      // 무료체험: trialEndDate 사용
+      currentEndDate = subscription.trialEndDate || subscription.currentPeriodEnd || null;
+    } else if (subscription.status === 'expired') {
       // 즉시 해지: currentPeriodEnd가 해지 시점으로 설정됨
       currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
     } else if (subscription.status === 'canceled') {

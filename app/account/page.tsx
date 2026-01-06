@@ -213,10 +213,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   }
 
   // 활성/해지예정 구독 여부 확인 (active, trial, canceled 모두 탈퇴 불가)
+  // plan이 'trial'인 경우도 체크 (status가 다른 값이어도 체험 중으로 처리)
   const hasActiveSubscriptions = tenants.some(
     (t) => t.subscription?.status === 'active' ||
            t.subscription?.status === 'trial' ||
-           t.subscription?.status === 'canceled'
+           t.subscription?.status === 'canceled' ||
+           t.subscription?.plan === 'trial'
   );
 
   return (

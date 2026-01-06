@@ -40,14 +40,46 @@ export async function DELETE(request: NextRequest) {
 
     const tenantIds = tenantsSnapshot.docs.map(doc => doc.data().tenantId || doc.id);
 
-    // 활성 구독이 있는지 확인
+    // 활성 구독이 있는지 확인 (subscriptions + tenants 모두 체크)
     for (const tenantId of tenantIds) {
+      // 1. subscriptions 컬렉션 체크
       const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
       if (subscriptionDoc.exists) {
         const subscription = subscriptionDoc.data();
-        if (subscription?.status === 'active' || subscription?.status === 'trial') {
+        if (subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'canceled') {
           return NextResponse.json(
-            { error: '활성 구독이 있는 경우 탈퇴할 수 없습니다. 모든 구독을 먼저 해지해주세요.' },
+            { error: '활성 구독 또는 체험 중인 매장이 있는 경우 탈퇴할 수 없습니다.' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // 2. tenants 컬렉션의 trial 상태도 체크 (subscriptions에 없는 경우)
+    for (const doc of tenantsSnapshot.docs) {
+      const tenantData = doc.data();
+      const tenantStatus = tenantData.subscription?.status || tenantData.status;
+      const tenantPlan = tenantData.subscription?.plan || tenantData.plan;
+
+      // trial 플랜이고 체험 종료일이 아직 안 지났으면 탈퇴 불가
+      if (tenantPlan === 'trial' || tenantStatus === 'trial') {
+        const trialEndsAt = tenantData.trialEndsAt || tenantData.subscription?.trialEndsAt;
+        let trialEndsAtDate: Date | null = null;
+
+        if (trialEndsAt) {
+          if (typeof trialEndsAt === 'object' && 'toDate' in trialEndsAt) {
+            trialEndsAtDate = trialEndsAt.toDate();
+          } else if (typeof trialEndsAt === 'object' && '_seconds' in trialEndsAt) {
+            trialEndsAtDate = new Date(trialEndsAt._seconds * 1000);
+          } else if (typeof trialEndsAt === 'string') {
+            trialEndsAtDate = new Date(trialEndsAt);
+          }
+        }
+
+        // 체험 종료일이 없거나 아직 안 지났으면 탈퇴 불가
+        if (!trialEndsAtDate || trialEndsAtDate > new Date()) {
+          return NextResponse.json(
+            { error: '무료체험 중인 매장이 있는 경우 탈퇴할 수 없습니다.' },
             { status: 400 }
           );
         }

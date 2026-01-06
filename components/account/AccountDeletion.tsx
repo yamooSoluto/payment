@@ -31,7 +31,7 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
     }
 
     if (hasActiveSubscriptions) {
-      setDeleteError('구독 또는 해지 예정인 매장이 있는 경우 탈퇴할 수 없습니다.');
+      setDeleteError('구독 중, 체험 중, 또는 해지 예정인 매장이 있는 경우 탈퇴할 수 없습니다.');
       return;
     }
 
@@ -88,7 +88,7 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
             <div className="border border-red-200 rounded-lg p-4 bg-red-50/50">
               <p className="text-sm text-gray-600 mb-3">
                 {hasActiveSubscriptions
-                  ? '구독 중이거나 해지 예정인 매장이 있어 탈퇴할 수 없습니다. 모든 구독이 종료된 후 탈퇴가 가능합니다.'
+                  ? '구독 중, 체험 중, 또는 해지 예정인 매장이 있어 탈퇴할 수 없습니다. 모든 구독/체험이 종료된 후 탈퇴가 가능합니다.'
                   : '계정을 삭제하면 모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.'}
               </p>
               <button

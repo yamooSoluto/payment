@@ -36,10 +36,27 @@ export async function GET(
 
     const userData = userDoc.data();
 
+    // 1. email 기준 trialApplied 확인
+    let trialApplied = userData?.trialApplied || false;
+
+    // 2. phone 기준 추가 체크 (다른 email로 같은 phone 사용 케이스)
+    if (!trialApplied && userData?.phone) {
+      const phoneTrialCheck = await db.collection('users')
+        .where('phone', '==', userData.phone)
+        .where('trialApplied', '==', true)
+        .limit(1)
+        .get();
+
+      if (!phoneTrialCheck.empty) {
+        trialApplied = true;
+      }
+    }
+
     return NextResponse.json({
       email: userData?.email || decodedEmail,
       name: userData?.name || '',
       phone: userData?.phone || '',
+      trialApplied,
     });
 
   } catch (error) {

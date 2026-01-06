@@ -29,7 +29,7 @@ interface TenantListProps {
 }
 
 const PLAN_NAMES: Record<string, string> = {
-  trial: '무료 체험',
+  trial: 'Trial',
   basic: 'Basic',
   business: 'Business',
 };
@@ -93,7 +93,12 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
         <>
           <div className="divide-y divide-gray-100 border-t border-gray-100">
         {tenants.map((tenant) => {
-          const status = tenant.subscription?.status || 'none';
+          // plan이 'trial'이면 status도 'trial'로 처리 (데이터 불일치 대응)
+          const plan = tenant.subscription?.plan;
+          let status = tenant.subscription?.status || 'none';
+          if (plan === 'trial' && status !== 'expired') {
+            status = 'trial';
+          }
           const statusConfig = STATUS_CONFIG[status];
           const StatusIcon = statusConfig?.icon || Sofa;
 
@@ -129,8 +134,8 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
                               <StatusIcon width={12} height={12} strokeWidth={2} />
                               {statusConfig.label}
-                              {/* 해지 예정인 경우 만료일 표시 */}
-                              {status === 'canceled' && tenant.subscription.currentPeriodEnd && (
+                              {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
+                              {(status === 'canceled' || status === 'trial') && tenant.subscription.currentPeriodEnd && (
                                 <span className="ml-0.5">
                                   (~{new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })})
                                 </span>
