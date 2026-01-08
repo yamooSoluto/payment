@@ -11,18 +11,37 @@ export function formatPrice(price: number): string {
   return new Intl.NumberFormat('ko-KR').format(price);
 }
 
-export function formatDate(date: Date | string | { toDate?: () => Date }): string {
-  let d: Date;
-
-  if (typeof date === 'string') {
-    d = new Date(date);
-  } else if (date && typeof (date as { toDate?: () => Date }).toDate === 'function') {
-    d = (date as { toDate: () => Date }).toDate();
-  } else {
-    d = date as Date;
+export function formatDate(date: Date | string | { toDate?: () => Date } | { _seconds?: number; _nanoseconds?: number } | null | undefined): string {
+  if (!date) {
+    return '-';
   }
 
-  return format(d, 'yyyy-MM-dd', { locale: ko });
+  let d: Date;
+
+  try {
+    if (typeof date === 'string') {
+      d = new Date(date);
+    } else if (typeof (date as { toDate?: () => Date }).toDate === 'function') {
+      d = (date as { toDate: () => Date }).toDate();
+    } else if (typeof (date as { _seconds?: number })._seconds === 'number') {
+      // Firestore Timestamp가 직렬화된 경우
+      d = new Date((date as { _seconds: number })._seconds * 1000);
+    } else if (date instanceof Date) {
+      d = date;
+    } else {
+      // 알 수 없는 형식
+      return '-';
+    }
+
+    // Invalid Date 체크
+    if (!d || isNaN(d.getTime())) {
+      return '-';
+    }
+
+    return format(d, 'yyyy-MM-dd', { locale: ko });
+  } catch {
+    return '-';
+  }
 }
 
 export function calculateDaysLeft(endDate: Date | string | { toDate?: () => Date }): number {

@@ -89,14 +89,25 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
 
     // 결제 내역에서 이전 구독 기간 추출
     // upgrade: 업그레이드 결제, downgrade: 다운그레이드, refund: 다운그레이드 환불
+    // conversion/trial_conversion: Trial에서 유료 플랜 전환
     const planChanges = payments
-      .filter(p => p.type === 'upgrade' || p.type === 'downgrade' || (p.type === 'refund' && p.previousPlan))
+      .filter(p =>
+        p.type === 'upgrade' ||
+        p.type === 'downgrade' ||
+        p.type === 'conversion' ||
+        p.type === 'trial_conversion' ||
+        (p.type === 'refund' && p.previousPlan)
+      )
       .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime());
 
     // 플랜 변경 내역으로 이전 구독 기간 구성
     planChanges.forEach((change, index) => {
       const changeDate = change.paidAt || change.createdAt;
-      if (change.previousPlan) {
+      // previousPlan이 있거나, conversion/trial_conversion 타입이면 이전 플랜 = trial
+      const prevPlan = change.previousPlan ||
+        ((change.type === 'conversion' || change.type === 'trial_conversion') ? 'trial' : null);
+
+      if (prevPlan) {
         // 이전 플랜의 시작일 추정 (이전 변경 날짜 또는 구독 시작일)
         const prevChange = planChanges[index + 1];
         const startDate = prevChange
@@ -105,7 +116,7 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
 
         subscriptionPeriods.push({
           id: `period-${index}`,
-          plan: change.previousPlan,
+          plan: prevPlan,
           startDate: startDate,
           endDate: changeDate,
           status: 'completed',
@@ -128,10 +139,22 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     }
   }
 
-  // 시작일 기준 내림차순 정렬
-  subscriptionPeriods.sort((a, b) =>
-    new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
-  );
+  // 1. 상태 우선 정렬 (사용중 > 사용완료 > 해지됨)
+  // 2. 같은 상태 내에서는 시작일 내림차순 (최신순)
+  const statusPriority: Record<SubscriptionPeriod['status'], number> = {
+    active: 1,
+    completed: 2,
+    canceled: 3,
+  };
+
+  subscriptionPeriods.sort((a, b) => {
+    // 상태 우선순위로 먼저 정렬
+    const statusDiff = statusPriority[a.status] - statusPriority[b.status];
+    if (statusDiff !== 0) return statusDiff;
+
+    // 같은 상태면 시작일 내림차순 (최신순)
+    return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+  });
 
   const getStatusText = (status: SubscriptionPeriod['status']) => {
     switch (status) {

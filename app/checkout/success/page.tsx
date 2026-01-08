@@ -67,6 +67,7 @@ function SuccessContent() {
   const startParam = searchParams.get('start');
   const endParam = searchParams.get('end');
   const reserved = searchParams.get('reserved') === 'true'; // 플랜 예약 모드
+  const changed = searchParams.get('changed') === 'true'; // 즉시 플랜 변경 모드
 
   // 이용 기간 계산 (URL 파라미터 사용)
   // 플랜 예약 모드에서는 start가 첫 결제일(= 이용 시작일)
@@ -100,7 +101,7 @@ function SuccessContent() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          {reserved ? '플랜 예약이 완료되었습니다!' : '결제가 완료되었습니다!'}
+          {reserved ? '플랜 예약이 완료되었습니다!' : changed ? '플랜 전환이 완료되었습니다!' : '결제가 완료되었습니다!'}
         </h1>
 
         {tenantName && (
@@ -112,12 +113,14 @@ function SuccessContent() {
         <p className="text-gray-600 mb-6">
           {reserved
             ? `${period.nextBilling}부터 ${getPlanName(plan)} 플랜이 시작됩니다.`
+            : changed
+            ? `${getPlanName(plan)} 플랜으로 전환되었습니다.`
             : `YAMOO ${getPlanName(plan)} 플랜 구독이 시작되었습니다.`}
         </p>
 
         <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left space-y-3">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">{reserved ? '예약 플랜' : '구독 플랜'}</span>
+            <span className="text-gray-500 text-sm">{reserved ? '예약 플랜' : changed ? '변경 플랜' : '구독 플랜'}</span>
             <span className="text-gray-900 font-semibold">{getPlanName(plan)}</span>
           </div>
           <div className="flex justify-between items-center">
@@ -156,7 +159,7 @@ function SuccessContent() {
             href={accountUrl}
             className="btn-primary w-full block text-center"
           >
-            내 계정으로 이동
+            마이페이지로 이동
           </Link>
           <Link
             href="/"

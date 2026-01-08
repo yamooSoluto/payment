@@ -212,9 +212,45 @@ export default function TossPaymentWidget({
 
         if (response.ok) {
           const authQuery = authParam ? `&${authParam}` : '';
-          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}${authQuery}`;
+          // 플랜 변경 시 기존 구독 종료일 유지 (start: 오늘, end: 기존 다음 결제일)
+          let periodQuery = '';
+          if (currentPeriodEnd) {
+            const today = new Date();
+            periodQuery = `&start=${today.toISOString()}&end=${new Date(currentPeriodEnd).toISOString()}`;
+          }
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}&changed=true${periodQuery}${authQuery}`;
         } else {
           throw new Error(data.error || '플랜 변경에 실패했습니다.');
+        }
+      } else if (hasBillingKey && isReserve) {
+        // 이미 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
+        const response = await fetch('/api/subscriptions/change-plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            tenantId: effectiveTenantId,
+            newPlan: plan,
+            newAmount: fullAmount,
+            mode: 'scheduled',
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const authQuery = authParam ? `&${authParam}` : '';
+          // 새 플랜 시작일 계산: 현재 구독 종료일 + 1일
+          let startQuery = '';
+          if (currentPeriodEnd) {
+            const periodEnd = new Date(currentPeriodEnd);
+            const startDate = new Date(periodEnd);
+            startDate.setDate(startDate.getDate() + 1);
+            startQuery = `&start=${startDate.toISOString()}`;
+          }
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&reserved=true${startQuery}${authQuery}`;
+        } else {
+          throw new Error(data.error || '플랜 예약에 실패했습니다.');
         }
       } else if (hasBillingKey && isTrialImmediate) {
         // Trial에서 즉시 전환 + 이미 카드 등록됨: 기존 빌링키로 바로 결제
@@ -585,6 +621,10 @@ export default function TossPaymentWidget({
               ? '등록된 카드로 즉시 결제'
               : isTrialImmediate
               ? '즉시 전환 결제'
+              : isReserve && hasBillingKey
+              ? currentPeriodEnd
+                ? '등록된 카드로 플랜 예약'
+                : '등록된 카드로 자동 시작 예약'
               : isReserve
               ? currentPeriodEnd
                 ? '구독 종료 후 자동 변경'
@@ -602,6 +642,12 @@ export default function TossPaymentWidget({
                 : `무료체험이 종료되면 자동으로 ${planName} 플랜이 시작되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
               : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
           </p>
+          {isReserve && (
+            <ul className={`mt-3 text-sm space-y-1 ${isDowngrade ? 'text-green-600' : 'text-blue-600'}`}>
+              <li>• 예약은 구독 설정에서 언제든 취소할 수 있습니다.</li>
+              <li>• {currentPeriodEnd ? '현재 구독' : '무료체험'} 기간 동안에는 결제되지 않습니다.</li>
+            </ul>
+          )}
         </div>
       )}
 
@@ -635,7 +681,9 @@ export default function TossPaymentWidget({
               formatPrice,
             })}</span>
           </li>
-          {REFUND_POLICY_ITEMS.map((policy, index) => (
+          {REFUND_POLICY_ITEMS
+            .filter(policy => !isReserve || !policy.includes('즉시 적용'))
+            .map((policy, index) => (
             <li key={index} className="flex gap-2">
               <span className="flex-shrink-0">•</span>
               <span>{policy}</span>
@@ -665,12 +713,14 @@ export default function TossPaymentWidget({
         ) : isProcessing ? (
           <span className="flex items-center justify-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yamoo-primary"></div>
-            {(isChangePlan || (hasBillingKey && isTrialImmediate)) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
+            {(isChangePlan || (hasBillingKey && isTrialImmediate) || (hasBillingKey && isReserve)) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
           </span>
         ) : isChangePlan ? (
           isDowngrade ? '플랜 변경하기' : `${formatPrice(amount)}원 결제하기`
         ) : hasBillingKey && isTrialImmediate ? (
           `${formatPrice(amount)}원 즉시 결제하기`
+        ) : hasBillingKey && isReserve ? (
+          '등록된 카드로 예약하기'
         ) : isReserve ? (
           '카드 등록하고 예약하기'
         ) : (
@@ -687,26 +737,7 @@ export default function TossPaymentWidget({
             <li>• 결제 후 바로 유료 플랜이 시작됩니다.</li>
             <li>• 매월 동일한 날짜에 자동 결제됩니다.</li>
           </>
-        ) : isReserve ? (
-          currentPeriodEnd ? (
-            <>
-              <li>• 현재 구독 종료 후 자동으로 새 플랜이 시작됩니다.</li>
-              <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
-              <li>• 현재 구독 기간 동안에는 결제되지 않습니다.</li>
-            </>
-          ) : (
-            <>
-              <li>• 무료체험 종료 후 자동으로 유료 플랜이 시작됩니다.</li>
-              <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
-              <li>• 무료체험 기간 동안에는 결제되지 않습니다.</li>
-            </>
-          )
-        ) : (
-          <>
-            <li>• 첫 결제 후 매월 동일한 날짜에 자동 결제됩니다.</li>
-            <li>• 언제든지 구독을 해지할 수 있습니다.</li>
-          </>
-          )}
+        ) : null}
         </ul>
       )}
     </div>

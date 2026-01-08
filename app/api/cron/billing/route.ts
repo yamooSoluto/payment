@@ -258,13 +258,92 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ========== 3. 정기결제 처리 ==========
-    // 오늘 결제일인 구독 찾기
-    const subscriptionsSnapshot = await db
+    // ========== 4. 유예 기간 만료 처리 ==========
+    const expiredGracePeriods: { tenantId: string; email: string }[] = [];
+
+    // 유예 기간이 만료된 구독 찾기
+    const gracePeriodSubscriptions = await db
+      .collection('subscriptions')
+      .where('status', '==', 'past_due')
+      .get();
+
+    for (const doc of gracePeriodSubscriptions.docs) {
+      const subscription = doc.data();
+      const tenantId = doc.id;
+      const gracePeriodUntil = subscription.gracePeriodUntil?.toDate?.() || subscription.gracePeriodUntil;
+
+      if (gracePeriodUntil && new Date(gracePeriodUntil) < today) {
+        // 유예 기간 만료 - 구독 정지 (D+7에 종료)
+        await db.collection('subscriptions').doc(tenantId).update({
+          status: 'suspended',
+          suspendedAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        // tenants 컬렉션 동기화
+        const { syncSubscriptionSuspended } = await import('@/lib/tenant-sync');
+        await syncSubscriptionSuspended(tenantId);
+
+        // N8N 웹훅 알림
+        if (process.env.N8N_WEBHOOK_URL) {
+          try {
+            await fetch(process.env.N8N_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'grace_period_expired',
+                tenantId,
+                email: subscription.email,
+                plan: subscription.plan,
+                gracePeriodUntil: gracePeriodUntil,
+                retryCount: subscription.retryCount || 0,
+                timestamp: new Date().toISOString(),
+              }),
+            });
+          } catch {
+            // 웹훅 실패 무시
+          }
+        }
+
+        expiredGracePeriods.push({ tenantId, email: subscription.email });
+        console.log(`Grace period expired for tenant: ${tenantId}`);
+      }
+    }
+
+    // ========== 5. 정기결제 처리 ==========
+    // 오늘 결제일인 구독 찾기 (active 상태)
+    const activeSubscriptionsSnapshot = await db
       .collection('subscriptions')
       .where('status', '==', 'active')
       .where('nextBillingDate', '<=', today)
       .get();
+
+    // 재시도 대기 중인 구독 찾기 (past_due 상태, 유예 기간 내)
+    const pastDueSubscriptionsSnapshot = await db
+      .collection('subscriptions')
+      .where('status', '==', 'past_due')
+      .get();
+
+    // 두 쿼리 결과 합치기
+    const allDocs = [...activeSubscriptionsSnapshot.docs];
+
+    // past_due 중에서 재시도 대상만 필터링 (retryCount < 3)
+    for (const doc of pastDueSubscriptionsSnapshot.docs) {
+      const subscription = doc.data();
+      const retryCount = subscription.retryCount || 0;
+      const lastFailedAt = subscription.lastPaymentFailedAt?.toDate?.() || subscription.lastPaymentFailedAt;
+
+      if (retryCount < 3 && lastFailedAt) {
+        const daysSinceFailure = Math.floor((today.getTime() - new Date(lastFailedAt).getTime()) / (1000 * 60 * 60 * 24));
+
+        // D+0 (1회차), D+1 (2회차), D+2 (3회차) 재시도
+        if (daysSinceFailure === retryCount) {
+          allDocs.push(doc);
+        }
+      }
+    }
+
+    const subscriptionsSnapshot = { docs: allDocs };
 
     interface BillingResult {
       tenantId: string;
@@ -310,10 +389,13 @@ export async function GET(request: NextRequest) {
 
           // 구독 정보 업데이트
           await db.collection('subscriptions').doc(tenantId).update({
+            status: 'active',
             currentPeriodStart: subscription.currentPeriodEnd,
             currentPeriodEnd: nextBillingDate,
             nextBillingDate,
             retryCount: 0,
+            gracePeriodUntil: null,
+            lastPaymentError: null,
             updatedAt: new Date(),
           });
 
@@ -373,26 +455,36 @@ export async function GET(request: NextRequest) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const newRetryCount = retryCount + 1;
 
-        if (retryCount >= 2) {
-          // 3회 실패 시 구독 정지
-          await db.collection('subscriptions').doc(tenantId).update({
-            status: 'past_due',
-            lastPaymentError: errorMessage,
-            lastPaymentFailedAt: new Date(),
-            updatedAt: new Date(),
-          });
+        // 1회 실패 시 유예 기간 설정 (D+0부터 D+6까지 7일, D+7에 종료)
+        const updateData: Record<string, unknown> = {
+          status: 'past_due',
+          retryCount: newRetryCount,
+          lastPaymentError: errorMessage,
+          lastPaymentFailedAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-          // tenants 컬렉션에 결제 실패 동기화
-          await syncPaymentFailure(tenantId);
+        // 1회차 실패 시 유예 기간 시작
+        if (newRetryCount === 1) {
+          const gracePeriodUntil = new Date();
+          gracePeriodUntil.setDate(gracePeriodUntil.getDate() + 6); // D+0부터 D+6까지 (7일)
+          updateData.gracePeriodUntil = gracePeriodUntil;
+        }
 
-          // 최종 실패 알림 (구독 정지)
+        await db.collection('subscriptions').doc(tenantId).update(updateData);
+
+        // tenants 컬렉션에 결제 실패 동기화
+        await syncPaymentFailure(tenantId);
+
+        if (newRetryCount >= 3) {
+          // 3회 실패 알림
           if (process.env.N8N_WEBHOOK_URL) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  event: 'payment_failed_final',
+                  event: 'payment_failed_grace_period',
                   tenantId,
                   email,
                   plan: subscription.plan,
@@ -400,7 +492,6 @@ export async function GET(request: NextRequest) {
                   retryCount: newRetryCount,
                   errorMessage,
                   cardInfo: subscription.cardInfo || null,
-                  status: 'suspended',
                   timestamp: new Date().toISOString(),
                 }),
               });
@@ -409,15 +500,9 @@ export async function GET(request: NextRequest) {
             }
           }
 
-          results.push({ tenantId, email, status: 'suspended', error: errorMessage });
+          results.push({ tenantId, email, status: 'retry', retryCount: newRetryCount, error: errorMessage });
         } else {
-          // 재시도 카운트 증가
-          await db.collection('subscriptions').doc(tenantId).update({
-            retryCount: newRetryCount,
-            lastPaymentError: errorMessage,
-            lastPaymentFailedAt: new Date(),
-            updatedAt: new Date(),
-          });
+          // 1~2회 실패 알림
 
           // 재시도 알림 (1회차, 2회차)
           if (process.env.N8N_WEBHOOK_URL) {
@@ -455,12 +540,14 @@ export async function GET(request: NextRequest) {
       trialExpired: expiredTrials.length,
       cardExpiringAlerts: cardExpiringAlerts.length,
       pendingPlansApplied: appliedPendingPlans.length,
+      gracePeriodExpired: expiredGracePeriods.length,
       paymentsProcessed: results.length,
       details: {
         convertedTrials,
         expiredTrials,
         cardExpiringAlerts,
         appliedPendingPlans,
+        expiredGracePeriods,
         billingResults: results,
       },
     });

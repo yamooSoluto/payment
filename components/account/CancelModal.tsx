@@ -23,9 +23,10 @@ interface CancelModalProps {
   currentPeriodEnd?: Date | string;
   currentPeriodStart?: Date | string;
   amount?: number;
+  pendingPlan?: string; // 예약된 플랜이 있는 경우
 }
 
-export default function CancelModal({ onClose, onConfirm, isLoading, currentPeriodEnd, currentPeriodStart, amount }: CancelModalProps) {
+export default function CancelModal({ onClose, onConfirm, isLoading, currentPeriodEnd, currentPeriodStart, amount, pendingPlan }: CancelModalProps) {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [otherReason, setOtherReason] = useState('');
   const [cancelMode, setCancelMode] = useState<CancelMode>('scheduled');
@@ -248,6 +249,15 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                   </div>
                 </label>
               </div>
+            </div>
+          )}
+
+          {/* 예약된 플랜 취소 안내 */}
+          {pendingPlan && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-orange-700">
+                <span className="font-medium">참고:</span> 예약된 플랜 변경도 함께 취소됩니다.
+              </p>
             </div>
           )}
 

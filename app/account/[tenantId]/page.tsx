@@ -92,8 +92,8 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   if (!rawSubscription && tenantData.subscription) {
     // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
 
-    // trial 날짜: trialEndsAt는 tenantData.trialEndsAt 또는 subscription.trial.trialEndsAt
-    let trialEndDate = tenantData.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt;
+    // trial 날짜: trial.trialEndsAt 또는 subscription.trial.trialEndsAt 또는 루트의 trialEndsAt
+    let trialEndDate = tenantData.trial?.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt || tenantData.trialEndsAt;
 
     // 시작일: subscription.startedAt만 사용
     let startDate = tenantData.subscription.startedAt;

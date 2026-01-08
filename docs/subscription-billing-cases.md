@@ -9,7 +9,10 @@
 4. [결제 실패 처리](#4-결제-실패-처리)
 5. [엣지 케이스](#5-엣지-케이스)
 6. [현재 구현 상태](#6-현재-구현-상태)
-7. [참고 자료](#7-참고-자료)
+7. [Vercel Cron Job 상세](#7-vercel-cron-job-상세)
+8. [알림 이력 관리 시스템 (TODO)](#8-알림-이력-관리-시스템-todo)
+9. [참고 자료](#9-참고-자료)
+10. [다음 구현 우선순위](#10-다음-구현-우선순위)
 
 ---
 
@@ -47,13 +50,29 @@
   - 데이터는 90일간 보관
 - **구현 상태**: ✅ 완료
 
+#### 1.3.1 무료 체험 중 예약 후 취소
+- **케이스**: 플랜 예약했다가 취소 후 체험 기간 만료
+- **처리**:
+  - 빌링키는 등록되어 있음 (예약 시 등록됨)
+  - `pendingPlan` = null (취소로 인해 삭제됨)
+  - 체험 종료 시 `pendingPlan`이 없으므로 자동 결제 시도 안 함
+  - 구독 상태: `trial` → `expired`
+  - 서비스 이용 중단
+  - 데이터는 90일간 보관
+  - 등록된 빌링키는 유지되어 나중에 재구독 시 재사용 가능
+- **구현 상태**: ✅ 완료
+
 ### 1.4 정기 결제
 - **케이스**: 매월 결제일에 자동 결제
 - **처리**:
   - 빌링키로 자동 결제 시도
-  - 성공: `currentPeriodStart`, `currentPeriodEnd` 업데이트
-  - 실패: Dunning 프로세스 시작
-- **구현 상태**: ⚠️ 스케줄링 필요
+  - 성공: `currentPeriodStart`, `currentPeriodEnd` 업데이트, payments 컬렉션에 결제 내역 저장
+  - 실패: Dunning 프로세스 시작 (3회 재시도)
+- **자동화**:
+  - Vercel Cron Job으로 매일 00:00 KST 실행
+  - N8N 웹훅으로 결제 성공/실패 알림 전송
+  - tenants 컬렉션 자동 동기화
+- **구현 상태**: ✅ 완료
 
 ---
 
@@ -110,10 +129,14 @@
 
 ### 2.5 엣지 케이스: 결제 주기 첫날 변경
 - **케이스**: 방금 결제하고 바로 플랜 변경
+- **계산 로직** (30일 기준):
+  - 현재 플랜: 1일 사용으로 간주, 29일치 환불
+  - 새 플랜: 전체 기간(30일) 결제
+  - 실제 차액: `새 플랜 30일치 - 현재 플랜 29일치`
 - **처리**:
-  - 전체 일수에 대한 환불 + 새 플랜 결제
-  - 사용자에게 손해가 없도록 안내
-- **구현 상태**: ✅ 로직상 가능
+  - 사용자가 1일 이용료만 지불하고 플랜 변경 가능
+  - 공정한 계산으로 손해 없이 변경 가능
+- **구현 상태**: ✅ 완료
 
 ---
 
@@ -166,33 +189,58 @@
 ### 4.1 Soft Decline (일시적 실패)
 - **원인**: 잔액 부족, 일시적 네트워크 오류, 카드사 시스템 점검
 - **처리** (Dunning):
-  1. 1일 후 재시도
-  2. 3일 후 재시도
-  3. 7일 후 재시도
-  4. 실패 시 구독 정지 또는 만료
-- **고객 알림**:
-  - 실패 즉시: "결제 실패" 이메일 + 카드 변경 링크
-  - 재시도 전: "곧 재시도됩니다" 알림
-  - 최종 실패: "구독이 곧 만료됩니다" 알림
-- **구현 상태**: ❌ 미구현
+  1. **D+0 (1일차, 1회차 실패)**:
+     - `status = 'past_due'` (즉시 변경)
+     - `retryCount = 1`
+     - `gracePeriodUntil = D+6` 설정 (7일간 유예)
+     - N8N: `payment_retry_1` 이벤트 전송
+  2. **D+1 (2일차, 2회차 실패)**:
+     - `status = 'past_due'` 유지
+     - `retryCount = 2`
+     - N8N: `payment_retry_2` 이벤트 전송
+  3. **D+2 (3일차, 3회차 실패)**:
+     - `status = 'past_due'` 유지
+     - `retryCount = 3`
+     - N8N: `payment_failed_grace_period` 이벤트 전송
+  4. **D+3 ~ D+6 (4~7일차, 유예 기간)**:
+     - 서비스 계속 이용 가능 (`status = 'past_due'`)
+     - 카드 업데이트 시 자동 재결제 시도
+  5. **D+7 (8일차, 유예 기간 만료)**:
+     - `status = 'suspended'` (서비스 중단)
+     - tenants 동기화: `syncSubscriptionSuspended()`
+     - N8N: `grace_period_expired` 이벤트 전송
+- **고객 알림** (N8N 웹훅):
+  - 1~2회 실패: `payment_retry_1`, `payment_retry_2`
+  - 3회 실패: `payment_failed_grace_period`
+  - 유예 기간 만료: `grace_period_expired`
+- **구현 상태**: ✅ 완료 (Vercel Cron, 웹훅 발송), ⏳ N8N 워크플로우 미설정
 
-### 4.2 Hard Decline (영구적 실패)
-- **원인**: 도난/분실 카드, 만료된 카드, 차단된 카드
+### 4.2 카드 업데이트 시 자동 재결제
+- **케이스**: 결제 실패 상태(`past_due`)에서 카드 변경
 - **처리**:
-  - 재시도 없이 즉시 유예 기간 부여
-  - 고객에게 카드 변경 요청
-  - 유예 기간(7일) 이내 변경 없으면 구독 만료
-- **구현 상태**: ❌ 미구현
+  - 새 카드로 즉시 재결제 시도
+  - 성공 시:
+    - `status = 'active'` 복구
+    - `retryCount = 0` 초기화
+    - `gracePeriodUntil = null` 제거
+    - `currentPeriodStart = today`, `nextBillingDate = today + 1개월`
+    - payments 저장 (`type: 'card_update_retry'`)
+    - N8N: `card_update_retry_success` 이벤트 전송
+  - 실패 시: 다음 정기 재시도 일정에 따라 진행
+- **구현 상태**: ✅ 완료
 
 ### 4.3 유예 기간 (Grace Period)
-- **정의**: 결제 실패 후에도 일정 기간 서비스 이용 가능
-- **기간**: 보통 3~7일
-- **상태**: `status: 'grace_period'`
+- **정의**: 결제 1회 실패부터 7일간 서비스 이용 가능
+- **기간**: 7일 (D+0 ~ D+6, 총 7일)
+- **상태**: `status = 'past_due'` + `gracePeriodUntil = D+6` 설정
 - **처리**:
-  - 서비스는 계속 이용 가능
-  - UI에 경고 배너 표시
-  - 매일 이메일/앱 푸시 알림
-- **구현 상태**: ❌ 미구현
+  - 1회 실패 시 유예 기간 시작
+  - D+0, D+1, D+2에 재시도 (3회)
+  - D+7 (8일차)에 유예 기간 만료 시 `status = 'suspended'`로 변경
+  - 유예 기간 중 서비스는 계속 이용 가능
+  - UI에 경고 배너 표시 (권장)
+  - 카드 업데이트 시 자동 재결제
+- **구현 상태**: ✅ 완료
 
 ---
 
@@ -293,22 +341,18 @@
 
 #### 5.5.2 카드 만료 전 갱신
 - **처리**:
-  - 만료 30일 전 이메일 알림
-  - 자동으로 새 카드 정보 확인 (카드사 연동 시)
-- **구현 상태**: ❌ 미구현
+  - 만료 30일 전, 7일 전 N8N 웹훅 알림 (`card_expiring_soon`)
+  - 사용자에게 카드 갱신 안내
+- **구현 상태**: ✅ 완료 (Vercel Cron + N8N)
 
 ### 5.6 세금/VAT 처리
-#### 5.6.1 국가별 세금율
-- **문제**: 한국 10% VAT, EU 국가별 VAT, 미국 주별 Sales Tax
-- **처리**:
-  - 사용자 위치 기반 세금 계산
-  - 표시: "가격 + 세금" 또는 "세금 포함 가격"
-- **구현 상태**: ❌ 미구현
-
-#### 5.6.2 세금 변경
-- **케이스**: 정부에서 VAT 10% → 12%로 변경
-- **처리**: 다음 결제부터 새 세율 적용
-- **구현 상태**: ❌ 미구현
+- **적용 범위**: 한국 시장 전용 (국제 결제 없음)
+- **세금율**: 10% VAT (부가가치세)
+- **가격 표시**: 모든 금액은 VAT 포함 가격
+  - Basic 플랜: 39,000원/월 (VAT 포함)
+  - Business 플랜: 99,000원/월 (VAT 포함)
+- **세금 변경**: 필요 없음 (고정 세율)
+- **구현 상태**: ✅ 완료 (Toss Payments 자동 처리)
 
 ### 5.7 쿠폰/프로모션 코드
 #### 5.7.1 첫 달 50% 할인
@@ -316,13 +360,13 @@
   - `discountAmount` 필드 추가
   - 첫 결제만 할인 적용
   - 두 번째 결제부터 정상 금액
-- **구현 상태**: ❌ 미구현
+- **구현 상태**: ❌ 미구현 (구현 계획 아직 없음)
 
 #### 5.7.2 연간 구독 할인
 - **처리**:
   - 12개월 금액의 80%로 연간 결제
   - `billingCycle: 'yearly'`
-- **구현 상태**: ❌ 미구현
+- **구현 상태**: ❌ 미구현 (구현 계획 아직 없음)
 
 ### 5.8 데이터 보관/삭제 정책
 #### 5.8.1 구독 해지 후 데이터 보관
@@ -343,39 +387,341 @@
 ## 6. 현재 구현 상태
 
 ### ✅ 완료된 기능
+
+#### 구독 관리
 1. **무료 체험 시작 및 관리**
-2. **무료 체험 → 유료 즉시 전환**
+   - 카드 등록 없이 체험 시작
+   - 빌링키는 유료 전환 시점에 등록
+2. **무료 체험 → 유료 전환**
+   - 즉시 전환: 카드 등록 + 즉시 결제
+   - 예약 전환: `pendingPlan` 저장 → 체험 종료일에 자동 전환
 3. **플랜 업그레이드/다운그레이드 (즉시)**
    - 일할 계산 환불/결제
-   - `currentPeriodStart` 업데이트
+   - `currentPeriodStart` 업데이트로 정확한 환불 계산
 4. **플랜 변경 예약 (다음 결제일부터)**
-5. **구독 해지 (예약 및 즉시)**
-   - 환불 계산
+   - `pendingPlan`, `pendingAmount`, `pendingMode` 저장
+   - Cron Job에서 자동 적용
+5. **구독 해지**
+   - 예약 해지: `currentPeriodEnd`까지 이용 가능
+   - 즉시 해지: 일할 환불 + 즉시 서비스 중단
    - 환불 내역 저장 (`type: 'downgrade_refund'`, `originalPaymentId` 연결)
-6. **Toss Payments Webhook 연동**
-7. **결제 내역 표시 (환불 내역 중첩 표시)**
+
+#### 결제 자동화 (Vercel Cron Job)
+6. **정기 결제 자동 처리**
+   - 실행 주기: 매일 00:00 KST (`vercel.json`)
+   - Firebase Composite Index 설정 완료
+   - CRON_SECRET 인증 적용
+7. **무료체험 만료 처리**
+   - `pendingPlan` 있으면: 자동 전환 + 첫 결제
+   - `pendingPlan` 없으면: `status = 'expired'`
+8. **카드 만료 사전 알림**
+   - 30일 전, 7일 전 알림 전송
+9. **예약 플랜 변경 자동 적용**
+   - `pendingChangeAt` 도달 시 자동 적용
+10. **결제 실패 재시도 (Dunning) 및 유예 기간**
+    - D+0, D+1, D+2 재시도 (3회)
+    - 1회 실패 시 즉시 `status = 'past_due'` 변경 및 `gracePeriodUntil = D+6` 설정
+    - 유예 기간: D+0 ~ D+6 (총 7일)
+    - D+7 (8일차)에 유예 기간 만료 시 `status = 'suspended'`
+    - 유예 기간 중 서비스 계속 이용 가능
+11. **카드 업데이트 시 자동 재결제**
+    - `past_due` 상태에서 카드 변경 시 즉시 재결제 시도
+    - 성공 시 `status = 'active'` 복구
+    - 실패 시 다음 재시도 일정에 따라 진행
+
+#### 데이터 동기화 & 알림
+12. **tenants 컬렉션 자동 동기화**
+    - `syncNewSubscription`: 무료체험 전환 시
+    - `syncTrialExpired`: 체험 만료 시
+    - `syncPlanChange`: 플랜 변경 시
+    - `syncPaymentSuccess`: 결제 성공 시
+    - `syncPaymentFailure`: 결제 실패 시
+    - `syncSubscriptionSuspended`: 유예 기간 만료 시
+13. **N8N 웹훅 알림**
+    - `trial_expired`: 무료체험 만료
+    - `card_expiring_soon`: 카드 만료 임박 (30일/7일 전)
+    - `pending_plan_applied`: 예약 플랜 적용
+    - `recurring_payment_success`: 정기결제 성공
+    - `payment_retry_1`, `payment_retry_2`: 결제 재시도
+    - `payment_failed_grace_period`: 3회 실패 후 유예 기간 시작
+    - `grace_period_expired`: 유예 기간 만료
+    - `card_update_retry_success`: 카드 변경 후 자동 재결제 성공
+14. **결제 내역 자동 저장**
+    - payments 컬렉션에 모든 결제 기록
+    - type 구분: `trial_conversion`, `upgrade`, `downgrade`, `downgrade_refund`, `recurring`, `card_update_retry`
+
+#### UI/UX
+15. **Toss Payments Webhook 연동**
+16. **결제 내역 표시 (환불 내역 중첩 표시)**
+17. **취소 모달 개선**
+    - 90일 데이터 보관 정책 안내
+    - 환불 계산 내역 인터랙티브 툴팁
+18. **구독 내역 정렬 개선**
+    - 상태 우선순위: 사용중 > 사용완료 > 해지됨
 
 ### ⚠️ 부분 구현
 1. **동시성 제어**: 트랜잭션은 있지만 Optimistic Locking 없음
 2. **Toss-DB 상태 동기화**: Webhook은 있지만 환불 처리 확인 필요
 3. **날짜 경계 처리**: 기본 구현됨, 엣지 케이스 테스트 필요
 4. **데이터 보관 정책**: UI 안내만 있음
+5. **N8N 웹훅 알림**: 웹훅 전송 코드는 있지만 Firestore 저장 없음, 중복 방지 없음
 
 ### ❌ 미구현
-1. **결제 실패 처리 (Dunning)**
-2. **유예 기간 (Grace Period)**
-3. **중복 결제 방지 (멱등성 키)**
-4. **결제 주기 마지막 날 플랜 변경 제한**
-5. **카드 만료 알림**
-6. **무료 체험 만료 알림**
-7. **세금/VAT 처리**
-8. **쿠폰/프로모션 코드**
-9. **연간 구독**
-10. **데이터 자동 삭제 스케줄러**
+1. **알림 이력 관리** (`payment_notifications` 컬렉션 및 중복 방지)
+2. **중복 결제 방지 (멱등성 키)**
+3. **결제 주기 마지막 날 플랜 변경 제한**
+4. **세금/VAT 처리**
+5. **쿠폰/프로모션 코드**
+6. **연간 구독**
+7. **데이터 자동 삭제 스케줄러** (90일 후)
 
 ---
 
-## 7. 참고 자료
+## 7. Vercel Cron Job 상세
+
+### 7.1 설정
+- **파일**: `vercel.json`
+- **실행 주기**: 매일 00:00 KST (15:00 UTC)
+- **엔드포인트**: `/api/cron/billing`
+- **인증**: CRON_SECRET 환경변수로 보호
+
+### 7.2 처리 프로세스
+
+#### Phase 1: 무료체험 처리
+```typescript
+// trial 상태 구독 조회
+subscriptions.where('status', '==', 'trial')
+
+// trialEndDate <= 오늘
+if (pendingPlan && billingKey) {
+  // 자동 전환 + 첫 결제
+  status: 'trial' → 'active'
+  syncNewSubscription()
+  N8N: 'trial_converted'
+} else {
+  // 만료 처리
+  status: 'trial' → 'expired'
+  syncTrialExpired()
+  N8N: 'trial_expired'
+}
+```
+
+#### Phase 2: 카드 만료 알림
+```typescript
+// active 구독의 카드 만료일 체크
+if (daysUntilExpiry === 30 || daysUntilExpiry === 7) {
+  N8N: 'card_expiring_soon'
+}
+```
+
+#### Phase 3: 예약 플랜 변경
+```typescript
+// pendingMode === 'scheduled' 구독 조회
+if (pendingChangeAt <= 오늘) {
+  plan: previousPlan → pendingPlan
+  amount: previousAmount → pendingAmount
+  pendingPlan = null
+  syncPlanChange()
+  N8N: 'pending_plan_applied'
+}
+```
+
+#### Phase 4: 유예 기간 만료 처리
+```typescript
+// past_due 상태 구독 조회
+subscriptions.where('status', '==', 'past_due')
+
+// 유예 기간이 만료된 구독 찾기
+if (gracePeriodUntil && gracePeriodUntil < today) {
+  // 유예 기간 만료 - 구독 정지 (D+7에 종료)
+  status = 'suspended'
+  suspendedAt = today
+  syncSubscriptionSuspended()
+  N8N: 'grace_period_expired'
+}
+```
+
+#### Phase 5: 정기 결제
+```typescript
+// 1. active 구독 조회 (nextBillingDate <= 오늘)
+activeSubscriptions
+  .where('status', '==', 'active')
+  .where('nextBillingDate', '<=', today)
+
+// 2. past_due 구독 중 재시도 대상 조회
+pastDueSubscriptions
+  .where('status', '==', 'past_due')
+  .filter(retryCount < 3 && daysSinceFailure === retryCount)
+
+// 결제 시도
+try {
+  payWithBillingKey()
+  // 성공
+  status = 'active'
+  nextBillingDate += 1개월
+  retryCount = 0
+  gracePeriodUntil = null
+  lastPaymentError = null
+  payments.add({ type: 'recurring' })
+  syncPaymentSuccess()
+  N8N: 'recurring_payment_success'
+} catch {
+  // 실패
+  retryCount++
+
+  // 1회 실패 시 유예 기간 시작
+  if (retryCount === 1) {
+    gracePeriodUntil = today + 6일  // D+0부터 D+6까지 (7일)
+  }
+
+  status = 'past_due'
+  syncPaymentFailure()
+
+  if (retryCount >= 3) {
+    // 3회 실패
+    N8N: 'payment_failed_grace_period'
+  } else {
+    // 1~2회 실패
+    N8N: `payment_retry_${retryCount}`
+  }
+}
+```
+
+### 7.3 Firebase Composite Index
+```
+Collection: subscriptions
+Fields:
+  - status (Ascending)
+  - nextBillingDate (Ascending)
+  - __name__ (Ascending)
+```
+
+### 7.4 응답 형식
+```json
+{
+  "success": true,
+  "trialConverted": 2,
+  "trialExpired": 1,
+  "cardExpiringAlerts": 0,
+  "pendingPlansApplied": 1,
+  "gracePeriodExpired": 0,
+  "paymentsProcessed": 5,
+  "details": {
+    "convertedTrials": [...],
+    "expiredTrials": [...],
+    "cardExpiringAlerts": [...],
+    "appliedPendingPlans": [...],
+    "expiredGracePeriods": [...],
+    "billingResults": [...]
+  }
+}
+```
+
+### 7.5 모니터링
+- **Vercel 로그**: Deployments → Functions → Cron
+- **수동 실행**: `curl -X GET -H "Authorization: Bearer $CRON_SECRET" https://your-domain.com/api/cron/billing`
+- **N8N 웹훅**: 각 이벤트별 알림 수신
+
+---
+
+## 8. 알림 이력 관리 시스템 (TODO)
+
+### 8.1 payment_notifications 컬렉션 구조
+
+```typescript
+{
+  id: string;                    // 자동 생성
+  tenantId: string;              // 테넌트 ID
+  email: string;                 // 사용자 이메일
+  event: NotificationEvent;      // 이벤트 타입
+  status: 'pending' | 'sent' | 'failed';
+  metadata: object;              // 이벤트별 추가 데이터
+  sentAt?: Timestamp;            // 발송 완료 시간
+  failedAt?: Timestamp;          // 발송 실패 시간
+  errorMessage?: string;         // 실패 시 에러 메시지
+  createdAt: Timestamp;          // 생성 시간
+}
+
+type NotificationEvent =
+  | 'trial_expired'              // 무료체험 만료
+  | 'card_expiring_soon'         // 카드 만료 임박
+  | 'payment_retry_1'            // 결제 재시도 1회차
+  | 'payment_retry_2'            // 결제 재시도 2회차
+  | 'payment_failed_grace_period' // 3회 실패 후 유예 기간 시작
+  | 'grace_period_expired'       // 유예 기간 만료
+  | 'card_update_retry_success'  // 카드 변경 후 자동 재결제 성공
+  | 'recurring_payment_success'  // 정기결제 성공
+  | 'pending_plan_applied';      // 예약 플랜 적용
+```
+
+### 8.2 구현 계획
+
+#### 1단계: 헬퍼 함수 생성
+```typescript
+// lib/notification.ts
+export async function saveNotification(params: {
+  tenantId: string;
+  email: string;
+  event: NotificationEvent;
+  metadata: object;
+}): Promise<string> {
+  // 중복 체크 (같은 이벤트가 24시간 내 발송되었는지)
+  // Firestore에 저장
+  // 문서 ID 반환
+}
+
+export async function updateNotificationStatus(
+  notificationId: string,
+  status: 'sent' | 'failed',
+  errorMessage?: string
+): Promise<void> {
+  // 발송 결과 업데이트
+}
+```
+
+#### 2단계: Cron Job 수정
+- N8N 웹훅 전송 전에 `saveNotification()` 호출
+- 웹훅 성공/실패에 따라 `updateNotificationStatus()` 호출
+- 중복 체크로 24시간 내 동일 알림 방지
+
+#### 3단계: 중복 방지 로직
+```typescript
+// 카드 만료 알림 예시
+const recentNotification = await db
+  .collection('payment_notifications')
+  .where('tenantId', '==', tenantId)
+  .where('event', '==', 'card_expiring_soon')
+  .where('createdAt', '>=', last24Hours)
+  .limit(1)
+  .get();
+
+if (!recentNotification.empty) {
+  // 이미 발송했으므로 스킵
+  return;
+}
+```
+
+### 8.3 혜택
+
+1. **알림 추적**: 어떤 사용자에게 언제 어떤 알림을 보냈는지 기록
+2. **중복 방지**: 카드 만료 알림 등 매일 중복 발송 방지
+3. **실패 재시도**: 실패한 알림 재발송 가능
+4. **통계 분석**: 알림 발송률, 성공률 등 분석 가능
+5. **고객 지원**: 고객 문의 시 알림 이력 확인 가능
+
+### 8.4 Firebase Composite Index
+
+```
+Collection: payment_notifications
+Fields:
+  - tenantId (Ascending)
+  - event (Ascending)
+  - createdAt (Descending)
+```
+
+---
+
+## 9. 참고 자료
 
 ### 글로벌 베스트 프랙티스
 - [Stripe: Prorations Documentation](https://docs.stripe.com/billing/subscriptions/prorations) - 플랜 변경 시 일할 계산 가이드
@@ -394,9 +740,7 @@
 
 ---
 
-## 우선순위 추천
-
-다음 순서로 구현하는 것을 권장합니다:
+## 10. 다음 구현 우선순위
 
 ### Phase 1: 안정성 (Critical)
 1. **중복 결제 방지** (멱등성 키)
@@ -404,15 +748,18 @@
 3. **음수 환불 방지** 체크 로직
 
 ### Phase 2: 사용자 경험 (High Priority)
-4. **결제 실패 처리** (Dunning)
-5. **카드 만료 알림**
-6. **무료 체험 만료 알림**
+4. **알림 이력 관리 시스템** (`payment_notifications` 컬렉션)
+   - N8N 웹훅 전송 시 Firestore에 저장
+   - 중복 알림 방지 (카드 만료 알림 매일 발송 방지)
+   - 알림 발송 이력 조회 및 통계
+   - 실패 시 재시도 메커니즘
+5. **데이터 자동 삭제 스케줄러** - 90일 후 자동 삭제
 
 ### Phase 3: 비즈니스 로직 (Medium Priority)
-7. **쿠폰/프로모션 코드**
-8. **연간 구독**
-9. **데이터 자동 삭제 스케줄러**
+6. **쿠폰/프로모션 코드**
+7. **연간 구독**
+8. **결제 주기 마지막 날 플랜 변경 제한**
 
 ### Phase 4: 글로벌 확장 (Low Priority)
-10. **세금/VAT 처리**
-11. **다중 통화 지원**
+9. **세금/VAT 처리**
+10. **다중 통화 지원**

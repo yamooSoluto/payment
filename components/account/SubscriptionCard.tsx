@@ -17,6 +17,7 @@ interface PlanSelectModalProps {
   onUpdatePendingPlan?: (planId: string) => Promise<void>;
   isActiveSubscription?: boolean; // Active 구독자 여부
   currentPlan?: string; // 현재 플랜 (같은 플랜 선택 방지)
+  isExpired?: boolean; // 만료된 구독자 (새 구독 시작)
 }
 
 const PLANS = [
@@ -44,14 +45,22 @@ const PLANS = [
   },
 ];
 
-function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, onUpdatePendingPlan, isActiveSubscription, currentPlan }: PlanSelectModalProps) {
+function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, onUpdatePendingPlan, isActiveSubscription, currentPlan, isExpired }: PlanSelectModalProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null); // Active 구독자용: 선택된 플랜
 
   if (!isOpen) return null;
 
   const handleSelectPlan = async (planId: string) => {
-    // 같은 플랜 선택시 경고
+    // 만료된 구독자: 새로운 구독 시작 (모든 플랜 선택 가능)
+    if (isExpired) {
+      const baseUrl = `/checkout?plan=${planId}&${authParam}`;
+      const url = tenantId ? `${baseUrl}&tenantId=${tenantId}` : baseUrl;
+      window.location.href = url;
+      return;
+    }
+
+    // 같은 플랜 선택시 경고 (만료 상태가 아닐 때만)
     if (currentPlan === planId) {
       alert('현재 구독중인 플랜입니다.');
       return;
@@ -86,7 +95,7 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
     window.location.href = url;
   };
 
-  // Active 구독자: 모드 선택 후 처리
+  // Active 구독자: 모드 선택 후 처리 (checkout 페이지로 이동)
   const handleModeSelect = (selectedMode: 'schedule' | 'immediate') => {
     if (!selectedPlan) return;
 
@@ -163,11 +172,13 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
         {/* Header */}
         <div className="p-6 pb-4 border-b">
           <h3 className="text-xl font-bold text-gray-900">
-            {isUpdating ? '변경 중...' : isActiveSubscription ? '플랜 변경' : mode === 'schedule' ? '플랜 예약' : '즉시 전환'}
+            {isUpdating ? '변경 중...' : isExpired ? '플랜 선택' : isActiveSubscription ? '플랜 변경' : mode === 'schedule' ? '플랜 예약' : '즉시 전환'}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             {isUpdating
               ? '잠시만 기다려주세요'
+              : isExpired
+              ? '구독할 플랜을 선택해주세요'
               : isActiveSubscription
               ? '변경할 플랜을 선택해주세요'
               : mode === 'schedule'
@@ -180,7 +191,8 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
         <div className="p-6 space-y-4">
           {PLANS.map((plan) => {
             const Icon = plan.icon;
-            const isCurrentPlan = currentPlan === plan.id;
+            // 만료 상태에서는 모든 플랜 선택 가능 (현재 플랜 표시 안함)
+            const isCurrentPlan = !isExpired && currentPlan === plan.id;
             return (
               <button
                 key={plan.id}
@@ -329,6 +341,86 @@ function CancelResultModal({ isOpen, onClose, mode, refundAmount, endDate }: Can
   );
 }
 
+// 예약 취소 확인 모달
+interface CancelReservationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  isLoading: boolean;
+  pendingPlan?: string;
+  pendingAmount?: number;
+}
+
+function CancelReservationModal({ isOpen, onClose, onConfirm, isLoading, pendingPlan, pendingAmount }: CancelReservationModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+        </button>
+
+        {/* Icon */}
+        <div className="pt-10 pb-4 flex justify-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center">
+            <WarningCircle width={32} height={32} strokeWidth={1.5} className="text-yellow-600" />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 pb-8 text-center">
+          <h3 className="text-xl font-bold text-gray-900 mb-3">
+            예약된 플랜 변경을 취소하시겠습니까?
+          </h3>
+
+          {pendingPlan && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">예약된 플랜</span>
+                <span className="font-semibold text-gray-900">{getPlanName(pendingPlan)}</span>
+              </div>
+              {pendingAmount && (
+                <div className="flex justify-between items-center text-sm mt-2">
+                  <span className="text-gray-500">예정 금액</span>
+                  <span className="font-semibold text-gray-900">{formatPrice(pendingAmount)}원/월</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="text-sm text-gray-500 mb-6">
+            예약을 취소하면 현재 플랜이 계속 유지됩니다.
+          </p>
+
+          {/* Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 py-3 px-4 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              돌아가기
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 py-3 px-4 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? '취소 중...' : '예약 취소'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface SubscriptionCardProps {
   subscription: {
     status: string;
@@ -350,6 +442,7 @@ interface SubscriptionCardProps {
 export default function SubscriptionCard({ subscription, authParam, tenantId }: SubscriptionCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPlanSelectModal, setShowPlanSelectModal] = useState<{ isOpen: boolean; mode: 'schedule' | 'immediate' }>({ isOpen: false, mode: 'schedule' });
+  const [showCancelReservationModal, setShowCancelReservationModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCancelingPending, setIsCancelingPending] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -454,8 +547,6 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   };
 
   const handleCancelPendingPlan = async () => {
-    if (!confirm('예약된 플랜 변경을 취소하시겠습니까?')) return;
-
     setIsCancelingPending(true);
     try {
       const { token, email } = parseAuthParam();
@@ -467,6 +558,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
       });
 
       if (response.ok) {
+        setShowCancelReservationModal(false);
         window.location.reload();
       } else {
         const data = await response.json();
@@ -532,7 +624,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-xl font-bold text-gray-900">
-                {isTrial ? '무료체험' : subscription.plan ? `${getPlanName(subscription.plan)} 플랜` : '구독 없음'}
+                {(isTrial || subscription.plan === 'trial') ? '무료체험' : subscription.plan ? `${getPlanName(subscription.plan)} 플랜` : '구독 없음'}
               </h2>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(subscription.status)}`}>
                 {getStatusText(subscription.status)}
@@ -583,13 +675,16 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-gray-600">
-              <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
-              <div>
-                <p className="text-sm text-gray-500">다음 결제일</p>
-                <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
+            {/* 예약된 플랜이 없을 때만 다음 결제일 표시 */}
+            {!subscription.pendingPlan && (
+              <div className="flex items-center gap-3 text-gray-600">
+                <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">다음 결제일</p>
+                  <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -600,7 +695,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               <div className="flex items-start gap-3 text-blue-700">
                 <Clock width={20} height={20} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" />
                 <div>
-                  <span className="font-medium">{isTrial ? '예약된 유료 플랜' : '예약된 플랜 변경'}</span>
+                  <span className="font-medium">{isTrial ? '예약된 유료 플랜' : '예약된 플랜'}</span>
                   <div className="mt-2 space-y-1 text-sm text-blue-600">
                     <p>
                       <span className="text-blue-500">플랜:</span>{' '}
@@ -628,13 +723,27 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                   </div>
                 </div>
               </div>
-              <button
-                onClick={handleCancelPendingPlan}
-                disabled={isCancelingPending}
-                className="text-sm text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 flex-shrink-0"
-              >
-                {isCancelingPending ? '취소 중...' : '예약 취소'}
-              </button>
+              <div className="flex gap-2 flex-shrink-0">
+                {/* 플랜이 3개 이상일 때만 예약 변경 버튼 표시 (현재 2개라 변경할 플랜이 1개뿐) */}
+                {PLANS.length > 2 && (
+                  <>
+                    <button
+                      onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      예약 변경
+                    </button>
+                    <span className="text-blue-300">|</span>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowCancelReservationModal(true)}
+                  disabled={isCancelingPending}
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                >
+                  예약 취소
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -698,7 +807,8 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               </button>
             </>
           )}
-          {isActive && (
+          {/* 플랜이 3개 이상이거나 예약된 플랜이 없을 때만 플랜 변경 버튼 표시 */}
+          {isActive && (PLANS.length > 2 || !subscription.pendingPlan) && (
             <button
               onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
               className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
@@ -741,12 +851,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </button>
           )}
           {isExpired && (
-            <a
-              href={`/pricing?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
+            <button
+              onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
               className="btn-primary"
             >
               유료 플랜 선택하기
-            </a>
+            </button>
           )}
         </div>
       </div>
@@ -760,6 +870,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           currentPeriodEnd={subscription.currentPeriodEnd}
           currentPeriodStart={subscription.currentPeriodStart}
           amount={subscription.amount}
+          pendingPlan={subscription.pendingPlan}
         />
       )}
 
@@ -770,6 +881,16 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         mode={cancelResult.mode}
         refundAmount={cancelResult.refundAmount}
         endDate={subscription.currentPeriodEnd ? String(subscription.currentPeriodEnd) : undefined}
+      />
+
+      {/* Cancel Reservation Modal */}
+      <CancelReservationModal
+        isOpen={showCancelReservationModal}
+        onClose={() => setShowCancelReservationModal(false)}
+        onConfirm={handleCancelPendingPlan}
+        isLoading={isCancelingPending}
+        pendingPlan={subscription.pendingPlan}
+        pendingAmount={subscription.pendingAmount}
       />
 
       {/* Plan Select Modal */}
@@ -783,6 +904,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         onUpdatePendingPlan={handleUpdatePendingPlan}
         isActiveSubscription={isActive}
         currentPlan={subscription.plan}
+        isExpired={isExpired}
       />
     </>
   );

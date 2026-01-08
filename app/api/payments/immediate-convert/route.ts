@@ -93,6 +93,8 @@ export async function POST(request: NextRequest) {
       // 구독 정보 업데이트
       transaction.update(subscriptionRef, {
         plan,
+        previousPlan: 'trial',  // Trial에서 전환
+        planChangedAt: now,
         status: 'active',
         amount: paymentAmount,
         currentPeriodStart: now,
@@ -114,6 +116,7 @@ export async function POST(request: NextRequest) {
         paymentKey: paymentResponse.paymentKey,
         amount: paymentAmount,
         plan,
+        previousPlan: 'trial',  // Trial에서 전환
         type: 'conversion',  // Trial에서 전환
         status: 'done',
         method: paymentResponse.method,

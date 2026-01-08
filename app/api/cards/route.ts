@@ -212,7 +212,108 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, message: 'Card added successfully' });
+    // 자동 재시도: past_due 상태이고 유예 기간 내라면 즉시 결제 재시도
+    let retryResult = null;
+    if (shouldSetPrimary && subscription?.status === 'past_due') {
+      const retryCount = subscription.retryCount || 0;
+      const gracePeriodUntil = subscription.gracePeriodUntil?.toDate?.() || subscription.gracePeriodUntil;
+
+      // 재시도 가능 여부 확인 (3회 미만, 유예 기간 내)
+      if (retryCount < 3 || (gracePeriodUntil && new Date(gracePeriodUntil) > new Date())) {
+        try {
+          const { payWithBillingKey, getPlanName, getEffectiveAmount } = await import('@/lib/toss');
+
+          const orderId = `RETRY_${Date.now()}_${tenantId}`;
+          const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 카드 변경 후 재결제`;
+
+          const effectiveAmount = getEffectiveAmount({
+            plan: subscription.plan,
+            amount: subscription.amount,
+            pricePolicy: subscription.pricePolicy,
+            priceProtectedUntil: subscription.priceProtectedUntil?.toDate?.() || subscription.priceProtectedUntil,
+          });
+
+          const paymentResponse = await payWithBillingKey(
+            billingKey,
+            email,
+            effectiveAmount,
+            orderId,
+            orderName,
+            email
+          );
+
+          if (paymentResponse.status === 'DONE') {
+            const nextBillingDate = new Date();
+            nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+            // 구독 상태 복구
+            await db.collection('subscriptions').doc(tenantId).update({
+              status: 'active',
+              currentPeriodStart: now,
+              currentPeriodEnd: nextBillingDate,
+              nextBillingDate,
+              retryCount: 0,
+              gracePeriodUntil: null,
+              lastPaymentError: null,
+              updatedAt: now,
+            });
+
+            // 결제 내역 저장
+            await db.collection('payments').add({
+              tenantId,
+              email,
+              orderId,
+              paymentKey: paymentResponse.paymentKey,
+              amount: effectiveAmount,
+              plan: subscription.plan,
+              type: 'card_update_retry',
+              status: 'done',
+              method: paymentResponse.method,
+              cardInfo: paymentResponse.card || null,
+              receiptUrl: paymentResponse.receipt?.url || null,
+              paidAt: now,
+              createdAt: now,
+            });
+
+            // tenants 컬렉션 동기화
+            const { syncPaymentSuccess } = await import('@/lib/tenant-sync');
+            await syncPaymentSuccess(tenantId, nextBillingDate);
+
+            // N8N 웹훅 알림
+            if (process.env.N8N_WEBHOOK_URL) {
+              try {
+                await fetch(process.env.N8N_WEBHOOK_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    event: 'card_update_retry_success',
+                    tenantId,
+                    email,
+                    plan: subscription.plan,
+                    amount: effectiveAmount,
+                    previousRetryCount: retryCount,
+                    timestamp: now.toISOString(),
+                  }),
+                });
+              } catch {
+                // 웹훅 실패 무시
+              }
+            }
+
+            retryResult = { success: true, message: '결제가 성공적으로 완료되었습니다.' };
+          }
+        } catch (error) {
+          console.error('Auto-retry payment failed:', error);
+          retryResult = { success: false, message: '자동 재결제에 실패했습니다. 다음 재시도 일정에 다시 시도됩니다.' };
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Card added successfully',
+      autoRetry: retryResult,
+    });
   } catch (error) {
     console.error('Failed to add card:', error);
     return NextResponse.json({ error: 'Failed to add card' }, { status: 500 });

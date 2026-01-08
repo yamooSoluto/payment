@@ -161,6 +161,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         : new Date(subscription.nextBillingDate);
 
       nextBillingDateStr = nextDate.toISOString();
+      currentPeriodEndStr = nextBillingDateStr; // 플랜 변경 후 success 페이지에서 사용
 
       // 총 기간 일수 (currentPeriodStart ~ nextBillingDate 전날)
       const startDateOnly = new Date(startDate);
@@ -245,16 +246,14 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       {/* Back Button */}
       <Link
         href={
-          isChangePlanMode
-            ? `/account/${tenantId}?${authParam}`
-            : (isReserveMode || isTrialImmediate) && tenantId
+          tenantId
             ? `/account/${tenantId}?${authParam}`
             : `/pricing?${authParam}`
         }
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >
         <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
-        {(isChangePlanMode || isReserveMode || isTrialImmediate) && tenantId
+        {tenantId
           ? '매장 상세 페이지로 돌아가기'
           : '요금제 선택으로 돌아가기'}
       </Link>
