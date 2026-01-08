@@ -88,7 +88,7 @@ export function generateToken(email: string, purpose: 'checkout' | 'account'): s
       nonce: crypto.randomUUID(),
       iat: Math.floor(Date.now() / 1000),
     },
-    JWT_SECRET,
+    JWT_SECRET!,
     { expiresIn: '10m' }
   );
 
