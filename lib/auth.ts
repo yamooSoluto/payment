@@ -1,8 +1,14 @@
 import jwt from 'jsonwebtoken';
 import { adminDb, initializeFirebaseAdmin } from './firebase-admin';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const DEV_MODE = process.env.DEV_MODE === 'true';
+// JWT_SECRET은 필수 환경변수 - 없으면 서버 시작 시 에러
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET 환경변수가 설정되지 않았습니다.');
+}
+
+// DEV_MODE는 개발 환경에서만 사용 (프로덕션에서는 절대 true로 설정하지 말 것)
+const DEV_MODE = process.env.NODE_ENV === 'development' && process.env.DEV_MODE === 'true';
 const DEV_EMAIL = process.env.DEV_EMAIL || 'test@example.com';
 
 interface TokenPayload {
@@ -121,21 +127,80 @@ export async function getSubscriptionByTenantId(tenantId: string, email?: string
   }
 
   try {
+    // 1. subscriptions 컬렉션에서 조회
     const doc = await db.collection('subscriptions').doc(tenantId).get();
 
-    if (!doc.exists) {
+    if (doc.exists) {
+      const subscription = doc.data();
+
+      // email이 제공된 경우 권한 확인
+      if (email && subscription?.email !== email) {
+        console.error('[getSubscriptionByTenantId] Unauthorized - subscription email:', subscription?.email, 'request email:', email);
+        return null;
+      }
+
+      return { ...subscription, tenantId };
+    }
+
+    // 2. subscriptions 컬렉션에 없으면 tenants 컬렉션에서 조회 (폴백)
+    const tenantSnapshot = await db
+      .collection('tenants')
+      .where('tenantId', '==', tenantId)
+      .limit(1)
+      .get();
+
+    if (tenantSnapshot.empty) {
       return null;
     }
 
-    const subscription = doc.data();
+    const tenantData = tenantSnapshot.docs[0].data();
 
     // email이 제공된 경우 권한 확인
-    if (email && subscription?.email !== email) {
-      console.error('Unauthorized access to subscription');
+    if (email && tenantData.email !== email) {
+      console.error('[getSubscriptionByTenantId] Unauthorized - tenant email:', tenantData.email, 'request email:', email);
       return null;
     }
 
-    return { ...subscription, tenantId };
+    // tenants의 subscription이 없으면 null
+    if (!tenantData.subscription) {
+      return null;
+    }
+
+    // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
+    let trialEndDate = tenantData.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt;
+    let startDate = tenantData.subscription.startedAt;
+
+    // startDate를 Date 객체로 변환
+    if (startDate && startDate.toDate) {
+      startDate = startDate.toDate();
+    } else if (startDate && startDate._seconds) {
+      startDate = new Date(startDate._seconds * 1000);
+    }
+
+    // trialEndDate를 Date 객체로 변환
+    if (trialEndDate && trialEndDate.toDate) {
+      trialEndDate = trialEndDate.toDate();
+    } else if (trialEndDate && trialEndDate._seconds) {
+      trialEndDate = new Date(trialEndDate._seconds * 1000);
+    }
+
+    const subscription = {
+      tenantId,
+      email: tenantData.email || email,
+      brandName: tenantData.brandName,
+      name: tenantData.name,
+      phone: tenantData.phone,
+      plan: tenantData.subscription.plan || tenantData.plan || 'trial',
+      status: tenantData.subscription.status === 'trialing' ? 'trial' : tenantData.subscription.status,
+      trialEndDate,
+      currentPeriodStart: startDate,
+      currentPeriodEnd: trialEndDate || tenantData.subscription.renewsAt,
+      nextBillingDate: tenantData.subscription.renewsAt,
+      createdAt: tenantData.createdAt,
+      updatedAt: tenantData.updatedAt,
+    };
+
+    return subscription;
   } catch (error) {
     console.error('Failed to get subscription:', error);
     return null;

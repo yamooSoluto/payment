@@ -57,9 +57,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
   // 병렬로 데이터 조회 (성능 최적화)
-  // mode=immediate인 경우 특정 tenant의 구독 정보를 조회
+  // mode=immediate 또는 mode=reserve인 경우 특정 tenant의 구독 정보를 조회
   const [subscription, tenantInfo, planInfo] = await Promise.all([
-    (mode === 'immediate' && tenantId)
+    ((mode === 'immediate' || mode === 'reserve') && tenantId)
       ? getSubscriptionByTenantId(tenantId, email)
       : getSubscription(email),
     tenantId ? getTenantInfo(tenantId) : Promise.resolve(null),
@@ -79,16 +79,39 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const fullAmount = planInfo.price;
   const planName = planInfo.name;
 
-  // 즉시 업그레이드인 경우 일할 계산
+  // 즉시 플랜 변경인 경우 일할 계산
   let amount = fullAmount;
-  let isUpgradeMode = false;
+  let isChangePlanMode = false; // 즉시 플랜 변경 (업그레이드 또는 다운그레이드)
+  let isDowngrade = false;      // 다운그레이드 여부 (환불 필요)
+  let refundAmount = 0;         // 다운그레이드 시 환불 금액
   let isReserveMode = false;
+  let isTrialImmediate = false; // Trial에서 즉시 전환
   let currentPlanName = '';
   let nextBillingDateStr: string | undefined;
   let trialEndDateStr: string | undefined;
+  let currentPeriodEndStr: string | undefined;
+  const hasBillingKey = !!subscription?.billingKey;
 
+  // 계산 상세 정보 (다운그레이드 시 사용)
+  let calculationDetails: {
+    totalDays: number;
+    usedDays: number;
+    daysLeft: number;
+    currentPlanAmount: number;
+    usedAmount: number;
+    currentRefund: number;
+    newPlanRemaining: number;
+    currentPeriodStart?: string;
+    currentPeriodEndDate?: string;
+  } | undefined;
+
+  // Trial 즉시 전환 모드
+  if (mode === 'immediate' && subscription?.status === 'trial') {
+    isTrialImmediate = true;
+    currentPlanName = '무료체험';
+  }
   // Trial 예약 모드
-  if (mode === 'reserve' && subscription?.status === 'trial') {
+  else if (mode === 'reserve' && subscription?.status === 'trial') {
     isReserveMode = true;
     currentPlanName = '무료체험';
     if (subscription.trialEndDate) {
@@ -99,27 +122,112 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       nextBillingDateStr = trialEndDateStr; // 무료체험 종료일 = 첫 결제일
     }
   }
-  // 즉시 업그레이드
+  // Active 구독자 플랜 예약 모드
+  else if (mode === 'reserve' && subscription?.status === 'active') {
+    isReserveMode = true;
+    const currentPlanInfo = await getPlanById(subscription.plan);
+    currentPlanName = currentPlanInfo?.name || subscription.plan;
+
+    // currentPeriodEnd = nextBillingDate - 1 (DB 값이 잘못되어 있을 수 있으므로 항상 계산)
+    if (subscription.nextBillingDate) {
+      const nextBilling = subscription.nextBillingDate.toDate
+        ? subscription.nextBillingDate.toDate()
+        : new Date(subscription.nextBillingDate);
+      const periodEnd = new Date(nextBilling);
+      periodEnd.setDate(periodEnd.getDate() - 1);
+      currentPeriodEndStr = periodEnd.toISOString();
+    }
+  }
+  // 즉시 플랜 변경 (Active 구독자)
   else if (mode === 'immediate' && subscription?.status === 'active') {
-    isUpgradeMode = true;
+    isChangePlanMode = true;
     const currentPlanInfo = await getPlanById(subscription.plan);
     currentPlanName = currentPlanInfo?.name || subscription.plan;
     const currentAmount = currentPlanInfo?.price || 0;
 
-    // 다음 결제일까지 남은 일수 계산
+    // 결제 기간 계산 (실제 기간 일수 기준)
+    let totalDays = 31; // 기본값
+    let usedDays = 1;   // 기본값 (오늘 사용)
     let daysLeft = 30;
-    if (subscription.nextBillingDate) {
+    let periodStartStr: string | undefined;
+    let periodEndStr: string | undefined;
+
+    if (subscription.currentPeriodStart && subscription.nextBillingDate) {
+      const startDate = subscription.currentPeriodStart.toDate
+        ? subscription.currentPeriodStart.toDate()
+        : new Date(subscription.currentPeriodStart);
       const nextDate = subscription.nextBillingDate.toDate
         ? subscription.nextBillingDate.toDate()
         : new Date(subscription.nextBillingDate);
+
       nextBillingDateStr = nextDate.toISOString();
-      daysLeft = Math.max(0, Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+      // 총 기간 일수 (currentPeriodStart ~ nextBillingDate 전날)
+      const startDateOnly = new Date(startDate);
+      startDateOnly.setHours(0, 0, 0, 0);
+      const nextDateOnly = new Date(nextDate);
+      nextDateOnly.setHours(0, 0, 0, 0);
+      totalDays = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+      // 사용 일수 (currentPeriodStart ~ 오늘, 오늘 포함)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // 남은 일수
+      daysLeft = Math.max(0, totalDays - usedDays);
+
+      // 기간 문자열 (표시용)
+      const endDate = new Date(nextDateOnly);
+      endDate.setDate(endDate.getDate() - 1);
+      periodStartStr = startDateOnly.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+      periodEndStr = endDate.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
     }
 
-    // 일할 계산: 새 플랜 비용 - 현재 플랜 환불액
-    const proratedNewAmount = Math.round((fullAmount / 30) * daysLeft);
-    const refundAmount = refund ? parseInt(refund) : Math.round((currentAmount / 30) * daysLeft);
-    amount = Math.max(0, proratedNewAmount - refundAmount);
+    // 즉시 플랜 변경 계산 (실제 기간 일수 기준)
+    // 기존 플랜: 변경일(오늘)까지 사용 → usedDays만큼 차감 후 daysLeft만큼 환불
+    const usedAmount = Math.round((currentAmount / totalDays) * usedDays);
+    const currentRefund = currentAmount - usedAmount;
+    // 새 플랜: 변경일(오늘)부터 종료일까지 이용 → (daysLeft + 1)일 결제
+    const newPlanCharge = Math.round((fullAmount / totalDays) * (daysLeft + 1));
+
+    if (fullAmount < currentAmount) {
+      // 다운그레이드: 환불
+      isDowngrade = true;
+      // 순환불액 = 기존 플랜 환불액 - 새 플랜 결제 금액
+      refundAmount = currentRefund - newPlanCharge;
+      amount = 0; // 결제 금액 없음
+
+      // 계산 상세 정보 저장
+      calculationDetails = {
+        totalDays,
+        usedDays,
+        daysLeft,
+        currentPlanAmount: currentAmount,
+        usedAmount,
+        currentRefund,
+        newPlanRemaining: newPlanCharge,
+        currentPeriodStart: periodStartStr,
+        currentPeriodEndDate: periodEndStr,
+      };
+    } else {
+      // 업그레이드: 차액 결제
+      // 결제금액 = 새 플랜 결제 금액 - 기존 플랜 환불액
+      amount = newPlanCharge - currentRefund;
+
+      // 계산 상세 정보 저장
+      calculationDetails = {
+        totalDays,
+        usedDays,
+        daysLeft,
+        currentPlanAmount: currentAmount,
+        usedAmount,
+        currentRefund,
+        newPlanRemaining: newPlanCharge,
+        currentPeriodStart: periodStartStr,
+        currentPeriodEndDate: periodEndStr,
+      };
+    }
   }
 
   // Trial 플랜은 무료 - 별도 처리 필요
@@ -136,23 +244,35 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
       <Link
-        href={isUpgradeMode ? `/account/change-plan?${authParam}&tenantId=${tenantId}` : `/pricing?${authParam}`}
+        href={
+          isChangePlanMode
+            ? `/account/${tenantId}?${authParam}`
+            : (isReserveMode || isTrialImmediate) && tenantId
+            ? `/account/${tenantId}?${authParam}`
+            : `/pricing?${authParam}`
+        }
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >
         <NavArrowLeft width={16} height={16} strokeWidth={1.5} />
-        {isUpgradeMode ? '플랜 변경으로 돌아가기' : '요금제 선택으로 돌아가기'}
+        {(isChangePlanMode || isReserveMode || isTrialImmediate) && tenantId
+          ? '매장 상세 페이지로 돌아가기'
+          : '요금제 선택으로 돌아가기'}
       </Link>
 
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {isUpgradeMode ? '플랜 업그레이드' : isReserveMode ? '플랜 예약' : '결제하기'}
+          {isChangePlanMode ? '플랜 변경' : isReserveMode ? '플랜 예약' : isTrialImmediate ? '즉시 전환' : '결제하기'}
         </h1>
         <p className="text-gray-600">
-          {isUpgradeMode
-            ? `${currentPlanName} → ${planName} 플랜으로 업그레이드`
+          {isChangePlanMode
+            ? `${currentPlanName} → ${planName} 플랜으로 변경합니다`
             : isReserveMode
-            ? `무료체험 종료 후 ${planName} 플랜이 자동 시작됩니다`
+            ? currentPeriodEndStr
+              ? `현재 구독 종료 후 ${planName} 플랜으로 변경됩니다`
+              : `무료체험 종료 후 ${planName} 플랜이 자동 시작됩니다`
+            : isTrialImmediate
+            ? `${currentPlanName}에서 ${planName} 플랜으로 즉시 전환합니다`
             : `${planName} 플랜을 구독합니다`}
         </p>
       </div>
@@ -200,13 +320,20 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           planName={planName}
           amount={amount}
           tenantId={tenantId}
-          isUpgrade={isUpgradeMode}
+          isChangePlan={isChangePlanMode}
+          isDowngrade={isDowngrade}
+          refundAmount={refundAmount}
           isReserve={isReserveMode}
+          isTrialImmediate={isTrialImmediate}
           fullAmount={fullAmount}
           isNewTenant={isNewTenant}
           authParam={authParam}
           nextBillingDate={nextBillingDateStr}
           trialEndDate={trialEndDateStr}
+          currentPeriodEnd={currentPeriodEndStr}
+          hasBillingKey={hasBillingKey}
+          calculationDetails={calculationDetails}
+          currentPlanName={currentPlanName}
         />
       </div>
 

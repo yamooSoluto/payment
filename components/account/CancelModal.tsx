@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Xmark, WarningTriangle, Calendar, Flash } from 'iconoir-react';
+import { Xmark, WarningTriangle, Calendar, Flash, InfoCircle } from 'iconoir-react';
 import { formatDate, formatPrice } from '@/lib/utils';
 
 // 취소 사유 옵션
@@ -29,6 +29,7 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [otherReason, setOtherReason] = useState('');
   const [cancelMode, setCancelMode] = useState<CancelMode>('scheduled');
+  const [showRefundDetail, setShowRefundDetail] = useState(false);
 
   // 실제 이용 마지막 날 (currentPeriodEnd가 다음 결제일인 경우 -1일)
   const actualEndDate = useMemo(() => {
@@ -202,16 +203,47 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                       <span className="text-sm font-medium text-gray-700">즉시 해지</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      즉시 서비스가 중단되며, 남은 기간에 대해
-                      {refundInfo.refundAmount > 0 ? (
-                        <span className="text-orange-600 font-medium"> {formatPrice(refundInfo.refundAmount)}원</span>
+                      즉시 서비스가 중단되며,{refundInfo.refundAmount > 0 ? (
+                        <span className="relative inline-flex items-center gap-1">
+                          <span className="text-orange-600 font-medium"> {formatPrice(refundInfo.refundAmount)}원</span>
+                          <button
+                            type="button"
+                            onMouseEnter={() => setShowRefundDetail(true)}
+                            onMouseLeave={() => setShowRefundDetail(false)}
+                            onClick={() => setShowRefundDetail(!showRefundDetail)}
+                            className="inline-flex items-center justify-center cursor-help"
+                          >
+                            <InfoCircle width={14} height={14} strokeWidth={1.5} className="text-gray-400 hover:text-gray-600" />
+                          </button>
+                          {showRefundDetail && (
+                            <div className="absolute z-10 left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs w-64">
+                              <div className="font-medium text-gray-900 mb-2">환불 계산 내역</div>
+                              <div className="space-y-2 text-gray-600">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-500">원 결제금액</span>
+                                  <span className="font-medium text-gray-900">{amount && formatPrice(amount)}원</span>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500 mb-1">이용 기간</div>
+                                  <div className="font-medium text-gray-900 mb-1">
+                                    {currentPeriodStart && formatDate(currentPeriodStart)} ~ {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                  </div>
+                                  <div className="font-medium text-gray-400 line-through">
+                                    {currentPeriodStart && formatDate(currentPeriodStart)} ~ {actualEndDate && formatDate(actualEndDate)}
+                                  </div>
+                                </div>
+                                <div className="border-t pt-2 mt-2 flex justify-between font-medium text-gray-900">
+                                  <span>환불금액</span>
+                                  <span className="text-orange-600">{formatPrice(refundInfo.refundAmount)}원</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </span>
                       ) : (
                         <span> 환불 없이</span>
                       )}
                       {refundInfo.refundAmount > 0 ? ' 환불됩니다.' : ' 처리됩니다.'}
-                      {refundInfo.daysLeft > 0 && (
-                        <span className="text-gray-400"> (남은 {refundInfo.daysLeft}일)</span>
-                      )}
                     </p>
                   </div>
                 </label>
@@ -224,11 +256,9 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
             {cancelMode === 'immediate' ? (
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• 오늘부로 서비스 이용이 즉시 중단됩니다.</li>
-                {refundInfo.refundAmount > 0 && (
-                  <li>• 남은 기간({refundInfo.daysLeft}일)에 대해 {formatPrice(refundInfo.refundAmount)}원이 환불됩니다.</li>
-                )}
                 <li>• 환불은 영업일 기준 3~5일 내 처리됩니다.</li>
-                <li>• 등록된 데이터는 유지됩니다.</li>
+                <li>• 등록된 데이터는 90일간 보관되고, 이후 삭제됩니다.</li>
+                <li>• 90일 이내 재구독 시 데이터를 복구할 수 있습니다.</li>
               </ul>
             ) : (
               <ul className="text-sm text-gray-600 space-y-1">
@@ -237,7 +267,8 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                   <li>• {formatDate(actualEndDate)}까지 서비스 이용이 가능합니다.</li>
                 )}
                 <li>• 언제든지 다시 구독할 수 있습니다.</li>
-                <li>• 등록된 데이터는 유지됩니다.</li>
+                <li>• 등록된 데이터는 90일간 보관되고, 이후 삭제됩니다.</li>
+                <li>• 90일 이내 재구독 시 데이터를 복구할 수 있습니다.</li>
               </ul>
             )}
           </div>

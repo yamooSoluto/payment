@@ -13,6 +13,10 @@ interface PlanSelectModalProps {
   mode: 'schedule' | 'immediate';
   authParam: string;
   tenantId?: string;
+  hasBillingKey?: boolean;
+  onUpdatePendingPlan?: (planId: string) => Promise<void>;
+  isActiveSubscription?: boolean; // Active 구독자 여부
+  currentPlan?: string; // 현재 플랜 (같은 플랜 선택 방지)
 }
 
 const PLANS = [
@@ -40,16 +44,109 @@ const PLANS = [
   },
 ];
 
-function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId }: PlanSelectModalProps) {
+function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, onUpdatePendingPlan, isActiveSubscription, currentPlan }: PlanSelectModalProps) {
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null); // Active 구독자용: 선택된 플랜
+
   if (!isOpen) return null;
 
-  const handleSelectPlan = (planId: string) => {
+  const handleSelectPlan = async (planId: string) => {
+    // 같은 플랜 선택시 경고
+    if (currentPlan === planId) {
+      alert('현재 구독중인 플랜입니다.');
+      return;
+    }
+
+    // Active 구독자: 먼저 플랜 선택 후 모드 선택 화면으로
+    if (isActiveSubscription) {
+      setSelectedPlan(planId);
+      return;
+    }
+
+    // Trial 사용자: 기존 로직
+    // 예약 모드이고 billingKey가 있으면 API로 직접 업데이트
+    if (mode === 'schedule' && hasBillingKey && onUpdatePendingPlan) {
+      setIsUpdating(true);
+      try {
+        await onUpdatePendingPlan(planId);
+        onClose();
+      } catch {
+        alert('예약 변경에 실패했습니다.');
+      } finally {
+        setIsUpdating(false);
+      }
+      return;
+    }
+
+    // 그 외에는 checkout으로 이동
     const baseUrl = `/checkout?plan=${planId}&${authParam}`;
     const url = tenantId
       ? `${baseUrl}&tenantId=${tenantId}${mode === 'schedule' ? '&mode=reserve' : '&mode=immediate'}`
       : `${baseUrl}${mode === 'schedule' ? '&mode=reserve' : ''}`;
     window.location.href = url;
   };
+
+  // Active 구독자: 모드 선택 후 처리
+  const handleModeSelect = (selectedMode: 'schedule' | 'immediate') => {
+    if (!selectedPlan) return;
+
+    const baseUrl = `/checkout?plan=${selectedPlan}&${authParam}`;
+    const url = tenantId
+      ? `${baseUrl}&tenantId=${tenantId}${selectedMode === 'schedule' ? '&mode=reserve' : '&mode=immediate'}`
+      : `${baseUrl}${selectedMode === 'schedule' ? '&mode=reserve' : ''}`;
+    window.location.href = url;
+  };
+
+  // Active 구독자가 플랜을 선택한 상태: 모드 선택 화면 표시
+  if (isActiveSubscription && selectedPlan) {
+    const selectedPlanInfo = PLANS.find(p => p.id === selectedPlan);
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedPlan(null)} />
+        <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors z-10"
+          >
+            <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+          </button>
+
+          {/* Header */}
+          <div className="p-6 pb-4 border-b">
+            <h3 className="text-xl font-bold text-gray-900">플랜 전환 방식 선택</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {selectedPlanInfo?.name} 플랜으로 어떻게 전환하시겠습니까?
+            </p>
+          </div>
+
+          {/* Mode Selection */}
+          <div className="p-6 space-y-3">
+            <button
+              onClick={() => handleModeSelect('schedule')}
+              className="w-full py-3 px-4 rounded-lg font-semibold border-2 border-gray-300 text-gray-700 hover:bg-yamoo-primary hover:border-yamoo-primary hover:text-gray-900 transition-colors"
+            >
+              <span className="block text-base">플랜 예약</span>
+              <span className="block text-xs opacity-70 mt-0.5">현재 구독 종료 후 자동 전환</span>
+            </button>
+            <button
+              onClick={() => handleModeSelect('immediate')}
+              className="w-full py-3 px-4 rounded-lg font-semibold border-2 border-gray-300 text-gray-700 hover:bg-yamoo-primary hover:border-yamoo-primary hover:text-gray-900 transition-colors"
+            >
+              <span className="block text-base">즉시 전환</span>
+              <span className="block text-xs opacity-70 mt-0.5">지금 바로 전환</span>
+            </button>
+            <button
+              onClick={() => setSelectedPlan(null)}
+              className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              뒤로
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -66,10 +163,14 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId }: PlanSel
         {/* Header */}
         <div className="p-6 pb-4 border-b">
           <h3 className="text-xl font-bold text-gray-900">
-            {mode === 'schedule' ? '플랜 예약' : '즉시 전환'}
+            {isUpdating ? '변경 중...' : isActiveSubscription ? '플랜 변경' : mode === 'schedule' ? '플랜 예약' : '즉시 전환'}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            {mode === 'schedule'
+            {isUpdating
+              ? '잠시만 기다려주세요'
+              : isActiveSubscription
+              ? '변경할 플랜을 선택해주세요'
+              : mode === 'schedule'
               ? '무료체험 종료 후 자동으로 시작됩니다'
               : '선택한 플랜으로 바로 전환합니다'}
           </p>
@@ -79,36 +180,45 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId }: PlanSel
         <div className="p-6 space-y-4">
           {PLANS.map((plan) => {
             const Icon = plan.icon;
+            const isCurrentPlan = currentPlan === plan.id;
             return (
               <button
                 key={plan.id}
                 onClick={() => handleSelectPlan(plan.id)}
-                className={`relative w-full p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${
-                  plan.color === 'blue'
+                disabled={isUpdating || isCurrentPlan}
+                className={`relative w-full p-4 rounded-xl border-2 text-left transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isCurrentPlan
+                    ? 'border-gray-300 bg-gray-50'
+                    : plan.color === 'blue'
                     ? 'border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
                     : 'border-purple-200 hover:border-purple-400 hover:bg-purple-50/50'
                 }`}
               >
-                {plan.popular && (
+                {isCurrentPlan && (
+                  <span className="absolute -top-2 right-4 px-2 py-0.5 bg-gray-500 text-white text-xs font-medium rounded-full">
+                    현재 플랜
+                  </span>
+                )}
+                {!isCurrentPlan && plan.popular && (
                   <span className="absolute -top-2 right-4 px-2 py-0.5 bg-purple-600 text-white text-xs font-medium rounded-full">
                     인기
                   </span>
                 )}
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    plan.color === 'blue' ? 'bg-blue-100' : 'bg-purple-100'
+                    isCurrentPlan ? 'bg-gray-200' : plan.color === 'blue' ? 'bg-blue-100' : 'bg-purple-100'
                   }`}>
                     <Icon
                       width={24}
                       height={24}
                       strokeWidth={1.5}
-                      className={plan.color === 'blue' ? 'text-blue-600' : 'text-purple-600'}
+                      className={isCurrentPlan ? 'text-gray-500' : plan.color === 'blue' ? 'text-blue-600' : 'text-purple-600'}
                     />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-bold text-gray-900">{plan.name}</h4>
-                      <p className="font-bold text-gray-900">
+                      <h4 className={`font-bold ${isCurrentPlan ? 'text-gray-500' : 'text-gray-900'}`}>{plan.name}</h4>
+                      <p className={`font-bold ${isCurrentPlan ? 'text-gray-500' : 'text-gray-900'}`}>
                         {formatPrice(plan.price)}원<span className="text-sm font-normal text-gray-500">/월</span>
                       </p>
                     </div>
@@ -231,6 +341,7 @@ interface SubscriptionCardProps {
     pendingPlan?: string;
     pendingAmount?: number;
     pendingChangeAt?: Date | string;
+    billingKey?: string;
   };
   authParam: string;
   tenantId?: string;
@@ -396,6 +507,24 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
     }
   };
 
+  // 예약 플랜 변경 (billingKey가 이미 있는 경우)
+  const handleUpdatePendingPlan = async (newPlan: string) => {
+    const { token, email } = parseAuthParam();
+
+    const response = await fetch('/api/subscriptions/update-pending-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, email, tenantId, newPlan }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || '예약 변경에 실패했습니다.');
+    }
+
+    window.location.reload();
+  };
+
   return (
     <>
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
@@ -484,10 +613,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                           <span className="text-blue-500">이용기간:</span>{' '}
                           {(() => {
                             const startDate = new Date(subscription.pendingChangeAt);
-                            startDate.setDate(startDate.getDate() + 1); // 결제일 다음날부터 시작
                             const endDate = new Date(startDate);
                             endDate.setMonth(endDate.getMonth() + 1);
-                            endDate.setDate(endDate.getDate() - 1); // 다음달 같은 날 전날까지
+                            endDate.setDate(endDate.getDate() - 1);
                             return `${formatDate(startDate)} ~ ${formatDate(endDate)}`;
                           })()}
                         </p>
@@ -558,30 +686,30 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             <>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
-                className="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+                className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
               >
-                플랜 예약
+                {subscription.pendingPlan ? '예약 변경' : '플랜 예약'}
               </button>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
-                className="bg-white text-gray-900 border-2 border-gray-200 px-6 py-3 rounded-lg font-semibold hover:border-yamoo-primary hover:bg-yamoo-primary/5 transition-all duration-200"
+                className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
               >
                 즉시 전환
               </button>
             </>
           )}
           {isActive && (
-            <a
-              href={`/account/change-plan?${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
-              className="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+            <button
+              onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
+              className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
             >
               플랜 변경
-            </a>
+            </button>
           )}
           {isActive && (
             <button
               onClick={() => setShowCancelModal(true)}
-              className="border-2 border-black text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-yamoo-primary hover:border-yamoo-primary transition-all duration-200"
+              className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
             >
               구독 해지
             </button>
@@ -651,6 +779,10 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         mode={showPlanSelectModal.mode}
         authParam={authParam}
         tenantId={tenantId}
+        hasBillingKey={!!subscription.billingKey}
+        onUpdatePendingPlan={handleUpdatePendingPlan}
+        isActiveSubscription={isActive}
+        currentPlan={subscription.plan}
       />
     </>
   );

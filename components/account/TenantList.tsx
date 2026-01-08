@@ -120,15 +120,10 @@ export default function TenantList({ authParam, initialTenants }: TenantListProp
                     {tenant.subscription ? (
                       <div className="flex items-center gap-2 mt-1">
                         {status === 'expired' || !statusConfig ? (
-                          // 만료(즉시해지) 또는 상태 미인식 - 아이콘 없이 미구독 + 플랜명 표시
-                          <>
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100">
-                              미구독
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {PLAN_NAMES[tenant.subscription.plan] || tenant.subscription.plan}
-                            </span>
-                          </>
+                          // 만료(즉시해지) 또는 상태 미인식 - 미구독만 표시
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100">
+                            미구독
+                          </span>
                         ) : (
                           <>
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>

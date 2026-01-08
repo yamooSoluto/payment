@@ -62,11 +62,11 @@ export default function ChangePlanButton({
     message: '',
   });
 
-  // 즉시 변경 시 일할 계산 (실제 결제 기간 기준)
-  // 남은 일수에 대한 현재 플랜 환불액
+  // 즉시 변경 시 계산 (실제 결제 기간 기준)
+  // 기존 플랜: 변경일(오늘)까지 사용 → usedDays만큼 차감 후 daysLeft만큼 환불
   const refundAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
-  // 남은 일수에 대한 새 플랜 비용 (할인가)
-  const proratedNewAmount = Math.round((newAmount / totalDaysInPeriod) * daysLeft);
+  // 새 플랜: 변경일(오늘)부터 종료일까지 이용 → (daysLeft + 1)일 결제
+  const proratedNewAmount = Math.round((newAmount / totalDaysInPeriod) * (daysLeft + 1));
   // 실제 결제/환불 금액
   const immediatePayment = proratedNewAmount - refundAmount;
 

@@ -94,15 +94,28 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   const nextBillingDate = subscription.nextBillingDate;
   const currentPeriodStart = subscription.currentPeriodStart;
 
-  // 결제 기간 총 일수 계산
-  const totalDaysInPeriod = (nextBillingDate && currentPeriodStart)
-    ? Math.ceil((new Date(nextBillingDate).getTime() - new Date(currentPeriodStart).getTime()) / (1000 * 60 * 60 * 24))
-    : 30;
+  // 결제 기간 계산 (실제 기간 일수 기준)
+  let totalDaysInPeriod = 31;
+  let usedDays = 1;
+  let daysLeft = 30;
 
-  // 남은 일수 계산
-  const daysLeft = nextBillingDate
-    ? Math.max(0, Math.ceil((new Date(nextBillingDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0;
+  if (nextBillingDate && currentPeriodStart) {
+    const startDateOnly = new Date(currentPeriodStart);
+    startDateOnly.setHours(0, 0, 0, 0);
+    const nextDateOnly = new Date(nextBillingDate);
+    nextDateOnly.setHours(0, 0, 0, 0);
+
+    // 총 기간 일수
+    totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+    // 사용 일수 (오늘 포함)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 남은 일수
+    daysLeft = Math.max(0, totalDaysInPeriod - usedDays);
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

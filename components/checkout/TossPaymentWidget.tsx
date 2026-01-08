@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { formatPrice } from '@/lib/utils';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
-import { Check, InfoCircle } from 'iconoir-react';
+import { Check, InfoCircle, NavArrowDown, NavArrowUp } from 'iconoir-react';
+import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleText } from '@/lib/payment-constants';
 
 // 플랜별 상세 기능 (요금제 페이지와 동일)
 const PLAN_FEATURES: Record<string, string[]> = {
@@ -22,23 +23,48 @@ const PLAN_FEATURES: Record<string, string[]> = {
   ],
 };
 
+// 환불/결제 계산 상세 정보
+interface CalculationDetails {
+  totalDays: number;        // 총 결제 기간 일수
+  usedDays: number;         // 사용한 일수
+  daysLeft: number;         // 남은 일수
+  currentPlanAmount: number; // 현재 플랜 월정액
+  usedAmount: number;       // 사용한 금액
+  currentRefund: number;    // 현재 플랜 환불액
+  newPlanRemaining: number; // 새 플랜 남은 기간 금액
+  currentPeriodStart?: string; // 현재 구독 시작일
+  currentPeriodEndDate?: string; // 현재 구독 종료일
+}
+
 interface TossPaymentWidgetProps {
   email: string;
   plan: string;
   planName: string;
   amount: number;
   tenantId?: string;
-  isUpgrade?: boolean;
-  isReserve?: boolean;  // Trial 예약 모드
+  isChangePlan?: boolean;     // 즉시 플랜 변경 (Active 구독자)
+  isDowngrade?: boolean;      // 다운그레이드 여부 (환불 필요)
+  refundAmount?: number;      // 다운그레이드 시 환불 금액
+  isReserve?: boolean;        // 예약 모드 (Trial 또는 Active)
+  isTrialImmediate?: boolean; // Trial에서 즉시 전환
   fullAmount?: number;
   isNewTenant?: boolean;
   authParam?: string;
-  nextBillingDate?: string; // 업그레이드 시 다음 결제일
-  trialEndDate?: string;    // Trial 종료일 (예약 모드)
+  nextBillingDate?: string;   // 다음 결제일
+  trialEndDate?: string;      // Trial 종료일 (Trial 예약 모드)
+  currentPeriodEnd?: string;  // 현재 구독 기간 종료일 (Active 예약 모드)
+  hasBillingKey?: boolean;    // 이미 카드가 등록되어 있는지
+  calculationDetails?: CalculationDetails; // 환불/결제 계산 상세 정보
+  currentPlanName?: string;   // 현재 플랜 이름
 }
 
 // 이용기간 계산 (종료일 = 다음 결제일 하루 전)
-function getSubscriptionPeriod(nextBillingDate?: string, isReserve?: boolean, trialEndDate?: string): { start: string; end: string; nextBilling: string } {
+function getSubscriptionPeriod(
+  nextBillingDate?: string,
+  isReserve?: boolean,
+  trialEndDate?: string,
+  currentPeriodEnd?: string
+): { start: string; end: string; nextBilling: string } {
   const today = new Date();
 
   // 컴팩트한 날짜 포맷 (YYYY-MM-DD)
@@ -49,11 +75,29 @@ function getSubscriptionPeriod(nextBillingDate?: string, isReserve?: boolean, tr
     return `${year}-${month}-${day}`;
   };
 
-  // 예약 모드: 무료체험 종료일 = 첫 결제일, 이용시작은 그 다음날
+  // Active 구독자 예약 모드: 현재 구독 종료일 다음날부터 새 플랜 시작
+  if (isReserve && currentPeriodEnd) {
+    const periodEnd = new Date(currentPeriodEnd);
+    const startDate = new Date(periodEnd);
+    startDate.setDate(startDate.getDate() + 1); // 이용 시작일 = 현재 구독 종료일 + 1
+    const billingDate = new Date(startDate); // 결제일 = 시작일과 동일
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(endDate.getDate() - 1); // 이용 종료일 = 시작일 + 1개월 - 1일
+
+    return {
+      start: formatDate(startDate),
+      end: formatDate(endDate),
+      nextBilling: formatDate(billingDate),
+    };
+  }
+
+  // Trial 예약 모드: 무료체험 종료일 다음날부터 유료 플랜 시작
   if (isReserve && trialEndDate) {
-    const billingDate = new Date(trialEndDate); // 결제일 = 무료체험 종료일
-    const startDate = new Date(billingDate);
-    startDate.setDate(startDate.getDate() + 1); // 이용 시작일 = 결제일 다음날
+    const trialEnd = new Date(trialEndDate);
+    const startDate = new Date(trialEnd);
+    startDate.setDate(startDate.getDate() + 1); // 이용 시작일 = 무료체험 종료일 + 1
+    const billingDate = new Date(startDate); // 첫 결제일 = 이용 시작일
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + 1);
     endDate.setDate(endDate.getDate() - 1); // 이용 종료일 = 시작일 + 1개월 - 1일
@@ -94,19 +138,27 @@ export default function TossPaymentWidget({
   planName,
   amount,
   tenantId,
-  isUpgrade = false,
+  isChangePlan = false,
+  isDowngrade = false,
+  refundAmount = 0,
   isReserve = false,
+  isTrialImmediate = false,
   fullAmount,
   isNewTenant = false,
   authParam = '',
   nextBillingDate,
   trialEndDate,
+  currentPeriodEnd,
+  hasBillingKey = false,
+  calculationDetails,
+  currentPlanName,
 }: TossPaymentWidgetProps) {
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(sdkError);
   const [agreed, setAgreed] = useState(false);
   const [showPlanTooltip, setShowPlanTooltip] = useState(false);
+  const [showCalculationDetails, setShowCalculationDetails] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   // 툴팁 외부 클릭 시 닫기
@@ -140,9 +192,9 @@ export default function TossPaymentWidget({
     setError(null);
 
     try {
-      if (isUpgrade) {
-        // 업그레이드: 기존 빌링키로 차액 결제
-        const response = await fetch('/api/payments/upgrade', {
+      if (isChangePlan) {
+        // 플랜 변경: 업그레이드 또는 다운그레이드
+        const response = await fetch('/api/payments/change-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -151,6 +203,8 @@ export default function TossPaymentWidget({
             newPlan: plan,
             newAmount: fullAmount,
             proratedAmount: amount,
+            isDowngrade,
+            refundAmount,
           }),
         });
 
@@ -160,7 +214,28 @@ export default function TossPaymentWidget({
           const authQuery = authParam ? `&${authParam}` : '';
           window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}${authQuery}`;
         } else {
-          throw new Error(data.error || '업그레이드에 실패했습니다.');
+          throw new Error(data.error || '플랜 변경에 실패했습니다.');
+        }
+      } else if (hasBillingKey && isTrialImmediate) {
+        // Trial에서 즉시 전환 + 이미 카드 등록됨: 기존 빌링키로 바로 결제
+        const response = await fetch('/api/payments/immediate-convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            tenantId: effectiveTenantId,
+            plan,
+            amount,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const authQuery = authParam ? `&${authParam}` : '';
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}${authQuery}`;
+        } else {
+          throw new Error(data.error || '결제에 실패했습니다.');
         }
       } else {
         // 신규 결제 or 예약: 빌링키 발급
@@ -188,7 +263,7 @@ export default function TossPaymentWidget({
     }
   };
 
-  const period = getSubscriptionPeriod(nextBillingDate, isReserve, trialEndDate);
+  const period = getSubscriptionPeriod(nextBillingDate, isReserve, trialEndDate, currentPeriodEnd);
 
   return (
     <div className="space-y-6">
@@ -230,26 +305,261 @@ export default function TossPaymentWidget({
           </span>
         </div>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-gray-600">{isReserve ? '첫 결제일' : '다음 결제일'}</span>
+          <span className="text-gray-600">
+            {isReserve ? (currentPeriodEnd ? '결제 예정일' : '첫 결제일') : '다음 결제일'}
+          </span>
           <span className="text-sm text-gray-900">
             {period.nextBilling}
           </span>
         </div>
-        {isUpgrade && fullAmount ? (
-          <>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-600">정상가</span>
-              <span className="text-gray-400 line-through">
-                {formatPrice(fullAmount)}원 / 월
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">지금 결제 (차액)</span>
-              <span className="text-xl font-bold text-gray-900">
-                {formatPrice(amount)}원
-              </span>
-            </div>
-          </>
+        {isChangePlan && fullAmount ? (
+          isDowngrade ? (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">새 플랜 가격</span>
+                <span className="text-gray-900">
+                  {formatPrice(fullAmount)}원 / 월
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">환불액</span>
+                <span className="text-xl font-bold text-green-600">
+                  +{formatPrice(refundAmount)}원
+                </span>
+              </div>
+              {/* 계산 상세 내역 토글 */}
+              {calculationDetails && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowCalculationDetails(!showCalculationDetails)}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    {showCalculationDetails ? (
+                      <>
+                        <NavArrowUp width={14} height={14} strokeWidth={2} />
+                        계산 내역 접기
+                      </>
+                    ) : (
+                      <>
+                        <NavArrowDown width={14} height={14} strokeWidth={2} />
+                        계산 내역 보기
+                      </>
+                    )}
+                  </button>
+                  {showCalculationDetails && (() => {
+                    // 실제 이용 종료일 계산 (시작일 + 사용일수 - 1)
+                    const getUsageEndDate = () => {
+                      if (!calculationDetails.currentPeriodStart) return calculationDetails.currentPeriodStart;
+                      const start = new Date(calculationDetails.currentPeriodStart.replace(/-/g, '/'));
+                      start.setDate(start.getDate() + calculationDetails.usedDays - 1);
+                      const year = start.getFullYear();
+                      const month = String(start.getMonth() + 1).padStart(2, '0');
+                      const day = String(start.getDate()).padStart(2, '0');
+                      return `${year}-${month}-${day}`;
+                    };
+                    const usageEndDate = getUsageEndDate();
+
+                    // 새 플랜 이용 시작일 = 변경일 = 기존 플랜 이용 종료일
+                    const newPlanStartDate = usageEndDate;
+
+                    return (
+                      <div className="mt-3 space-y-3">
+                        {/* 파트 1: 기존 플랜 중도 해지 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="text-gray-900 font-bold mb-2">
+                            {currentPlanName || '현재 플랜'} 플랜 중도 해지
+                          </div>
+                          <div className="flex justify-between text-gray-600 mb-1">
+                            <span>이용 기간</span>
+                            <div className="text-right">
+                              <span>{calculationDetails.currentPeriodStart} ~ {usageEndDate}</span>
+                              <div className="text-gray-400 line-through text-xs">
+                                {calculationDetails.currentPeriodStart} ~ {calculationDetails.currentPeriodEndDate}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="border-t border-gray-200 my-2 pt-2 space-y-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>결제금액</span>
+                              <span>{formatPrice(calculationDetails.currentPlanAmount)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-600">
+                              <span>사용금액</span>
+                              <span>{formatPrice(calculationDetails.usedAmount)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-900 font-medium">
+                              <span>환불금액</span>
+                              <span>{formatPrice(calculationDetails.currentRefund)}원</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 파트 2: 새 플랜 중도 이용 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="text-gray-900 font-bold mb-2">
+                            {planName} 플랜 중도 이용
+                          </div>
+                          <div className="flex justify-between text-gray-600 mb-1">
+                            <span>이용 기간</span>
+                            <span>{newPlanStartDate} ~ {calculationDetails.currentPeriodEndDate}</span>
+                          </div>
+                          <div className="border-t border-gray-200 my-2 pt-2 space-y-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>원금액</span>
+                              <span>{formatPrice(fullAmount || 0)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-900 font-medium">
+                              <span>결제금액</span>
+                              <span>{formatPrice(calculationDetails.newPlanRemaining)}원</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 파트 3: 실 금액 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-900 font-bold">실 금액</span>
+                            <div className="text-right">
+                              <span className="text-xs text-gray-500 block">
+                                {formatPrice(calculationDetails.currentRefund)}원 - {formatPrice(calculationDetails.newPlanRemaining)}원
+                              </span>
+                              <span className="text-green-600 font-bold text-base">
+                                = {formatPrice(refundAmount)}원 (환불)
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">정상가</span>
+                <span className="text-gray-400 line-through">
+                  {formatPrice(fullAmount)}원 / 월
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">지금 결제 (차액)</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {formatPrice(amount)}원
+                </span>
+              </div>
+              {/* 업그레이드 계산 상세 내역 토글 */}
+              {calculationDetails && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowCalculationDetails(!showCalculationDetails)}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    {showCalculationDetails ? (
+                      <>
+                        <NavArrowUp width={14} height={14} strokeWidth={2} />
+                        계산 내역 접기
+                      </>
+                    ) : (
+                      <>
+                        <NavArrowDown width={14} height={14} strokeWidth={2} />
+                        계산 내역 보기
+                      </>
+                    )}
+                  </button>
+                  {showCalculationDetails && (() => {
+                    // 실제 이용 종료일 계산 (시작일 + 사용일수 - 1)
+                    const getUsageEndDate = () => {
+                      if (!calculationDetails.currentPeriodStart) return calculationDetails.currentPeriodStart;
+                      const start = new Date(calculationDetails.currentPeriodStart.replace(/-/g, '/'));
+                      start.setDate(start.getDate() + calculationDetails.usedDays - 1);
+                      const year = start.getFullYear();
+                      const month = String(start.getMonth() + 1).padStart(2, '0');
+                      const day = String(start.getDate()).padStart(2, '0');
+                      return `${year}-${month}-${day}`;
+                    };
+                    const usageEndDate = getUsageEndDate();
+
+                    // 새 플랜 이용 시작일 = 변경일 = 기존 플랜 이용 종료일
+                    const newPlanStartDate = usageEndDate;
+
+                    return (
+                      <div className="mt-3 space-y-3">
+                        {/* 파트 1: 기존 플랜 중도 해지 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="text-gray-900 font-bold mb-2">
+                            {currentPlanName || '현재 플랜'} 플랜 중도 해지
+                          </div>
+                          <div className="flex justify-between text-gray-600 mb-1">
+                            <span>이용 기간</span>
+                            <div className="text-right">
+                              <span>{calculationDetails.currentPeriodStart} ~ {usageEndDate}</span>
+                              <div className="text-gray-400 line-through text-xs">
+                                {calculationDetails.currentPeriodStart} ~ {calculationDetails.currentPeriodEndDate}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="border-t border-gray-200 my-2 pt-2 space-y-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>결제금액</span>
+                              <span>{formatPrice(calculationDetails.currentPlanAmount)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-600">
+                              <span>사용금액</span>
+                              <span>{formatPrice(calculationDetails.usedAmount)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-900 font-medium">
+                              <span>환불금액</span>
+                              <span>{formatPrice(calculationDetails.currentRefund)}원</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 파트 2: 새 플랜 중도 이용 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="text-gray-900 font-bold mb-2">
+                            {planName} 플랜 중도 이용
+                          </div>
+                          <div className="flex justify-between text-gray-600 mb-1">
+                            <span>이용 기간</span>
+                            <span>{newPlanStartDate} ~ {calculationDetails.currentPeriodEndDate}</span>
+                          </div>
+                          <div className="border-t border-gray-200 my-2 pt-2 space-y-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>원금액</span>
+                              <span>{formatPrice(fullAmount || 0)}원</span>
+                            </div>
+                            <div className="flex justify-between text-gray-900 font-medium">
+                              <span>결제금액</span>
+                              <span>{formatPrice(calculationDetails.newPlanRemaining)}원</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 파트 3: 실 금액 */}
+                        <div className="bg-gray-100 rounded-lg p-3 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-900 font-bold">실 금액</span>
+                            <div className="text-right">
+                              <span className="text-xs text-gray-500 block">
+                                {formatPrice(calculationDetails.newPlanRemaining)}원 - {formatPrice(calculationDetails.currentRefund)}원
+                              </span>
+                              <span className="text-blue-700 font-bold text-base">
+                                = {formatPrice(amount)}원 (결제)
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </>
+          )
         ) : isReserve ? (
           <div className="flex justify-between items-center">
             <span className="text-gray-600">예약 후 결제 금액</span>
@@ -268,18 +578,32 @@ export default function TossPaymentWidget({
       </div>
 
       {/* 안내 */}
-      <div className="bg-blue-50 rounded-lg p-4">
-        <h3 className="font-medium text-blue-900 mb-2">
-          {isUpgrade ? '플랜 업그레이드 결제' : isReserve ? '무료체험 종료 후 자동 시작' : '정기결제 카드 등록'}
-        </h3>
-        <p className="text-sm text-blue-700">
-          {isUpgrade
-            ? '등록된 카드로 차액이 즉시 결제됩니다. 다음 결제일부터 새 플랜 금액이 정기 결제됩니다.'
-            : isReserve
-            ? `무료체험이 종료되면 자동으로 ${planName} 플랜이 시작되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
-            : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
-        </p>
-      </div>
+      {!isChangePlan && (
+        <div className={`rounded-lg p-4 ${isDowngrade ? 'bg-green-50' : 'bg-blue-50'}`}>
+          <h3 className={`font-medium mb-2 ${isDowngrade ? 'text-green-900' : 'text-blue-900'}`}>
+            {isTrialImmediate && hasBillingKey
+              ? '등록된 카드로 즉시 결제'
+              : isTrialImmediate
+              ? '즉시 전환 결제'
+              : isReserve
+              ? currentPeriodEnd
+                ? '구독 종료 후 자동 변경'
+                : '무료체험 종료 후 자동 시작'
+              : '정기결제 카드 등록'}
+          </h3>
+          <p className={`text-sm ${isDowngrade ? 'text-green-700' : 'text-blue-700'}`}>
+            {isTrialImmediate && hasBillingKey
+              ? `등록된 카드로 ${formatPrice(amount)}원이 즉시 결제되고 ${planName} 플랜이 바로 시작됩니다.`
+              : isTrialImmediate
+              ? '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'
+              : isReserve
+              ? currentPeriodEnd
+                ? `현재 구독이 종료되면 자동으로 ${planName} 플랜으로 변경되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
+                : `무료체험이 종료되면 자동으로 ${planName} 플랜이 시작되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
+              : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
+          </p>
+        </div>
+      )}
 
       {/* 결제/환불 규정 동의 */}
       <div className="border rounded-lg p-4">
@@ -290,20 +614,34 @@ export default function TossPaymentWidget({
             onChange={(e) => setAgreed(e.target.checked)}
             className="mt-1 w-5 h-5 text-yamoo-primary rounded border-gray-300 focus:ring-yamoo-primary"
           />
-          <div>
-            <span className="font-medium text-gray-900">
-              결제/환불 규정에 동의합니다 (필수)
-            </span>
-            <p className="text-sm text-gray-500 mt-1">
-              {isUpgrade && fullAmount
-                ? `지금 ${formatPrice(amount)}원이 결제되고, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`
-                : isReserve
-                ? `무료체험 종료일인 ${period.nextBilling}부터 매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`
-                : `매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`}
-              {' '}구독 해지 시 다음 결제일부터 결제가 중단되며, 이미 결제된 금액은 환불되지 않습니다.
-            </p>
-          </div>
+          <span className="font-medium text-gray-900">
+            {AGREEMENT_LABEL}
+          </span>
         </label>
+        <ul className="text-sm text-gray-500 mt-2 space-y-1">
+          <li className="flex gap-2">
+            <span className="flex-shrink-0">•</span>
+            <span>{getPaymentScheduleText({
+              amount,
+              fullAmount,
+              isChangePlan,
+              isDowngrade,
+              refundAmount,
+              isReserve,
+              isTrialImmediate,
+              hasBillingKey,
+              currentPeriodEnd,
+              nextBillingDate: period.nextBilling,
+              formatPrice,
+            })}</span>
+          </li>
+          {REFUND_POLICY_ITEMS.map((policy, index) => (
+            <li key={index} className="flex gap-2">
+              <span className="flex-shrink-0">•</span>
+              <span>{policy}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* 에러 메시지 */}
@@ -327,10 +665,12 @@ export default function TossPaymentWidget({
         ) : isProcessing ? (
           <span className="flex items-center justify-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yamoo-primary"></div>
-            {isUpgrade ? '결제 처리 중...' : '카드 등록 페이지로 이동 중...'}
+            {(isChangePlan || (hasBillingKey && isTrialImmediate)) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
           </span>
-        ) : isUpgrade ? (
-          `${formatPrice(amount)}원 결제하기`
+        ) : isChangePlan ? (
+          isDowngrade ? '플랜 변경하기' : `${formatPrice(amount)}원 결제하기`
+        ) : hasBillingKey && isTrialImmediate ? (
+          `${formatPrice(amount)}원 즉시 결제하기`
         ) : isReserve ? (
           '카드 등록하고 예약하기'
         ) : (
@@ -339,25 +679,36 @@ export default function TossPaymentWidget({
       </button>
 
       {/* 안내 문구 */}
-      <ul className="text-sm text-gray-500 space-y-1">
-        {isUpgrade ? (
+      {!isChangePlan && (
+        <ul className="text-sm text-gray-500 space-y-1">
+          {hasBillingKey && isTrialImmediate ? (
           <>
             <li>• 등록된 카드로 즉시 결제됩니다.</li>
-            <li>• 업그레이드 후 새 플랜 기능을 바로 이용할 수 있습니다.</li>
+            <li>• 결제 후 바로 유료 플랜이 시작됩니다.</li>
+            <li>• 매월 동일한 날짜에 자동 결제됩니다.</li>
           </>
         ) : isReserve ? (
-          <>
-            <li>• 무료체험 종료 후 자동으로 유료 플랜이 시작됩니다.</li>
-            <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
-            <li>• 무료체험 기간 동안에는 결제되지 않습니다.</li>
-          </>
+          currentPeriodEnd ? (
+            <>
+              <li>• 현재 구독 종료 후 자동으로 새 플랜이 시작됩니다.</li>
+              <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
+              <li>• 현재 구독 기간 동안에는 결제되지 않습니다.</li>
+            </>
+          ) : (
+            <>
+              <li>• 무료체험 종료 후 자동으로 유료 플랜이 시작됩니다.</li>
+              <li>• 예약을 취소하려면 구독 설정에서 언제든 취소할 수 있습니다.</li>
+              <li>• 무료체험 기간 동안에는 결제되지 않습니다.</li>
+            </>
+          )
         ) : (
           <>
             <li>• 첫 결제 후 매월 동일한 날짜에 자동 결제됩니다.</li>
             <li>• 언제든지 구독을 해지할 수 있습니다.</li>
           </>
-        )}
-      </ul>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

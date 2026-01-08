@@ -3,6 +3,46 @@ import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-a
 import { sendAlimtalk } from '@/lib/bizm';
 
 /**
+ * 다양한 형식의 날짜를 Date 객체로 변환
+ */
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+
+  // Firestore Timestamp
+  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate();
+  }
+
+  // Date 객체
+  if (value instanceof Date) {
+    return value;
+  }
+
+  // ISO 문자열 또는 기타 문자열
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  // 숫자 (timestamp ms)
+  if (typeof value === 'number') {
+    return new Date(value);
+  }
+
+  return null;
+}
+
+/**
+ * 날짜를 한국어 형식으로 포맷
+ */
+function formatDateKR(date: Date | null): string {
+  if (!date) return '';
+  return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+}
+
+/**
  * 임시 비밀번호 생성 (8자리: 대소문자 + 숫자)
  */
 function generateTempPassword(): string {
@@ -56,8 +96,132 @@ export async function POST(request: Request) {
     ]);
 
     if (!existingUserPhone.empty || !existingTenantPhone.empty) {
+      // 이전 체험 이력 정보 조회
+      let trialHistory: { brandName: string; periodStart: string; periodEnd: string } | null = null;
+
+      try {
+        // tenants에서 찾은 경우 해당 tenantId로 subscription 조회
+        if (!existingTenantPhone.empty) {
+          const tenantData = existingTenantPhone.docs[0].data();
+          const tenantId = tenantData.tenantId || existingTenantPhone.docs[0].id;
+
+          console.log('체험 이력 조회 - tenantData:', JSON.stringify({
+            tenantId,
+            brandName: tenantData.brandName,
+            createdAt: tenantData.createdAt,
+            subscription: tenantData.subscription,
+          }));
+
+          // subscription에서 trial 기록 조회
+          const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+
+          // 날짜 후보들 (subscriptions 컬렉션, tenant 내장 subscription, tenant 자체)
+          let periodStart: Date | null = null;
+          let periodEnd: Date | null = null;
+
+          if (subscriptionDoc.exists) {
+            const subData = subscriptionDoc.data();
+            console.log('체험 이력 조회 - subscriptionDoc:', JSON.stringify({
+              currentPeriodStart: subData?.currentPeriodStart,
+              currentPeriodEnd: subData?.currentPeriodEnd,
+              trialEndDate: subData?.trialEndDate,
+              createdAt: subData?.createdAt,
+            }));
+            periodStart = parseDate(subData?.currentPeriodStart) || parseDate(subData?.createdAt);
+            periodEnd = parseDate(subData?.currentPeriodEnd) || parseDate(subData?.trialEndDate);
+          }
+
+          // subscriptions 컬렉션에 없거나 날짜가 없으면 tenant 내장 subscription 확인
+          if (!periodStart && tenantData.subscription) {
+            const embeddedSub = tenantData.subscription;
+            periodStart = parseDate(embeddedSub.currentPeriodStart) || parseDate(embeddedSub.startDate) || parseDate(embeddedSub.createdAt);
+            periodEnd = parseDate(embeddedSub.currentPeriodEnd) || parseDate(embeddedSub.endDate) || parseDate(embeddedSub.trialEndDate);
+          }
+
+          // 그래도 없으면 tenant의 createdAt 사용
+          if (!periodStart) {
+            periodStart = parseDate(tenantData.createdAt) || parseDate(tenantData.registeredAt) || parseDate(tenantData.created_at);
+          }
+
+          trialHistory = {
+            brandName: tenantData.brandName || '알 수 없음',
+            periodStart: formatDateKR(periodStart),
+            periodEnd: formatDateKR(periodEnd),
+          };
+        }
+        // users에서만 찾은 경우
+        else if (!existingUserPhone.empty) {
+          const userData = existingUserPhone.docs[0].data();
+          const trialAppliedAt = parseDate(userData.trialAppliedAt);
+
+          // 해당 이메일로 tenants 조회
+          const userEmail = userData.email;
+          if (userEmail) {
+            const userTenantsSnapshot = await db.collection('tenants')
+              .where('email', '==', userEmail)
+              .limit(1)
+              .get();
+
+            if (!userTenantsSnapshot.empty) {
+              const tenantData = userTenantsSnapshot.docs[0].data();
+              const tenantId = tenantData.tenantId || userTenantsSnapshot.docs[0].id;
+
+              const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+
+              let periodStart: Date | null = null;
+              let periodEnd: Date | null = null;
+
+              if (subscriptionDoc.exists) {
+                const subData = subscriptionDoc.data();
+                periodStart = parseDate(subData?.currentPeriodStart) || parseDate(subData?.createdAt);
+                periodEnd = parseDate(subData?.currentPeriodEnd) || parseDate(subData?.trialEndDate);
+              }
+
+              // subscriptions 컬렉션에 없거나 날짜가 없으면 tenant 내장 subscription 확인
+              if (!periodStart && tenantData.subscription) {
+                const embeddedSub = tenantData.subscription;
+                periodStart = parseDate(embeddedSub.currentPeriodStart) || parseDate(embeddedSub.startDate) || parseDate(embeddedSub.createdAt);
+                periodEnd = parseDate(embeddedSub.currentPeriodEnd) || parseDate(embeddedSub.endDate) || parseDate(embeddedSub.trialEndDate);
+              }
+
+              // 그래도 없으면 tenant의 createdAt 또는 trialAppliedAt 사용
+              if (!periodStart) {
+                periodStart = parseDate(tenantData.createdAt) || parseDate(tenantData.registeredAt) || trialAppliedAt;
+              }
+
+              trialHistory = {
+                brandName: tenantData.brandName || '알 수 없음',
+                periodStart: formatDateKR(periodStart),
+                periodEnd: formatDateKR(periodEnd),
+              };
+            }
+          }
+        }
+      } catch (historyError) {
+        console.error('체험 이력 조회 오류:', historyError);
+      }
+
+      // 상세 오류 메시지 생성
+      let errorMessage = '무료체험 이용 이력이 있어 재신청이 불가합니다.';
+      if (trialHistory) {
+        const periodInfo = trialHistory.periodEnd
+          ? `${trialHistory.periodStart} ~ ${trialHistory.periodEnd}`
+          : trialHistory.periodStart
+          ? `${trialHistory.periodStart}~`
+          : '';
+
+        if (periodInfo) {
+          errorMessage = `무료체험 이용 이력이 있어 재신청이 불가합니다.\n\n최근 이용: ${trialHistory.brandName}\n기간: ${periodInfo}`;
+        } else {
+          errorMessage = `무료체험 이용 이력이 있어 재신청이 불가합니다.\n\n최근 이용: ${trialHistory.brandName}`;
+        }
+      }
+
       return NextResponse.json(
-        { error: '이미 무료체험을 신청한 연락처입니다.' },
+        {
+          error: errorMessage,
+          trialHistory,
+        },
         { status: 400 }
       );
     }

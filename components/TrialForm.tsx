@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { Check } from 'iconoir-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
 
 // 검증 함수
@@ -22,7 +23,7 @@ interface TrialFormProps {
 }
 
 export default function TrialForm({ cardStyle = true }: TrialFormProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // 폼 상태
   const [formData, setFormData] = useState({
@@ -53,6 +54,8 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   const [isSuccess, setIsSuccess] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [alreadyApplied, setAlreadyApplied] = useState(false);
+  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(false);
 
   // 약관 모달 상태
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy' | null>(null);
@@ -69,6 +72,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   useEffect(() => {
     const fetchUserInfo = async () => {
       if (user?.email) {
+        setIsLoadingUserInfo(true);
         try {
           const response = await fetch(`/api/users/${encodeURIComponent(user.email)}`);
           if (response.ok) {
@@ -83,9 +87,15 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             if (userData.phone) {
               setIsPhoneVerified(true);
             }
+            // 이미 무료체험 신청한 경우 (전화번호 기준으로 체크됨)
+            if (userData.trialApplied) {
+              setAlreadyApplied(true);
+            }
           }
         } catch (error) {
           console.error('Failed to fetch user info:', error);
+        } finally {
+          setIsLoadingUserInfo(false);
         }
       }
     };
@@ -271,6 +281,67 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
       setIsSubmitting(false);
     }
   };
+
+  // 로그인 상태 로딩 중이거나 사용자 정보 로딩 중
+  if (authLoading || (user && isLoadingUserInfo)) {
+    return (
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-[#ffbf03] mb-4" />
+          <p className="text-gray-500">정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 이미 신청한 경우 (로그인 사용자)
+  if (alreadyApplied) {
+    return (
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+        <div className="text-center py-6 sm:py-8">
+          <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">📋</div>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">이미 무료체험을 신청하셨습니다</h3>
+
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <p className="text-gray-600 text-sm sm:text-base mb-2">
+              <span className="font-semibold text-gray-900">{formData.email}</span> 계정으로
+            </p>
+            <p className="text-gray-600 text-sm sm:text-base">
+              이미 무료체험이 신청되었습니다.
+            </p>
+          </div>
+
+          <div className="text-gray-500 text-xs sm:text-sm mb-6 space-y-2 flex flex-col items-center">
+            <p className="flex items-center gap-2">
+              <Check width={16} height={16} strokeWidth={2} className="text-green-500 flex-shrink-0" />
+              <span>포탈에서 서비스 이용이 가능해요.</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <Check width={16} height={16} strokeWidth={2} className="text-green-500 flex-shrink-0" />
+              <span>마이페이지에서 구독 상태를 확인하실 수 있어요.</span>
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a
+              href="https://app.yamoo.ai.kr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-8 rounded-lg transition-colors"
+            >
+              포탈 이동
+            </a>
+            <a
+              href={`/account?email=${encodeURIComponent(formData.email)}`}
+              className="inline-block bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-8 rounded-lg transition-colors"
+            >
+              마이페이지
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 성공 화면
   if (isSuccess) {
@@ -520,7 +591,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
 
         <div className="text-center mt-4 text-sm text-gray-500">
           <p>
-            💡 신청 후 <span className="text-[#ffbf03] font-bold">알림톡으로 포탈 접속 정보</span>를 받으세요<br />
+            💡 신청 시 포탈 접속 정보 전송<br />
             💳 카드 등록 불필요 • 🎁 무료 체험
           </p>
         </div>
@@ -558,7 +629,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               <h3 className="text-lg font-bold text-gray-900 mb-2">
                 오류
               </h3>
-              <p className="text-gray-600 text-sm mb-6">
+              <p className="text-gray-600 text-sm mb-6 whitespace-pre-line">
                 {submitError}
               </p>
 

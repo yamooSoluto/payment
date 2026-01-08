@@ -84,22 +84,103 @@ export async function GET(request: NextRequest) {
 
       const now = new Date();
 
-      // 기존 trial subscription 조회
+      // 1. subscriptions 컬렉션에서 조회
       const subscriptionRef = db.collection('subscriptions').doc(tenantId);
-      const subscriptionDoc = await subscriptionRef.get();
+      let subscriptionDoc = await subscriptionRef.get();
+      let subscriptionData = subscriptionDoc.exists ? subscriptionDoc.data() : null;
 
-      if (!subscriptionDoc.exists) {
+      // 2. subscriptions 컬렉션에 없으면 tenants 컬렉션에서 조회 (폴백)
+      if (!subscriptionData) {
+        const tenantSnapshot = await db
+          .collection('tenants')
+          .where('tenantId', '==', tenantId)
+          .limit(1)
+          .get();
+
+        if (!tenantSnapshot.empty) {
+          const tenantData = tenantSnapshot.docs[0].data();
+
+          if (tenantData.subscription) {
+            // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
+            let trialEndDate = tenantData.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt;
+            let startDate = tenantData.subscription.startedAt;
+
+            // startDate를 Date 객체로 변환
+            if (startDate && startDate.toDate) {
+              startDate = startDate.toDate();
+            } else if (startDate && startDate._seconds) {
+              startDate = new Date(startDate._seconds * 1000);
+            }
+
+            // trialEndDate를 Date 객체로 변환
+            if (trialEndDate && trialEndDate.toDate) {
+              trialEndDate = trialEndDate.toDate();
+            } else if (trialEndDate && trialEndDate._seconds) {
+              trialEndDate = new Date(trialEndDate._seconds * 1000);
+            }
+
+            subscriptionData = {
+              tenantId,
+              email: tenantData.email || email,
+              brandName: tenantData.brandName,
+              name: tenantData.name,
+              phone: tenantData.phone,
+              plan: tenantData.subscription.plan || tenantData.plan || 'trial',
+              status: tenantData.subscription.status === 'trialing' ? 'trial' : tenantData.subscription.status,
+              trialEndDate,
+              currentPeriodStart: startDate,
+              currentPeriodEnd: trialEndDate || tenantData.subscription.renewsAt,
+              nextBillingDate: tenantData.subscription.renewsAt,
+              createdAt: tenantData.createdAt || now,
+              updatedAt: now,
+            };
+
+            // subscriptions 컬렉션에 문서 생성
+            await subscriptionRef.set(subscriptionData);
+            console.log('Created subscription document from tenants collection data');
+          }
+        }
+      }
+
+      if (!subscriptionData) {
         const authQuery = authParam ? `&${authParam}` : '';
         return NextResponse.redirect(
-          new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent('Trial subscription not found')}`, request.url)
+          new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent('Subscription not found')}`, request.url)
         );
       }
 
-      const subscriptionData = subscriptionDoc.data();
+      // Trial 종료일 또는 현재 구독 종료일 (첫 결제일)
+      // Date 객체로 변환하는 헬퍼
+      const toDate = (value: unknown): Date | null => {
+        if (!value) return null;
+        if (value instanceof Date) return value;
+        if (typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+          return (value as { toDate: () => Date }).toDate();
+        }
+        if (typeof value === 'string' || typeof value === 'number') {
+          const d = new Date(value);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        return null;
+      };
 
-      // Trial 종료일 (첫 결제일)
-      const trialEndDate = subscriptionData?.trialEndDate?.toDate?.() || subscriptionData?.trialEndDate;
-      const pendingChangeAt = trialEndDate ? new Date(trialEndDate) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const trialEndDate = toDate(subscriptionData?.trialEndDate);
+      const nextBillingDateValue = toDate(subscriptionData?.nextBillingDate);
+      const isTrial = subscriptionData?.status === 'trial';
+
+      // pendingChangeAt 계산:
+      // - Trial 사용자: trialEndDate + 1 (무료체험 마지막 날 다음날)
+      // - Active 사용자: nextBillingDate 그대로 (다음 결제일이 곧 새 플랜 시작일)
+      let pendingChangeAt: Date;
+      if (isTrial && trialEndDate) {
+        pendingChangeAt = new Date(trialEndDate);
+        pendingChangeAt.setDate(pendingChangeAt.getDate() + 1);
+      } else if (nextBillingDateValue) {
+        pendingChangeAt = new Date(nextBillingDateValue);
+      } else {
+        // 폴백: 30일 후
+        pendingChangeAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      }
 
       // subscription 업데이트: pendingPlan 추가
       await subscriptionRef.update({

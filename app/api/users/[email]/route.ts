@@ -26,15 +26,34 @@ export async function GET(
     }
 
     const userDoc = await db.collection('users').doc(decodedEmail).get();
+    let userData = userDoc.exists ? userDoc.data() : null;
 
-    if (!userDoc.exists) {
-      return NextResponse.json(
-        { error: '사용자를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+    // users 컬렉션에 없으면 tenants 컬렉션에서 찾기
+    if (!userData) {
+      const tenantsSnapshot = await db.collection('tenants')
+        .where('email', '==', decodedEmail)
+        .limit(1)
+        .get();
+
+      if (!tenantsSnapshot.empty) {
+        const tenantData = tenantsSnapshot.docs[0].data();
+        userData = {
+          email: tenantData.email,
+          name: tenantData.ownerName || tenantData.name || '',
+          phone: tenantData.phone || '',
+        };
+      }
     }
 
-    const userData = userDoc.data();
+    // users에도 tenants에도 없으면 email만 반환
+    if (!userData) {
+      return NextResponse.json({
+        email: decodedEmail,
+        name: '',
+        phone: '',
+        trialApplied: false,
+      });
+    }
 
     // 1. email 기준 trialApplied 확인
     let trialApplied = userData?.trialApplied || false;
@@ -49,6 +68,21 @@ export async function GET(
 
       if (!phoneTrialCheck.empty) {
         trialApplied = true;
+      }
+    }
+
+    // 3. tenants 컬렉션에서 체험 중인 매장이 있는지 확인
+    if (!trialApplied) {
+      const trialTenantsSnapshot = await db.collection('tenants')
+        .where('email', '==', decodedEmail)
+        .get();
+
+      for (const doc of trialTenantsSnapshot.docs) {
+        const tenantData = doc.data();
+        if (tenantData.subscription?.plan === 'trial' || tenantData.subscription?.status === 'trial') {
+          trialApplied = true;
+          break;
+        }
       }
     }
 

@@ -66,9 +66,23 @@ function SuccessContent() {
   const email = searchParams.get('email');
   const startParam = searchParams.get('start');
   const endParam = searchParams.get('end');
+  const reserved = searchParams.get('reserved') === 'true'; // 플랜 예약 모드
 
   // 이용 기간 계산 (URL 파라미터 사용)
-  const period = getSubscriptionPeriod(startParam, endParam);
+  // 플랜 예약 모드에서는 start가 첫 결제일(= 이용 시작일)
+  const period = reserved && startParam
+    ? (() => {
+        const startDate = new Date(startParam);
+        const endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + 1);
+        endDate.setDate(endDate.getDate() - 1);
+        return {
+          start: formatDate(startDate),
+          end: formatDate(endDate),
+          nextBilling: formatDate(startDate), // 첫 결제일 = 이용 시작일
+        };
+      })()
+    : getSubscriptionPeriod(startParam, endParam);
 
   // 인증 파라미터 생성
   const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
@@ -86,7 +100,7 @@ function SuccessContent() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          결제가 완료되었습니다!
+          {reserved ? '플랜 예약이 완료되었습니다!' : '결제가 완료되었습니다!'}
         </h1>
 
         {tenantName && (
@@ -96,27 +110,29 @@ function SuccessContent() {
         )}
 
         <p className="text-gray-600 mb-6">
-          YAMOO {getPlanName(plan)} 플랜 구독이 시작되었습니다.
+          {reserved
+            ? `${period.nextBilling}부터 ${getPlanName(plan)} 플랜이 시작됩니다.`
+            : `YAMOO ${getPlanName(plan)} 플랜 구독이 시작되었습니다.`}
         </p>
 
         <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left space-y-3">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">구독 플랜</span>
+            <span className="text-gray-500 text-sm">{reserved ? '예약 플랜' : '구독 플랜'}</span>
             <span className="text-gray-900 font-semibold">{getPlanName(plan)}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">이용 기간</span>
+            <span className="text-gray-500 text-sm">{reserved ? '예정 이용 기간' : '이용 기간'}</span>
             <span className="text-gray-900 text-sm">
               {period.start} ~ {period.end}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">다음 결제일</span>
+            <span className="text-gray-500 text-sm">{reserved ? '첫 결제일' : '다음 결제일'}</span>
             <span className="text-gray-900 text-sm">
               {period.nextBilling}
             </span>
           </div>
-          {orderId && (
+          {orderId && !reserved && (
             <div className="pt-2 border-t border-gray-200">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-gray-400 text-xs">주문번호</span>
@@ -125,6 +141,15 @@ function SuccessContent() {
             </div>
           )}
         </div>
+
+        {reserved && (
+          <div className="bg-blue-50 rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-blue-700">
+              등록하신 카드로 첫 결제일에 자동 결제됩니다.<br />
+              예약은 마이페이지에서 언제든 취소할 수 있습니다.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3">
           <Link
