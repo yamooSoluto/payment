@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash } from 'iconoir-react';
 
 interface Member {
   id: string;
@@ -76,6 +76,33 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     amount: 0,
   });
   const [savingPolicy, setSavingPolicy] = useState(false);
+
+  // 수동 결제 모달 상태
+  const [manualChargeModal, setManualChargeModal] = useState<{
+    isOpen: boolean;
+    tenantId: string;
+    tenantName: string;
+  } | null>(null);
+  const [chargeFormData, setChargeFormData] = useState({
+    plan: 'basic',
+    amount: 39000,
+    reason: '',
+    selectedCardId: '',
+  });
+  const [chargeInfo, setChargeInfo] = useState<{
+    canCharge: boolean;
+    email?: string;
+    cards?: Array<{
+      id: string;
+      cardInfo?: { company?: string; number?: string; cardType?: string };
+      alias?: string;
+      isPrimary?: boolean;
+    }>;
+    reason?: string;
+  } | null>(null);
+  const [loadingChargeInfo, setLoadingChargeInfo] = useState(false);
+  const [processingCharge, setProcessingCharge] = useState(false);
+  const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMemberDetail();
@@ -166,6 +193,99 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     } finally {
       setSavingPolicy(false);
     }
+  };
+
+  // 수동 결제 모달 열기
+  const openManualChargeModal = async (tenant: TenantInfo) => {
+    setManualChargeModal({
+      isOpen: true,
+      tenantId: tenant.tenantId,
+      tenantName: tenant.brandName,
+    });
+    setChargeInfo(null);
+    setLoadingChargeInfo(true);
+
+    // 플랜별 기본 금액 설정
+    const planPrices: Record<string, number> = {
+      basic: 39000,
+      business: 99000,
+    };
+    const currentPlan = tenant.subscription?.plan || 'basic';
+    const defaultPlan = currentPlan === 'trial' ? 'basic' : currentPlan;
+    setChargeFormData({
+      plan: defaultPlan,
+      amount: planPrices[defaultPlan] || 39000,
+      reason: '',
+      selectedCardId: '',
+    });
+
+    // 결제 가능 여부 확인 및 카드 목록 조회
+    try {
+      const response = await fetch(`/api/admin/payments/manual-charge?tenantId=${tenant.tenantId}`);
+      const data = await response.json();
+      setChargeInfo(data);
+      // 첫 번째 카드(primary)를 기본 선택
+      if (data.cards && data.cards.length > 0) {
+        setChargeFormData(prev => ({ ...prev, selectedCardId: data.cards[0].id }));
+      }
+    } catch (error) {
+      console.error('Failed to check charge availability:', error);
+      setChargeInfo({ canCharge: false, reason: '정보를 불러올 수 없습니다.' });
+    } finally {
+      setLoadingChargeInfo(false);
+    }
+  };
+
+  // 수동 결제 실행
+  const handleManualCharge = async () => {
+    if (!manualChargeModal || !chargeInfo?.canCharge) return;
+
+    if (!confirm(`${chargeFormData.amount.toLocaleString()}원을 결제하시겠습니까?`)) {
+      return;
+    }
+
+    setProcessingCharge(true);
+    try {
+      const response = await fetch('/api/admin/payments/manual-charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: manualChargeModal.tenantId,
+          plan: chargeFormData.plan,
+          amount: chargeFormData.amount,
+          reason: chargeFormData.reason || '관리자 수동 결제',
+          cardId: chargeFormData.selectedCardId || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert(`결제가 완료되었습니다.\n주문번호: ${data.orderId}\n금액: ${data.amount.toLocaleString()}원`);
+        setManualChargeModal(null);
+        fetchMemberDetail(); // 데이터 새로고침
+      } else {
+        alert(data.error || '결제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Manual charge failed:', error);
+      alert('결제 처리 중 오류가 발생했습니다.');
+    } finally {
+      setProcessingCharge(false);
+    }
+  };
+
+  // 플랜 변경 시 금액 자동 설정
+  const handlePlanChange = (plan: string) => {
+    const planPrices: Record<string, number> = {
+      basic: 39000,
+      business: 99000,
+    };
+    setChargeFormData({
+      ...chargeFormData,
+      plan,
+      amount: planPrices[plan] || chargeFormData.amount,
+    });
   };
 
   const getStatusBadge = (status: string, size: 'sm' | 'md' = 'md') => {
@@ -394,74 +514,113 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             <div className="flex items-center gap-2 mb-4">
               <Sofa className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-semibold">매장 목록</h2>
+              <span className="text-sm text-gray-400">({tenants.length})</span>
             </div>
             {tenants.length === 0 ? (
               <p className="text-gray-500 text-center py-4">등록된 매장이 없습니다.</p>
             ) : (
-              <ul className="space-y-3">
-                {tenants.map((tenant) => (
-                  <li key={tenant.tenantId} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <p className="font-medium text-gray-900">{tenant.brandName}</p>
-                      {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
-                    </div>
-                    {tenant.address && <p className="text-sm text-gray-500 mt-1">{tenant.address}</p>}
-                    {tenant.subscription && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        <div className="flex justify-between">
-                          <span>플랜</span>
-                          <span className="font-medium">{getPlanName(tenant.subscription.plan)}</span>
+              <div className="space-y-2">
+                {tenants.map((tenant) => {
+                  const isExpanded = expandedTenantId === tenant.tenantId;
+                  return (
+                    <div key={tenant.tenantId} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* 아코디언 헤더 */}
+                      <button
+                        onClick={() => setExpandedTenantId(isExpanded ? null : tenant.tenantId)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium text-gray-900">{tenant.brandName}</span>
+                          {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
                         </div>
-                        {tenant.subscription.amount > 0 && (
-                          <div className="flex justify-between">
-                            <span>금액</span>
-                            <span>{tenant.subscription.amount.toLocaleString()}원/월</span>
-                          </div>
-                        )}
-                        {tenant.subscription.nextBillingDate && (
-                          <div className="flex justify-between">
-                            <span>다음 결제일</span>
-                            <span>{new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}</span>
-                          </div>
-                        )}
-                        {/* 가격 정책 */}
-                        <div className="flex justify-between items-center mt-1">
-                          <span>가격 정책</span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            tenant.subscription.pricePolicy === 'grandfathered'
-                              ? 'bg-purple-100 text-purple-700'
-                              : tenant.subscription.pricePolicy === 'protected_until'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {PRICE_POLICY_LABELS[tenant.subscription.pricePolicy || 'standard']}
-                          </span>
-                        </div>
-                        {tenant.subscription.pricePolicy === 'protected_until' && tenant.subscription.priceProtectedUntil && (
-                          <div className="flex justify-between text-xs text-amber-600 mt-1">
-                            <span>보호 기간</span>
-                            <span>~{new Date(tenant.subscription.priceProtectedUntil).toLocaleDateString('ko-KR')}</span>
-                          </div>
-                        )}
-                        {tenant.subscription.originalAmount && tenant.subscription.originalAmount !== tenant.subscription.amount && (
-                          <div className="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>원래 금액</span>
-                            <span>{tenant.subscription.originalAmount.toLocaleString()}원</span>
-                          </div>
-                        )}
-                        {tenant.subscription.status === 'active' && (
-                          <button
-                            onClick={() => openPricePolicyModal(tenant)}
-                            className="w-full mt-2 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                        <div className="flex items-center gap-2">
+                          {tenant.subscription && (
+                            <span className="text-xs text-gray-500">{getPlanName(tenant.subscription.plan)}</span>
+                          )}
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            가격 정책 변경
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+
+                      {/* 아코디언 콘텐츠 */}
+                      {isExpanded && (
+                        <div className="px-4 py-3 bg-white border-t border-gray-100">
+                          {tenant.address && <p className="text-sm text-gray-500 mb-2">{tenant.address}</p>}
+                          {tenant.subscription && (
+                            <div className="text-sm text-gray-600 space-y-1">
+                              <div className="flex justify-between">
+                                <span>플랜</span>
+                                <span className="font-medium">{getPlanName(tenant.subscription.plan)}</span>
+                              </div>
+                              {tenant.subscription.amount > 0 && (
+                                <div className="flex justify-between">
+                                  <span>금액</span>
+                                  <span>{tenant.subscription.amount.toLocaleString()}원/월</span>
+                                </div>
+                              )}
+                              {tenant.subscription.nextBillingDate && (
+                                <div className="flex justify-between">
+                                  <span>다음 결제일</span>
+                                  <span>{new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}</span>
+                                </div>
+                              )}
+                              {/* 가격 정책 */}
+                              <div className="flex justify-between items-center">
+                                <span>가격 정책</span>
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  tenant.subscription.pricePolicy === 'grandfathered'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : tenant.subscription.pricePolicy === 'protected_until'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {PRICE_POLICY_LABELS[tenant.subscription.pricePolicy || 'standard']}
+                                </span>
+                              </div>
+                              {tenant.subscription.pricePolicy === 'protected_until' && tenant.subscription.priceProtectedUntil && (
+                                <div className="flex justify-between text-xs text-amber-600">
+                                  <span>보호 기간</span>
+                                  <span>~{new Date(tenant.subscription.priceProtectedUntil).toLocaleDateString('ko-KR')}</span>
+                                </div>
+                              )}
+                              {tenant.subscription.originalAmount && tenant.subscription.originalAmount !== tenant.subscription.amount && (
+                                <div className="flex justify-between text-xs text-gray-500">
+                                  <span>원래 금액</span>
+                                  <span>{tenant.subscription.originalAmount.toLocaleString()}원</span>
+                                </div>
+                              )}
+                              {/* 관리자 액션 버튼들 */}
+                              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                                {tenant.subscription.status === 'active' && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openPricePolicyModal(tenant); }}
+                                    className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                                  >
+                                    가격 정책
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openManualChargeModal(tenant); }}
+                                  className="flex-1 px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <HandCash className="w-3 h-3" />
+                                  수동 결제
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -586,6 +745,165 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingPolicy ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 수동 결제 모달 */}
+      {manualChargeModal?.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center gap-2 mb-4">
+              <HandCash className="w-5 h-5 text-blue-600" />
+              <h3 className="text-lg font-semibold">수동 결제</h3>
+            </div>
+
+            {/* 매장 정보 */}
+            <div className="bg-gray-50 rounded-lg p-3 text-sm mb-4">
+              <div className="flex justify-between mb-1">
+                <span className="text-gray-500">매장</span>
+                <span className="font-medium">{manualChargeModal.tenantName}</span>
+              </div>
+              {chargeInfo?.email && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">이메일</span>
+                  <span className="font-medium text-xs">{chargeInfo.email}</span>
+                </div>
+              )}
+            </div>
+
+            {loadingChargeInfo ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshDouble className="w-6 h-6 text-blue-600 animate-spin" />
+              </div>
+            ) : !chargeInfo?.canCharge ? (
+              <div className="text-center py-6">
+                <p className="text-red-500 mb-2">결제를 진행할 수 없습니다.</p>
+                <p className="text-sm text-gray-500">{chargeInfo?.reason}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 결제 카드 선택 */}
+                {chargeInfo.cards && chargeInfo.cards.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      결제 카드 선택 <span className="text-gray-400 font-normal">({chargeInfo.cards.length}개)</span>
+                    </label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <select
+                        value={chargeFormData.selectedCardId}
+                        onChange={(e) => setChargeFormData({ ...chargeFormData, selectedCardId: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 appearance-none bg-white cursor-pointer"
+                      >
+                        {chargeInfo.cards.map((card) => (
+                          <option key={card.id} value={card.id}>
+                            {card.cardInfo?.company || '카드'} {card.cardInfo?.number || '****'}
+                            {card.isPrimary ? ' (기본)' : ''}
+                            {card.alias ? ` - ${card.alias}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 플랜 선택 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    플랜 선택
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePlanChange('basic')}
+                      className={`px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                        chargeFormData.plan === 'basic'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div>Basic</div>
+                      <div className="text-xs text-gray-500">39,000원</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePlanChange('business')}
+                      className={`px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                        chargeFormData.plan === 'business'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div>Business</div>
+                      <div className="text-xs text-gray-500">99,000원</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 금액 입력 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    결제 금액 (원)
+                  </label>
+                  <input
+                    type="number"
+                    value={chargeFormData.amount}
+                    onChange={(e) => setChargeFormData({ ...chargeFormData, amount: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    min={0}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    금액을 직접 수정할 수 있습니다. (할인, 프로모션 등)
+                  </p>
+                </div>
+
+                {/* 결제 사유 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    결제 사유 (선택)
+                  </label>
+                  <input
+                    type="text"
+                    value={chargeFormData.reason}
+                    onChange={(e) => setChargeFormData({ ...chargeFormData, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="예: 카드 변경 후 재결제, 환불 후 재청구"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setManualChargeModal(null)}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleManualCharge}
+                disabled={!chargeInfo?.canCharge || processingCharge || chargeFormData.amount <= 0}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {processingCharge ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    처리중...
+                  </>
+                ) : (
+                  <>
+                    <HandCash className="w-4 h-4" />
+                    {chargeFormData.amount.toLocaleString()}원 결제
+                  </>
+                )}
               </button>
             </div>
           </div>
