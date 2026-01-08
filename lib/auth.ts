@@ -35,7 +35,7 @@ export async function verifyToken(token: string): Promise<string | null> {
 
   try {
     // 1. JWT 검증
-    const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as unknown as TokenPayload;
 
     // 2. purpose 체크
     if (payload.purpose !== 'checkout' && payload.purpose !== 'account') {
