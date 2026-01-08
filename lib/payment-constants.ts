@@ -62,10 +62,3 @@ export function getPaymentScheduleText(options: {
   // 일반 결제 (처음 구독)
   return `${formatPrice(amount)}원이 즉시 결제되고, 매월 동일한 날짜에 자동 결제됩니다.`;
 }
-
-/**
- * 전체 결제 동의 텍스트 생성 (스케줄 + 환불규정)
- */
-export function getFullAgreementText(options: Parameters<typeof getPaymentScheduleText>[0]): string {
-  return `${getPaymentScheduleText(options)} ${REFUND_POLICY}`;
-}
