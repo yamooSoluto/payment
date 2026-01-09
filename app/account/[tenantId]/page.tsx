@@ -7,8 +7,9 @@ import CardList from '@/components/account/CardList';
 import AccountTabs from '@/components/account/AccountTabs';
 import SubscriptionHistory from '@/components/account/SubscriptionHistory';
 import TenantHeader from '@/components/account/TenantHeader';
+import NoSubscriptionCard from '@/components/account/NoSubscriptionCard';
 import Link from 'next/link';
-import { NavArrowLeft, NavArrowRight, Sofa } from 'iconoir-react';
+import { NavArrowLeft } from 'iconoir-react';
 
 interface TenantPageProps {
   params: Promise<{ tenantId: string }>;
@@ -156,6 +157,49 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   const payments = serializeData(limitedPayments);
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
+  // 사용자 정보 및 무료체험 이력 확인 (구독이 없을 때만)
+  let hasTrialHistory = false;
+  let userName: string | undefined;
+  let userPhone: string | undefined;
+
+  if (!subscription) {
+    // users 컬렉션에서 사용자 정보 조회
+    const userDoc = await db.collection('users').doc(email).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      hasTrialHistory = userData?.trialApplied === true;
+      userName = userData?.name;
+      userPhone = userData?.phone;
+    }
+
+    // 해당 이메일로 등록된 다른 tenant들 중 trial 이력이 있는지 확인
+    if (!hasTrialHistory) {
+      const tenantsSnapshot = await db.collection('tenants')
+        .where('email', '==', email)
+        .get();
+
+      for (const doc of tenantsSnapshot.docs) {
+        const tData = doc.data();
+        // trial 상태였던 이력이 있거나 subscription이 있으면 무료체험 이력으로 간주
+        if (tData.subscription?.status === 'trial' ||
+            tData.subscription?.plan === 'trial' ||
+            tData.trial?.trialEndsAt) {
+          hasTrialHistory = true;
+          break;
+        }
+        // subscriptions 컬렉션도 확인
+        const subDoc = await db.collection('subscriptions').doc(tData.tenantId || doc.id).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          if (subData?.status === 'trial' || subData?.plan === 'trial' || subData?.trialEndDate) {
+            hasTrialHistory = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
@@ -209,21 +253,16 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
           />
         ) : (
           /* 구독이 없을 때 */
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sofa width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              이 매장에 구독 중인 플랜이 없습니다
-            </h2>
-            <Link
-              href={`/pricing?${authParam}&tenantId=${tenantId}`}
-              className="btn-primary inline-flex items-center gap-2"
-            >
-              요금제 보기
-              <NavArrowRight width={20} height={20} strokeWidth={1.5} />
-            </Link>
-          </div>
+          <NoSubscriptionCard
+            tenantId={tenantId}
+            brandName={tenantData.brandName || '매장'}
+            email={email}
+            authParam={authParam}
+            hasTrialHistory={hasTrialHistory}
+            userName={userName}
+            userPhone={userPhone}
+            industry={tenantData.industry}
+          />
         )}
       </div>
     </div>
