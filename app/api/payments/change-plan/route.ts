@@ -121,6 +121,20 @@ export async function POST(request: NextRequest) {
 
     // 3. 트랜잭션으로 데이터 업데이트
     await db.runTransaction(async (transaction) => {
+      // === 모든 읽기 먼저 수행 ===
+      let existingRefunded = 0;
+      let originalPaymentRef = null;
+
+      if (creditAmount && creditAmount > 0 && refundResult && originalPaymentId) {
+        originalPaymentRef = db.collection('payments').doc(originalPaymentId);
+        const originalPaymentDoc = await transaction.get(originalPaymentRef);
+        if (originalPaymentDoc.exists) {
+          existingRefunded = originalPaymentDoc.data()?.refundedAmount || 0;
+        }
+      }
+
+      // === 모든 쓰기 수행 ===
+
       // 환불 내역 저장 (기존 플랜)
       if (creditAmount && creditAmount > 0 && refundResult) {
         const refundDocId = `${refundOrderId}_${Date.now()}`;
@@ -144,18 +158,13 @@ export async function POST(request: NextRequest) {
         });
 
         // 원결제 문서에 환불 정보 업데이트
-        if (originalPaymentId) {
-          const originalPaymentRef = db.collection('payments').doc(originalPaymentId);
-          const originalPaymentDoc = await transaction.get(originalPaymentRef);
-          if (originalPaymentDoc.exists) {
-            const existingRefunded = originalPaymentDoc.data()?.refundedAmount || 0;
-            transaction.update(originalPaymentRef, {
-              refundedAmount: existingRefunded + creditAmount,
-              lastRefundAt: now,
-              lastRefundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경`,
-              updatedAt: now,
-            });
-          }
+        if (originalPaymentRef) {
+          transaction.update(originalPaymentRef, {
+            refundedAmount: existingRefunded + creditAmount,
+            lastRefundAt: now,
+            lastRefundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경`,
+            updatedAt: now,
+          });
         }
       }
 
