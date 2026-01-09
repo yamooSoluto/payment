@@ -89,13 +89,50 @@ export async function POST(request: Request) {
       );
     }
 
-    // 연락처 중복 확인 (users, tenants 모두 체크)
+    // 무료체험 이력 확인 (phone 기준)
+    // 1. users 컬렉션에서 trialApplied가 true인 경우
+    // 2. tenants 컬렉션에서 subscription이 있거나 trial 이력이 있는 경우
     const [existingUserPhone, existingTenantPhone] = await Promise.all([
       db.collection('users').where('phone', '==', phone).limit(1).get(),
       db.collection('tenants').where('phone', '==', phone).limit(1).get(),
     ]);
 
-    if (!existingUserPhone.empty || !existingTenantPhone.empty) {
+    // 실제 무료체험 이력이 있는지 확인
+    let hasActualTrialHistory = false;
+    let trialHistorySource: 'user' | 'tenant' | null = null;
+
+    // users에서 trialApplied 확인
+    if (!existingUserPhone.empty) {
+      const userData = existingUserPhone.docs[0].data();
+      if (userData.trialApplied === true) {
+        hasActualTrialHistory = true;
+        trialHistorySource = 'user';
+      }
+    }
+
+    // tenants에서 subscription/trial 이력 확인
+    if (!hasActualTrialHistory && !existingTenantPhone.empty) {
+      const tenantData = existingTenantPhone.docs[0].data();
+      const tenantId = tenantData.tenantId || existingTenantPhone.docs[0].id;
+
+      // subscription이 있거나 trial 관련 필드가 있는 경우
+      if (tenantData.subscription?.plan || tenantData.subscription?.status || tenantData.trialEndsAt) {
+        hasActualTrialHistory = true;
+        trialHistorySource = 'tenant';
+      } else {
+        // subscriptions 컬렉션에서도 확인
+        const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          if (subData?.plan || subData?.status) {
+            hasActualTrialHistory = true;
+            trialHistorySource = 'tenant';
+          }
+        }
+      }
+    }
+
+    if (hasActualTrialHistory) {
       // 이전 체험 이력 정보 조회
       let trialHistory: { brandName: string; periodStart: string; periodEnd: string } | null = null;
 
