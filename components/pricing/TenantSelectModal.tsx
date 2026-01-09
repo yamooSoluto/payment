@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Xmark, Sofa, Sparks, CreditCard, WarningCircle, ArrowRight } from 'iconoir-react';
+import { useState, useEffect } from 'react';
+import { Xmark, Sofa, Sparks, CreditCard, WarningCircle, ArrowRight, ArrowLeft } from 'iconoir-react';
 import { cn } from '@/lib/utils';
+import { INDUSTRY_OPTIONS } from '@/lib/constants';
 
 interface Tenant {
   id: string;
@@ -72,6 +73,22 @@ export default function TenantSelectModal({
     tenantId: '',
   });
 
+  // 매장 정보 입력 폼 상태
+  const [showTenantForm, setShowTenantForm] = useState(false);
+  const [brandName, setBrandName] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // 모달이 닫힐 때 폼 상태 초기화
+  useEffect(() => {
+    if (!isOpen) {
+      setShowTenantForm(false);
+      setBrandName('');
+      setIndustry('');
+      setFormError(null);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const hasTenants = tenants.length > 0;
@@ -81,14 +98,31 @@ export default function TenantSelectModal({
   };
 
   const handleDirectPayment = () => {
-    const url = `/checkout?plan=${selectedPlan}&${authParam}&newTenant=true`;
+    // 매장 정보 입력 폼 표시
+    setShowTenantForm(true);
+    setFormError(null);
+  };
 
-    // 무료체험 이력이 없으면 팝업 표시 (trial 플랜 제외)
-    if (selectedPlan !== 'trial' && !trialApplied && onCheckTrialBeforeSubscribe) {
-      onCheckTrialBeforeSubscribe(selectedPlan, url);
-    } else {
-      window.location.href = url;
+  const handleBackToSelection = () => {
+    setShowTenantForm(false);
+    setBrandName('');
+    setIndustry('');
+    setFormError(null);
+  };
+
+  const handleTenantFormSubmit = () => {
+    if (!brandName.trim()) {
+      setFormError('매장명을 입력해주세요.');
+      return;
     }
+    if (!industry) {
+      setFormError('업종을 선택해주세요.');
+      return;
+    }
+
+    // 매장 정보와 함께 결제 페이지로 이동
+    const url = `/checkout?plan=${selectedPlan}&${authParam}&newTenant=true&brandName=${encodeURIComponent(brandName.trim())}&industry=${encodeURIComponent(industry)}`;
+    window.location.href = url;
   };
 
   const handleSelectTenant = (tenant: Tenant) => {
@@ -184,8 +218,16 @@ export default function TenantSelectModal({
         <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-            <h2 className="text-xl font-bold text-gray-900">
-              {hasTenants ? '매장 선택' : '서비스 시작하기'}
+            {showTenantForm && (
+              <button
+                onClick={handleBackToSelection}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors mr-2"
+              >
+                <ArrowLeft width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+              </button>
+            )}
+            <h2 className="text-xl font-bold text-gray-900 flex-1">
+              {showTenantForm ? '매장 정보 입력' : hasTenants ? '매장 선택' : '서비스 시작하기'}
             </h2>
             <button
               onClick={onClose}
@@ -197,7 +239,73 @@ export default function TenantSelectModal({
 
           {/* Content */}
           <div className="p-6 overflow-y-auto flex-1">
-            {hasTenants ? (
+            {showTenantForm ? (
+              // 매장 정보 입력 폼
+              <div className="space-y-4">
+                <p className="text-gray-600 text-center mb-4">
+                  구독할 매장의 정보를 입력해주세요.
+                </p>
+
+                {/* 매장명 입력 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    매장명 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="예: 야무 강남점"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                </div>
+
+                {/* 업종 선택 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    업종 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                  >
+                    <option value="">업종을 선택해주세요</option>
+                    {INDUSTRY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    업종은 최초 설정 후 변경할 수 없습니다.
+                  </p>
+                </div>
+
+                {formError && (
+                  <p className="text-sm text-red-600">{formError}</p>
+                )}
+
+                {/* 버튼 */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleBackToSelection}
+                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    이전
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTenantFormSubmit}
+                    disabled={!brandName.trim() || !industry}
+                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    결제 진행
+                  </button>
+                </div>
+              </div>
+            ) : hasTenants ? (
               // 매장이 있는 경우: 매장 선택
               <div className="space-y-3">
                 <p className="text-gray-600 mb-4">

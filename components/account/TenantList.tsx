@@ -44,7 +44,7 @@ function PricingGuidanceModal({ isOpen, onClose }: PricingGuidanceModalProps) {
           </h3>
           <p className="text-gray-600 mb-6 text-sm">
             첫 매장은 요금제 선택 후 자동으로 생성됩니다.<br />
-            30일 무료체험도 가능합니다!
+            1개월 무료체험도 가능합니다!
           </p>
           <div className="flex flex-col gap-3">
             <button
