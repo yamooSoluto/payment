@@ -3,9 +3,68 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Shop } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Shop, Xmark, Gift } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import AddTenantModal from './AddTenantModal';
+
+// 요금제 선택 안내 모달
+interface PricingGuidanceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function PricingGuidanceModal({ isOpen, onClose }: PricingGuidanceModalProps) {
+  const router = useRouter();
+
+  if (!isOpen) return null;
+
+  const handleGoPricing = () => {
+    router.push('/pricing');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors z-10"
+        >
+          <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+        </button>
+
+        {/* Content */}
+        <div className="p-8 text-center">
+          <div className="w-16 h-16 bg-yamoo-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Gift width={32} height={32} strokeWidth={1.5} className="text-yamoo-primary" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            요금제를 먼저 선택해주세요
+          </h3>
+          <p className="text-gray-600 mb-6 text-sm">
+            첫 매장은 요금제 선택 후 자동으로 생성됩니다.<br />
+            30일 무료체험도 가능합니다!
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleGoPricing}
+              className="w-full py-3 bg-yamoo-primary text-gray-900 rounded-lg font-semibold hover:bg-yamoo-primary/90 transition-colors"
+            >
+              요금제 선택하러 가기
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full py-3 text-gray-500 hover:text-gray-700 transition-colors text-sm"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Subscription {
   plan: string;
@@ -30,6 +89,7 @@ interface TenantListProps {
   authParam: string;
   email: string;
   initialTenants: Tenant[];
+  hasTrialHistory?: boolean;
 }
 
 const PLAN_CONFIG: Record<string, { label: string; color: string }> = {
@@ -53,10 +113,11 @@ interface NewTenantData {
   industry: string;
 }
 
-export default function TenantList({ authParam, email, initialTenants }: TenantListProps) {
+export default function TenantList({ authParam, email, initialTenants, hasTrialHistory = false }: TenantListProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showPricingGuidance, setShowPricingGuidance] = useState(false);
   const [pendingTenants, setPendingTenants] = useState<Tenant[]>([]);
 
   // initialTenants가 업데이트되면 pending에서 중복 제거
@@ -87,6 +148,23 @@ export default function TenantList({ authParam, email, initialTenants }: TenantL
     router.refresh();
   };
 
+  // 매장 추가 버튼 클릭 핸들러
+  const handleAddTenantClick = () => {
+    // 첫 매장 추가 시 무료체험 이력이 없으면 요금제 선택으로 유도
+    // (구독 중인 매장이 없고, 무료체험도 안 해봤으면)
+    const hasAnySubscription = tenants.some(t =>
+      t.subscription?.status === 'active' ||
+      t.subscription?.status === 'trial' ||
+      t.subscription?.status === 'canceled'
+    );
+
+    if (tenants.length === 0 && !hasTrialHistory && !hasAnySubscription) {
+      setShowPricingGuidance(true);
+    } else {
+      setShowAddModal(true);
+    }
+  };
+
   if (tenants.length === 0) {
     return (
       <>
@@ -98,14 +176,16 @@ export default function TenantList({ authParam, email, initialTenants }: TenantL
             등록된 매장이 없습니다
           </h2>
           <p className="text-gray-600 mb-6">
-            새 매장을 추가해주세요.
+            {!hasTrialHistory
+              ? '요금제를 선택하고 첫 매장을 추가해주세요.'
+              : '새 매장을 추가해주세요.'}
           </p>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={handleAddTenantClick}
             className="btn-primary inline-flex items-center gap-2"
           >
             <Plus width={20} height={20} strokeWidth={2} />
-            새 매장 추가하기
+            {!hasTrialHistory ? '시작하기' : '새 매장 추가하기'}
           </button>
         </div>
 
@@ -116,6 +196,11 @@ export default function TenantList({ authParam, email, initialTenants }: TenantL
             authParam={authParam}
           />
         )}
+
+        <PricingGuidanceModal
+          isOpen={showPricingGuidance}
+          onClose={() => setShowPricingGuidance(false)}
+        />
       </>
     );
   }
@@ -225,7 +310,7 @@ export default function TenantList({ authParam, email, initialTenants }: TenantL
           {/* 새 매장 추가 버튼 */}
           <div className="p-4 bg-gray-50 border-t border-gray-100">
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={handleAddTenantClick}
               className="flex items-center justify-center gap-2 w-full py-3 text-sm text-gray-600 hover:text-yamoo-primary transition-colors"
             >
               <Plus width={16} height={16} strokeWidth={2} />
@@ -242,6 +327,11 @@ export default function TenantList({ authParam, email, initialTenants }: TenantL
           authParam={authParam}
         />
       )}
+
+      <PricingGuidanceModal
+        isOpen={showPricingGuidance}
+        onClose={() => setShowPricingGuidance(false)}
+      />
     </div>
   );
 }

@@ -167,10 +167,12 @@ export default function NoSubscriptionCard({
     setTrialError(null);
 
     try {
-      const response = await fetch('/api/trial/create', {
+      // 기존 tenant에 trial 적용 (새 tenant 생성 안 함)
+      const response = await fetch('/api/trial/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          tenantId,
           email,
           name: userName,
           phone: userPhone,

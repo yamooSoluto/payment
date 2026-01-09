@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { sendAlimtalk } from '@/lib/bizm';
+import crypto from 'crypto';
+
+// 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
+function hashPhone(phone: string): string {
+  return crypto.createHash('sha256').update(phone).digest('hex');
+}
 
 /**
  * 다양한 형식의 날짜를 Date 객체로 변환
@@ -92,17 +98,26 @@ export async function POST(request: Request) {
     // 무료체험 이력 확인 (phone 기준)
     // 1. users 컬렉션에서 trialApplied가 true인 경우
     // 2. tenants 컬렉션에서 subscription이 있거나 trial 이력이 있는 경우
-    const [existingUserPhone, existingTenantPhone] = await Promise.all([
+    // 3. used_trial_phones 컬렉션에서 해시된 번호 확인 (탈퇴 회원)
+    const phoneHash = hashPhone(phone);
+    const [existingUserPhone, existingTenantPhone, existingTrialHash] = await Promise.all([
       db.collection('users').where('phone', '==', phone).limit(1).get(),
       db.collection('tenants').where('phone', '==', phone).limit(1).get(),
+      db.collection('used_trial_phones').doc(phoneHash).get(),
     ]);
 
     // 실제 무료체험 이력이 있는지 확인
     let hasActualTrialHistory = false;
-    let trialHistorySource: 'user' | 'tenant' | null = null;
+    let trialHistorySource: 'user' | 'tenant' | 'deleted' | null = null;
+
+    // 탈퇴 회원의 해시된 번호 확인 (used_trial_phones)
+    if (existingTrialHash.exists) {
+      hasActualTrialHistory = true;
+      trialHistorySource = 'deleted';
+    }
 
     // users에서 trialApplied 확인
-    if (!existingUserPhone.empty) {
+    if (!hasActualTrialHistory && !existingUserPhone.empty) {
       const userData = existingUserPhone.docs[0].data();
       if (userData.trialApplied === true) {
         hasActualTrialHistory = true;

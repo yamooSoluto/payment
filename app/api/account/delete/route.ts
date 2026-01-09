@@ -124,7 +124,47 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 4. 탈퇴 로그 저장
+    // 4. users 컬렉션 처리 - 보관 기간 차등 적용
+    // - 결제 고객: 5년 (전자상거래법)
+    // - 무료체험만: 1년 (부정 이용 방지)
+    const userRef = db.collection('users').doc(email);
+    const userDocData = await userRef.get();
+    if (userDocData.exists) {
+      // 결제 이력 확인 (payments 컬렉션에서 성공한 결제가 있는지)
+      let hasPaidHistory = false;
+      for (const tenantId of tenantIds) {
+        const paymentsSnapshot = await db.collection('payments')
+          .where('tenantId', '==', tenantId)
+          .where('status', '==', 'DONE')
+          .limit(1)
+          .get();
+        if (!paymentsSnapshot.empty) {
+          hasPaidHistory = true;
+          break;
+        }
+      }
+
+      // 보관 기간 계산
+      const retentionEndDate = new Date(now);
+      if (hasPaidHistory) {
+        retentionEndDate.setFullYear(retentionEndDate.getFullYear() + 5); // 결제 고객: 5년
+      } else {
+        retentionEndDate.setFullYear(retentionEndDate.getFullYear() + 1); // 무료체험만: 1년
+      }
+
+      batch.update(userRef, {
+        // 탈퇴 상태 표시 (개인정보는 그대로 유지)
+        deleted: true,
+        deletedAt: now,
+        retentionEndDate,
+        retentionReason: hasPaidHistory ? '전자상거래법_5년' : '부정이용방지_1년',
+        // email, phone, name, trialApplied 모두 유지
+        // - deleted 상태라 신규 가입은 가능
+        // - phone으로 무료체험 이력 추적
+      });
+    }
+
+    // 5. 탈퇴 로그 저장
     const deletionLogRef = db.collection('account_deletions').doc();
     batch.set(deletionLogRef, {
       email,

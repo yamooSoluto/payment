@@ -69,6 +69,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   // 사용자 정보 (users 컬렉션 우선, 없으면 tenants에서 가져옴)
   let userInfo: { name: string; phone: string } = { name: '', phone: '' };
+  // 무료체험 이력 (phone 기준 trialApplied === true)
+  let hasTrialHistory = false;
 
   if (db) {
     try {
@@ -80,6 +82,24 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           name: userData?.name || '',
           phone: userData?.phone || '',
         };
+        // users에서 trialApplied 확인
+        if (userData?.trialApplied === true) {
+          hasTrialHistory = true;
+        }
+      }
+
+      // phone 기준으로 무료체험 이력 추가 확인 (users 컬렉션에서)
+      if (!hasTrialHistory && userInfo.phone) {
+        const usersByPhone = await db.collection('users')
+          .where('phone', '==', userInfo.phone)
+          .limit(1)
+          .get();
+        if (!usersByPhone.empty) {
+          const phoneUserData = usersByPhone.docs[0].data();
+          if (phoneUserData.trialApplied === true) {
+            hasTrialHistory = true;
+          }
+        }
       }
 
       // tenants 컬렉션에서 email로 매장 목록 조회
@@ -284,7 +304,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           phone={userInfo.phone}
         />
         {/* 내 매장 */}
-        <TenantList authParam={authParam} email={email} initialTenants={tenants} />
+        <TenantList
+          authParam={authParam}
+          email={email}
+          initialTenants={tenants}
+          hasTrialHistory={hasTrialHistory}
+        />
         {/* 회원 탈퇴 */}
         <AccountDeletion
           authParam={authParam}
