@@ -95,20 +95,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 무료체험 이력 확인 (phone 기준)
-    // 1. users 컬렉션에서 trialApplied가 true인 경우
+    // 무료체험 이력 확인 (phone + email 기준)
+    // 1. users 컬렉션에서 trialApplied가 true인 경우 (phone 또는 email)
     // 2. tenants 컬렉션에서 subscription이 있거나 trial 이력이 있는 경우
     // 3. used_trial_phones 컬렉션에서 해시된 번호 확인 (탈퇴 회원)
     const phoneHash = hashPhone(phone);
-    const [existingUserPhone, existingTenantPhone, existingTrialHash] = await Promise.all([
+    const [existingUserPhone, existingUserEmail, existingTenantPhone, existingTenantEmail, existingTrialHash] = await Promise.all([
       db.collection('users').where('phone', '==', phone).limit(1).get(),
+      db.collection('users').doc(email).get(),
       db.collection('tenants').where('phone', '==', phone).limit(1).get(),
+      db.collection('tenants').where('email', '==', email).limit(1).get(),
       db.collection('used_trial_phones').doc(phoneHash).get(),
     ]);
 
     // 실제 무료체험 이력이 있는지 확인
     let hasActualTrialHistory = false;
-    let trialHistorySource: 'user' | 'tenant' | 'deleted' | null = null;
+    let trialHistorySource: 'user' | 'tenant' | 'deleted' | 'email' | 'paid' | null = null;
 
     // 탈퇴 회원의 해시된 번호 확인 (used_trial_phones)
     if (existingTrialHash.exists) {
@@ -116,12 +118,42 @@ export async function POST(request: Request) {
       trialHistorySource = 'deleted';
     }
 
-    // users에서 trialApplied 확인
+    // users에서 email 기준 trialApplied 확인 (유료 결제 이력 포함)
+    if (!hasActualTrialHistory && existingUserEmail.exists) {
+      const userData = existingUserEmail.data();
+      if (userData?.trialApplied === true) {
+        hasActualTrialHistory = true;
+        // 유료 결제로 인해 trialApplied가 설정된 경우 'paid'로 구분
+        trialHistorySource = userData?.paidSubscriptionAt ? 'paid' : 'email';
+      }
+    }
+
+    // users에서 phone 기준 trialApplied 확인
     if (!hasActualTrialHistory && !existingUserPhone.empty) {
       const userData = existingUserPhone.docs[0].data();
       if (userData.trialApplied === true) {
         hasActualTrialHistory = true;
         trialHistorySource = 'user';
+      }
+    }
+
+    // tenants에서 email 기준 subscription 이력 확인
+    if (!hasActualTrialHistory && !existingTenantEmail.empty) {
+      const tenantData = existingTenantEmail.docs[0].data();
+      const tenantId = tenantData.tenantId || existingTenantEmail.docs[0].id;
+
+      if (tenantData.subscription?.plan || tenantData.subscription?.status || tenantData.trialEndsAt) {
+        hasActualTrialHistory = true;
+        trialHistorySource = 'tenant';
+      } else {
+        const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          if (subData?.plan || subData?.status) {
+            hasActualTrialHistory = true;
+            trialHistorySource = 'tenant';
+          }
+        }
       }
     }
 
@@ -255,7 +287,11 @@ export async function POST(request: Request) {
 
       // 상세 오류 메시지 생성
       let errorMessage = '무료체험 이용 이력이 있어 재신청이 불가합니다.';
-      if (trialHistory) {
+
+      // 유료 결제 이력으로 인한 차단인 경우 다른 메시지
+      if (trialHistorySource === 'paid') {
+        errorMessage = '이미 유료 구독 이력이 있어 무료체험을 신청하실 수 없습니다.\n\n유료 결제 이후에는 무료체험이 불가능합니다.';
+      } else if (trialHistory) {
         const periodInfo = trialHistory.periodEnd
           ? `${trialHistory.periodStart} ~ ${trialHistory.periodEnd}`
           : trialHistory.periodStart

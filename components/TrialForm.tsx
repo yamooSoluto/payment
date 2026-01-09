@@ -55,6 +55,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   const [submitError, setSubmitError] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
+  const [hasPaidSubscription, setHasPaidSubscription] = useState(false);
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(false);
 
   // 약관 모달 상태
@@ -87,8 +88,13 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             if (userData.phone) {
               setIsPhoneVerified(true);
             }
+            // 유료 구독 이력이 있는 경우
+            if (userData.hasPaidSubscription) {
+              setHasPaidSubscription(true);
+              setAlreadyApplied(true); // 무료체험도 불가
+            }
             // 이미 무료체험 신청한 경우 (전화번호 기준으로 체크됨)
-            if (userData.trialApplied) {
+            else if (userData.trialApplied) {
               setAlreadyApplied(true);
             }
           }
@@ -299,15 +305,19 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
     return (
       <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
         <div className="text-center py-6 sm:py-8">
-          <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">📋</div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">이미 무료체험을 신청하셨습니다</h3>
+          <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">{hasPaidSubscription ? '💳' : '📋'}</div>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+            {hasPaidSubscription ? '이미 유료 구독중입니다' : '이미 무료체험을 신청하셨습니다'}
+          </h3>
 
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <p className="text-gray-600 text-sm sm:text-base mb-2">
               <span className="font-semibold text-gray-900">{formData.email}</span> 계정으로
             </p>
             <p className="text-gray-600 text-sm sm:text-base">
-              이미 무료체험이 신청되었습니다.
+              {hasPaidSubscription
+                ? '유료 구독 이력이 있어 무료체험을 신청하실 수 없습니다.'
+                : '이미 무료체험이 신청되었습니다.'}
             </p>
           </div>
 

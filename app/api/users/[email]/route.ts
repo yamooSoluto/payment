@@ -71,16 +71,61 @@ export async function GET(
       }
     }
 
-    // 3. tenants 컬렉션에서 체험 중인 매장이 있는지 확인
+    // 3. tenants 컬렉션에서 구독 이력이 있는지 확인 (trial 또는 유료)
     if (!trialApplied) {
-      const trialTenantsSnapshot = await db.collection('tenants')
+      const tenantsSnapshot = await db.collection('tenants')
         .where('email', '==', decodedEmail)
         .get();
 
-      for (const doc of trialTenantsSnapshot.docs) {
+      for (const doc of tenantsSnapshot.docs) {
         const tenantData = doc.data();
-        if (tenantData.subscription?.plan === 'trial' || tenantData.subscription?.status === 'trial') {
+        const tenantId = tenantData.tenantId || doc.id;
+
+        // tenant에 subscription 정보가 있는 경우
+        if (tenantData.subscription?.plan || tenantData.subscription?.status) {
           trialApplied = true;
+          break;
+        }
+
+        // subscriptions 컬렉션에서도 확인
+        const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          if (subData?.plan || subData?.status) {
+            trialApplied = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 유료 구독 이력 확인
+    let hasPaidSubscription = !!userData?.paidSubscriptionAt;
+
+    // paidSubscriptionAt가 없어도 subscriptions에서 유료 플랜(trial 제외) 이력 확인
+    if (!hasPaidSubscription) {
+      const tenantsForPaid = await db.collection('tenants')
+        .where('email', '==', decodedEmail)
+        .get();
+
+      for (const doc of tenantsForPaid.docs) {
+        const tenantData = doc.data();
+        const tenantId = tenantData.tenantId || doc.id;
+
+        // subscriptions 컬렉션에서 유료 플랜 확인
+        const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          // trial이 아닌 플랜이 있으면 유료 구독 이력
+          if (subData?.plan && subData.plan !== 'trial') {
+            hasPaidSubscription = true;
+            break;
+          }
+        }
+
+        // tenant의 embedded subscription에서도 확인
+        if (!hasPaidSubscription && tenantData.subscription?.plan && tenantData.subscription.plan !== 'trial') {
+          hasPaidSubscription = true;
           break;
         }
       }
@@ -91,6 +136,7 @@ export async function GET(
       name: userData?.name || '',
       phone: userData?.phone || '',
       trialApplied,
+      hasPaidSubscription,
     });
 
   } catch (error) {

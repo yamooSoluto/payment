@@ -52,8 +52,8 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 로그인 후 리다이렉트할 URL (없으면 /pricing)
-  const redirectUrl = searchParams.get('redirect') || '/pricing';
+  // 로그인 후 리다이렉트할 URL (없으면 /account)
+  const redirectUrl = searchParams.get('redirect') || '/account';
 
   // 전화번호 포맷팅 (010-1234-5678)
   const formatPhone = (value: string) => {

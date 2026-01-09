@@ -78,6 +78,7 @@ export default function TenantSelectModal({
   const [brandName, setBrandName] = useState('');
   const [industry, setIndustry] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [agreedNoTrial, setAgreedNoTrial] = useState(false);
 
   // 모달이 닫힐 때 폼 상태 초기화
   useEffect(() => {
@@ -86,6 +87,7 @@ export default function TenantSelectModal({
       setBrandName('');
       setIndustry('');
       setFormError(null);
+      setAgreedNoTrial(false);
     }
   }, [isOpen]);
 
@@ -108,6 +110,7 @@ export default function TenantSelectModal({
     setBrandName('');
     setIndustry('');
     setFormError(null);
+    setAgreedNoTrial(false);
   };
 
   const handleTenantFormSubmit = () => {
@@ -282,6 +285,34 @@ export default function TenantSelectModal({
                   </p>
                 </div>
 
+                {/* 무료체험 불가 안내 */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <WarningCircle width={20} height={20} strokeWidth={1.5} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-semibold mb-1">무료체험 불가 안내</p>
+                      <p className="text-amber-700">
+                        유료 결제 이후에는 동일 명의로 무료체험을 신청하실 수 없습니다.
+                        (탈퇴 후 재가입해도 동일)
+                        무료체험을 원하시면 이전으로 돌아가 &apos;무료체험 신청하기&apos;를 선택해주세요.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 동의 체크박스 */}
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedNoTrial}
+                    onChange={(e) => setAgreedNoTrial(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-700">
+                    유료 결제 후 동일 명의로 무료체험을 신청할 수 없음을 확인했습니다.
+                  </span>
+                </label>
+
                 {formError && (
                   <p className="text-sm text-red-600">{formError}</p>
                 )}
@@ -298,7 +329,7 @@ export default function TenantSelectModal({
                   <button
                     type="button"
                     onClick={handleTenantFormSubmit}
-                    disabled={!brandName.trim() || !industry}
+                    disabled={!brandName.trim() || !industry || !agreedNoTrial}
                     className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     결제 진행
@@ -401,8 +432,7 @@ export default function TenantSelectModal({
                         무료체험 신청하기
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
-                        1개월 무료로 야무를 체험해보세요!<br />
-                        신청서 작성 후 담당자가 연락드립니다.
+                        1개월 무료로 야무를 체험해보세요!
                       </p>
                     </div>
                   </div>

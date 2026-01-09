@@ -12,22 +12,34 @@ export async function GET(request: NextRequest) {
   const customerKey = searchParams.get('customerKey');
   const plan = searchParams.get('plan');
   const amount = searchParams.get('amount');
-  const tenantId = searchParams.get('tenantId');
+  let tenantId = searchParams.get('tenantId');
   const token = searchParams.get('token');
   const emailParam = searchParams.get('email');
   const mode = searchParams.get('mode'); // 'reserve' for trial reservation
+  // 신규 매장 생성 파라미터
+  const brandNameParam = searchParams.get('brandName');
+  const industryParam = searchParams.get('industry');
 
   // 인증 파라미터 생성 (리다이렉트 시 사용)
   const authParam = token ? `token=${token}` : emailParam ? `email=${encodeURIComponent(emailParam)}` : '';
   const isReserveMode = mode === 'reserve';
+  const isNewTenant = tenantId === 'new';
 
-  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, mode, hasToken: !!token });
+  console.log('Billing confirm received:', { authKey, customerKey, plan, amount, tenantId, mode, hasToken: !!token, isNewTenant, brandNameParam });
 
   // 필수 파라미터 검증
   if (!authKey || !customerKey || !plan || !tenantId) {
     const authQuery = authParam ? `&${authParam}` : '';
     return NextResponse.redirect(
       new URL(`/checkout?plan=${plan || 'basic'}&tenantId=${tenantId || ''}${authQuery}&error=missing_params`, request.url)
+    );
+  }
+
+  // 신규 매장인 경우 brandName 필수
+  if (isNewTenant && !brandNameParam) {
+    const authQuery = authParam ? `&${authParam}` : '';
+    return NextResponse.redirect(
+      new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=missing_brand_name`, request.url)
     );
   }
 
@@ -47,12 +59,91 @@ export async function GET(request: NextRequest) {
 
     console.log('Billing key issued:', billingKey?.slice(0, 10) + '...');
 
+    // 1.5. 신규 매장 생성 (tenantId가 'new'인 경우)
+    if (isNewTenant && brandNameParam) {
+      console.log('Creating new tenant:', { brandName: brandNameParam, industry: industryParam });
+
+      const email = customerKey;
+
+      // users 컬렉션에서 사용자 정보 조회 (name, phone)
+      const userDoc = await db.collection('users').doc(email).get();
+      const userData = userDoc.exists ? userDoc.data() : null;
+
+      // n8n 웹훅 호출 (매장 생성)
+      const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+      if (!n8nWebhookUrl) {
+        console.error('N8N_WEBHOOK_URL이 설정되지 않았습니다.');
+        const authQuery = authParam ? `&${authParam}` : '';
+        return NextResponse.redirect(
+          new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=system_configuration_error`, request.url)
+        );
+      }
+
+      try {
+        const timestamp = new Date().toISOString();
+        const n8nResponse = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            name: userData?.name || null,
+            phone: userData?.phone || null,
+            brandName: brandNameParam.trim(),
+            industry: industryParam || '',
+            timestamp,
+            createdAt: timestamp,
+            isTrialSignup: false, // 매장 추가용 (체험 신청 아님)
+            isPaidSubscription: true, // 유료 구독용
+          }),
+        });
+
+        if (!n8nResponse.ok) {
+          console.error('n8n webhook 호출 실패:', n8nResponse.status);
+          const authQuery = authParam ? `&${authParam}` : '';
+          return NextResponse.redirect(
+            new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_creation_failed`, request.url)
+          );
+        }
+
+        const n8nData = await n8nResponse.json();
+        console.log('신규 매장 생성 n8n webhook 성공:', n8nData);
+
+        if (n8nData.tenantId) {
+          tenantId = n8nData.tenantId;
+          console.log('새 tenantId 생성됨:', tenantId);
+        } else {
+          console.error('n8n webhook에서 tenantId를 받지 못함');
+          const authQuery = authParam ? `&${authParam}` : '';
+          return NextResponse.redirect(
+            new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_id_missing`, request.url)
+          );
+        }
+      } catch (error) {
+        console.error('n8n webhook 호출 오류:', error);
+        const authQuery = authParam ? `&${authParam}` : '';
+        return NextResponse.redirect(
+          new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_creation_error`, request.url)
+        );
+      }
+    }
+
+    // tenantId null 체크 (위에서 검증했거나 새로 생성됨)
+    if (!tenantId) {
+      const authQuery = authParam ? `&${authParam}` : '';
+      return NextResponse.redirect(
+        new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_id_missing`, request.url)
+      );
+    }
+
+    // TypeScript 타입 안전을 위해 non-null 변수 생성
+    const validTenantId: string = tenantId;
+
     // 2. 플랜 정보 조회 (Firestore에서 동적으로)
     const planInfo = await getPlanById(plan);
     if (!planInfo) {
       const authQuery = authParam ? `&${authParam}` : '';
       return NextResponse.redirect(
-        new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=invalid_plan`, request.url)
+        new URL(`/checkout?plan=${plan}&tenantId=${validTenantId}${authQuery}&error=invalid_plan`, request.url)
       );
     }
 
@@ -65,17 +156,36 @@ export async function GET(request: NextRequest) {
     let brandName = '';
     let ownerName = '';
     let phone = '';
-    try {
-      const tenantDoc = await db.collection('tenants').doc(tenantId).get();
-      if (tenantDoc.exists) {
-        const tenantData = tenantDoc.data();
-        brandName = tenantData?.brandName || '';
-        ownerName = tenantData?.name || '';
-        phone = tenantData?.phone || '';
-        tenantName = brandName || ownerName || '';
+
+    // 신규 매장인 경우 URL 파라미터에서 가져오기
+    if (isNewTenant && brandNameParam) {
+      brandName = brandNameParam.trim();
+      tenantName = brandName;
+      // 사용자 정보도 조회
+      try {
+        const userDoc = await db.collection('users').doc(email).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          ownerName = userData?.name || '';
+          phone = userData?.phone || '';
+        }
+      } catch {
+        // 무시
       }
-    } catch {
-      // 무시
+    } else {
+      // 기존 매장인 경우 Firestore에서 조회
+      try {
+        const tenantDoc = await db.collection('tenants').doc(validTenantId).get();
+        if (tenantDoc.exists) {
+          const tenantData = tenantDoc.data();
+          brandName = tenantData?.brandName || '';
+          ownerName = tenantData?.name || '';
+          phone = tenantData?.phone || '';
+          tenantName = brandName || ownerName || '';
+        }
+      } catch {
+        // 무시
+      }
     }
 
     // 예약 모드: 빌링키만 저장하고 결제하지 않음
@@ -85,7 +195,7 @@ export async function GET(request: NextRequest) {
       const now = new Date();
 
       // 1. subscriptions 컬렉션에서 조회
-      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      const subscriptionRef = db.collection('subscriptions').doc(validTenantId);
       let subscriptionDoc = await subscriptionRef.get();
       let subscriptionData = subscriptionDoc.exists ? subscriptionDoc.data() : null;
 
@@ -93,7 +203,7 @@ export async function GET(request: NextRequest) {
       if (!subscriptionData) {
         const tenantSnapshot = await db
           .collection('tenants')
-          .where('tenantId', '==', tenantId)
+          .where('tenantId', '==', validTenantId)
           .limit(1)
           .get();
 
@@ -120,7 +230,7 @@ export async function GET(request: NextRequest) {
             }
 
             subscriptionData = {
-              tenantId,
+              tenantId: validTenantId,
               email: tenantData.email || email,
               brandName: tenantData.brandName,
               name: tenantData.name,
@@ -145,7 +255,7 @@ export async function GET(request: NextRequest) {
       if (!subscriptionData) {
         const authQuery = authParam ? `&${authParam}` : '';
         return NextResponse.redirect(
-          new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=${encodeURIComponent('Subscription not found')}`, request.url)
+          new URL(`/checkout?plan=${plan}&tenantId=${validTenantId}${authQuery}&error=${encodeURIComponent('Subscription not found')}`, request.url)
         );
       }
 
@@ -198,15 +308,15 @@ export async function GET(request: NextRequest) {
       const authQuery = authParam ? `&${authParam}` : '';
       const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
       return NextResponse.redirect(
-        new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&reserved=true&start=${encodeURIComponent(pendingChangeAt.toISOString())}${tenantNameQuery}${authQuery}`, request.url)
+        new URL(`/checkout/success?plan=${plan}&tenantId=${validTenantId}&reserved=true&start=${encodeURIComponent(pendingChangeAt.toISOString())}${tenantNameQuery}${authQuery}`, request.url)
       );
     }
 
     // 일반 모드: 첫 결제 수행
-    const orderId = `SUB_${Date.now()}_${tenantId}`;
+    const orderId = `SUB_${Date.now()}_${validTenantId}`;
     const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
 
-    console.log('Processing first payment:', { orderId, paymentAmount, tenantId });
+    console.log('Processing first payment:', { orderId, paymentAmount, tenantId: validTenantId });
 
     const paymentResponse = await payWithBillingKey(
       billingKey,
@@ -229,9 +339,9 @@ export async function GET(request: NextRequest) {
 
     await db.runTransaction(async (transaction) => {
       // 구독 정보 저장
-      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      const subscriptionRef = db.collection('subscriptions').doc(validTenantId);
       transaction.set(subscriptionRef, {
-        tenantId,
+        tenantId: validTenantId,
         brandName: brandName || null,  // 한글 매장명
         name: ownerName || null,        // 담당자 이름
         phone: phone || null,           // 전화번호
@@ -251,7 +361,7 @@ export async function GET(request: NextRequest) {
       // 결제 내역 저장
       const paymentRef = db.collection('payments').doc(paymentDocId);
       transaction.set(paymentRef, {
-        tenantId,
+        tenantId: validTenantId,
         email,
         orderId,
         paymentKey: paymentResponse.paymentKey,
@@ -268,7 +378,32 @@ export async function GET(request: NextRequest) {
     });
 
     // tenants 컬렉션에 구독 정보 동기화
-    await syncNewSubscription(tenantId, plan, nextBillingDate);
+    await syncNewSubscription(validTenantId, plan, nextBillingDate);
+
+    // users 컬렉션에 trialApplied 플래그 설정 (무료체험 재신청 방지)
+    try {
+      const userRef = db.collection('users').doc(email);
+      const userDoc = await userRef.get();
+      if (userDoc.exists) {
+        await userRef.update({
+          trialApplied: true,
+          paidSubscriptionAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await userRef.set({
+          email,
+          trialApplied: true,
+          paidSubscriptionAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log('✅ User trialApplied flag set for:', email);
+    } catch (userUpdateError) {
+      console.error('Failed to update user trialApplied:', userUpdateError);
+      // 실패해도 결제는 완료됨
+    }
 
     // n8n 웹훅 호출 (구독 성공 알림)
     if (process.env.N8N_WEBHOOK_URL) {
@@ -278,7 +413,7 @@ export async function GET(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event: 'subscription_created',
-            tenantId,
+            tenantId: validTenantId,
             email,
             plan,
             amount: paymentAmount,
@@ -295,7 +430,7 @@ export async function GET(request: NextRequest) {
     const periodStart = now.toISOString();
     const periodEnd = nextBillingDate.toISOString();
     return NextResponse.redirect(
-      new URL(`/checkout/success?plan=${plan}&tenantId=${tenantId}&orderId=${orderId}&start=${encodeURIComponent(periodStart)}&end=${encodeURIComponent(periodEnd)}${tenantNameQuery}${authQuery}`, request.url)
+      new URL(`/checkout/success?plan=${plan}&tenantId=${validTenantId}&orderId=${orderId}&start=${encodeURIComponent(periodStart)}&end=${encodeURIComponent(periodEnd)}${tenantNameQuery}${authQuery}`, request.url)
     );
   } catch (error) {
     console.error('Billing confirm failed:', error);

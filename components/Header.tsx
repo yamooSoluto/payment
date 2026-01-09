@@ -4,12 +4,38 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 
 export default function Header() {
   const { user, loading, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hasTenants, setHasTenants] = useState(false);
+  const pathname = usePathname();
+
+  // 사용자의 매장 수 확인 (페이지 이동 시마다 재확인)
+  useEffect(() => {
+    const fetchTenants = async () => {
+      if (!user?.email) {
+        setHasTenants(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/tenants?email=${encodeURIComponent(user.email)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHasTenants(data.tenants && data.tenants.length > 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenants:', error);
+        setHasTenants(false);
+      }
+    };
+
+    fetchTenants();
+  }, [user?.email, pathname]);
 
   const handleSignOut = async () => {
     try {
@@ -89,13 +115,15 @@ export default function Header() {
               <>
                 {user ? (
                   <>
-                    <button
-                      onClick={handlePortalClick}
-                      className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium"
-                    >
-                      포탈
-                      <OpenNewWindow width={14} height={14} strokeWidth={2} />
-                    </button>
+                    {hasTenants && (
+                      <button
+                        onClick={handlePortalClick}
+                        className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium"
+                      >
+                        포탈
+                        <OpenNewWindow width={14} height={14} strokeWidth={2} />
+                      </button>
+                    )}
                     <Link
                       href={`/account?email=${encodeURIComponent(user.email || '')}`}
                       className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium"
@@ -174,16 +202,18 @@ export default function Header() {
               </Link>
               {!loading && user && (
                 <>
-                  <button
-                    onClick={() => {
-                      handlePortalClick();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium py-2 text-left"
-                  >
-                    포탈
-                    <OpenNewWindow width={14} height={14} strokeWidth={2} />
-                  </button>
+                  {hasTenants && (
+                    <button
+                      onClick={() => {
+                        handlePortalClick();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="flex items-center gap-1 text-yamoo-dark hover:text-yamoo-primary transition-colors font-medium py-2 text-left"
+                    >
+                      포탈
+                      <OpenNewWindow width={14} height={14} strokeWidth={2} />
+                    </button>
+                  )}
                   <Link
                     href={`/account?email=${encodeURIComponent(user.email || '')}`}
                     className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"

@@ -13,6 +13,8 @@ interface CheckoutPageProps {
     mode?: string;      // 'immediate' for upgrade, 'reserve' for trial reservation
     refund?: string;    // 현재 플랜 환불액
     newTenant?: string; // 신규 매장 (매장 없이 결제)
+    brandName?: string; // 신규 매장 이름
+    industry?: string;  // 신규 매장 업종
     error?: string;     // 결제 실패 에러
   }>;
 }
@@ -27,7 +29,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const params = await searchParams;
-  const { plan, token, email: emailParam, tenantId, mode, refund, newTenant, error } = params;
+  const { plan, token, email: emailParam, tenantId, mode, refund, newTenant, brandName, industry, error } = params;
 
   if (!plan) {
     redirect('/error?message=invalid_access');
@@ -290,24 +292,15 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       )}
 
       {/* 매장 정보 */}
-      {tenantInfo && (
+      {(tenantInfo || (isNewTenant && brandName)) && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-3">
           <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center flex-shrink-0">
             <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">적용 매장</p>
-            <p className="font-semibold text-gray-900">{tenantInfo.brandName}</p>
+            <p className="text-sm text-gray-500">{isNewTenant ? '신규 매장' : '적용 매장'}</p>
+            <p className="font-semibold text-gray-900">{tenantInfo?.brandName || brandName}</p>
           </div>
-        </div>
-      )}
-
-      {/* 신규 매장 안내 */}
-      {isNewTenant && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-yellow-800">
-            <strong>신규 매장:</strong> 결제 완료 후 담당자가 매장 설정을 도와드립니다.
-          </p>
         </div>
       )}
 
@@ -333,6 +326,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           hasBillingKey={hasBillingKey}
           calculationDetails={calculationDetails}
           currentPlanName={currentPlanName}
+          brandName={brandName}
+          industry={industry}
         />
       </div>
 

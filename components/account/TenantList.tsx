@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Shop, Xmark, Gift } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Xmark, Box3dCenter } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import AddTenantModal from './AddTenantModal';
 
@@ -37,13 +37,12 @@ function PricingGuidanceModal({ isOpen, onClose }: PricingGuidanceModalProps) {
         {/* Content */}
         <div className="p-8 text-center">
           <div className="w-16 h-16 bg-yamoo-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Gift width={32} height={32} strokeWidth={1.5} className="text-yamoo-primary" />
+            <Box3dCenter width={32} height={32} strokeWidth={1.5} className="text-yamoo-primary" />
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">
             요금제를 먼저 선택해주세요
           </h3>
           <p className="text-gray-600 mb-6 text-sm">
-            첫 매장은 요금제 선택 후 자동으로 생성됩니다.<br />
             1개월 무료체험도 가능합니다!
           </p>
           <div className="flex flex-col gap-3">
@@ -170,7 +169,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
       <>
         <div className="bg-white rounded-xl shadow-lg p-8 text-center border border-gray-100">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shop width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
+            <Sofa width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             등록된 매장이 없습니다

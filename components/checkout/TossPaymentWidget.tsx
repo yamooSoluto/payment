@@ -56,6 +56,8 @@ interface TossPaymentWidgetProps {
   hasBillingKey?: boolean;    // 이미 카드가 등록되어 있는지
   calculationDetails?: CalculationDetails; // 환불/결제 계산 상세 정보
   currentPlanName?: string;   // 현재 플랜 이름
+  brandName?: string;         // 신규 매장 이름
+  industry?: string;          // 신규 매장 업종
 }
 
 // 이용기간 계산 (종료일 = 다음 결제일 하루 전)
@@ -152,6 +154,8 @@ export default function TossPaymentWidget({
   hasBillingKey = false,
   calculationDetails,
   currentPlanName,
+  brandName,
+  industry,
 }: TossPaymentWidgetProps) {
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -285,9 +289,11 @@ export default function TossPaymentWidget({
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
         const authQuery = authParam ? `&${authParam}` : '';
         const reserveQuery = isReserve ? `&mode=reserve` : '';
+        // 신규 매장인 경우 brandName과 industry 전달
+        const newTenantQuery = isNewTenant && brandName ? `&brandName=${encodeURIComponent(brandName)}&industry=${encodeURIComponent(industry || '')}` : '';
         await tossPayments.requestBillingAuth('카드', {
           customerKey: email,
-          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}`,
+          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}`,
           failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,
         });
