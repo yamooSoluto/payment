@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { formatPrice } from '@/lib/utils';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 import { Check, InfoCircle, NavArrowDown, NavArrowUp } from 'iconoir-react';
-import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleText } from '@/lib/payment-constants';
+import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleTexts } from '@/lib/payment-constants';
 
 // 플랜별 상세 기능 (요금제 페이지와 동일)
 const PLAN_FEATURES: Record<string, string[]> = {
@@ -670,25 +670,27 @@ export default function TossPaymentWidget({
           </span>
         </label>
         <ul className="text-sm text-gray-500 mt-2 space-y-1">
-          <li className="flex gap-2">
-            <span className="flex-shrink-0">•</span>
-            <span>{getPaymentScheduleText({
-              amount,
-              fullAmount,
-              isChangePlan,
-              isDowngrade,
-              refundAmount,
-              isReserve,
-              isTrialImmediate,
-              hasBillingKey,
-              currentPeriodEnd,
-              nextBillingDate: period.nextBilling,
-              formatPrice,
-              // 채널톡 스타일: 실제 결제/환불 금액 분리 안내
-              newPlanPaymentAmount: calculationDetails?.newPlanRemaining,
-              currentRefundAmount: calculationDetails?.currentRefund,
-            })}</span>
-          </li>
+          {getPaymentScheduleTexts({
+            amount,
+            fullAmount,
+            isChangePlan,
+            isDowngrade,
+            refundAmount,
+            isReserve,
+            isTrialImmediate,
+            hasBillingKey,
+            currentPeriodEnd,
+            nextBillingDate: period.nextBilling,
+            formatPrice,
+            // 채널톡 스타일: 실제 결제/환불 금액 분리 안내
+            newPlanPaymentAmount: calculationDetails?.newPlanRemaining,
+            currentRefundAmount: calculationDetails?.currentRefund,
+          }).map((text, index) => (
+            <li key={`schedule-${index}`} className="flex gap-2">
+              <span className="flex-shrink-0">•</span>
+              <span>{text}</span>
+            </li>
+          ))}
           {REFUND_POLICY_ITEMS
             .filter(policy => !isReserve || !policy.includes('즉시 적용'))
             .map((policy, index) => (
