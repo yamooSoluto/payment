@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, tenantId, newPlan, newAmount, proratedAmount, isDowngrade, refundAmount } = body;
+    const { email, tenantId, newPlan, newAmount, proratedAmount, isDowngrade, refundAmount, creditAmount, proratedNewAmount } = body;
 
     if (!email || !tenantId || !newPlan || newAmount === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -201,6 +201,9 @@ export async function POST(request: NextRequest) {
             receiptUrl: paymentResponse.receipt?.url || null,
             paidAt: now,
             createdAt: now,
+            // 업그레이드 상세 정보 (크레딧 표시용)
+            creditAmount: creditAmount || 0, // 기존 플랜 미사용분 크레딧
+            proratedNewAmount: proratedNewAmount || 0, // 새 플랜 일할 금액
           });
         }
 

@@ -209,6 +209,9 @@ export default function TossPaymentWidget({
             proratedAmount: amount,
             isDowngrade,
             refundAmount,
+            // 업그레이드 상세 정보 (크레딧 표시용)
+            creditAmount: calculationDetails?.currentRefund || 0,
+            proratedNewAmount: calculationDetails?.newPlanRemaining || 0,
           }),
         });
 

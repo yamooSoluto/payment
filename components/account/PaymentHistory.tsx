@@ -24,6 +24,9 @@ interface Payment {
   originalPaymentId?: string;
   refundedAmount?: number;
   lastRefundAt?: Date | string;
+  // 업그레이드 상세 정보
+  creditAmount?: number; // 기존 플랜 미사용분 크레딧
+  proratedNewAmount?: number; // 새 플랜 일할 금액
 }
 
 // 환불 정보가 병합된 결제 내역
@@ -457,6 +460,22 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                 )}
               </div>
             </div>
+
+            {/* 업그레이드 상세 정보 - 크레딧 정보 표시 */}
+            {payment.type === 'upgrade' && payment.creditAmount && payment.creditAmount > 0 && (
+              <div className="mt-2 ml-7 pl-3 border-l-2 border-blue-200">
+                <div className="text-xs sm:text-sm text-gray-500 space-y-1">
+                  <div className="flex justify-between">
+                    <span>└ {getPlanName(payment.plan)} ({payment.proratedNewAmount ? `일할계산` : ''})</span>
+                    <span className="text-gray-700">+{formatPrice(payment.proratedNewAmount || 0)}원</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="ml-3">{getPlanName(payment.previousPlan || '')} 미사용분</span>
+                    <span className="text-green-600">-{formatPrice(payment.creditAmount)}원</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 환불 내역 - 원결제 아래에 하위 행으로 표시 */}
             {payment.hasRefund && payment.refunds.map((refund, index) => (
