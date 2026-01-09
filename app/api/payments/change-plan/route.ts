@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, tenantId, newPlan, newAmount, proratedAmount, isDowngrade, refundAmount, creditAmount, proratedNewAmount } = body;
+    const { email, tenantId, newPlan, newAmount, creditAmount, proratedNewAmount } = body;
 
     if (!email || !tenantId || !newPlan || newAmount === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -41,18 +41,22 @@ export async function POST(request: NextRequest) {
     const previousPlan = subscription.plan;
     const previousAmount = subscription.amount;
     const now = new Date();
-    const orderId = `CHANGE_${Date.now()}_${tenantId}`;
+    const timestamp = Date.now();
 
-    if (isDowngrade && refundAmount > 0) {
-      // 다운그레이드: 환불 처리
-      console.log('Processing downgrade:', {
-        orderId,
-        tenantId,
-        refundAmount,
-        previousPlan,
-        newPlan,
-      });
+    console.log('Processing plan change:', {
+      tenantId,
+      previousPlan,
+      newPlan,
+      creditAmount,
+      proratedNewAmount,
+    });
 
+    // 1. 기존 결제에서 미사용분 부분 환불
+    let refundResult = null;
+    let originalPaymentId = null;
+    const refundOrderId = `REFUND_${timestamp}_${tenantId}`;
+
+    if (creditAmount && creditAmount > 0) {
       // 가장 최근 결제 내역 조회
       const paymentsSnapshot = await db
         .collection('payments')
@@ -62,197 +66,167 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .get();
 
-      let refundResult = null;
-      let originalPaymentId = null;
       if (!paymentsSnapshot.empty) {
         const lastPaymentDoc = paymentsSnapshot.docs[0];
         const lastPayment = lastPaymentDoc.data();
         originalPaymentId = lastPaymentDoc.id;
 
-        // 부분 환불 시도 (마지막 결제에서 환불액만큼 취소)
-        if (lastPayment.paymentKey && lastPayment.amount >= refundAmount) {
+        // 부분 환불 시도
+        if (lastPayment.paymentKey) {
           try {
             refundResult = await cancelPayment(
               lastPayment.paymentKey,
-              `플랜 다운그레이드: ${getPlanName(previousPlan)} → ${getPlanName(newPlan)}`,
-              refundAmount
+              `플랜 변경: ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} (미사용분 환불)`,
+              creditAmount
             );
             console.log('Refund processed:', refundResult);
           } catch (refundError) {
-            console.error('Refund failed, continuing with plan change:', refundError);
-            // 환불 실패해도 플랜 변경은 진행 (크레딧으로 처리 가능)
+            console.error('Refund failed:', refundError);
+            // 환불 실패 시 에러 반환 (결제 진행하지 않음)
+            return NextResponse.json({
+              error: '기존 플랜 환불 처리에 실패했습니다. 잠시 후 다시 시도해주세요.'
+            }, { status: 500 });
           }
         }
       }
+    }
 
-      // 트랜잭션으로 데이터 업데이트
-      await db.runTransaction(async (transaction) => {
-        // 환불 내역 저장
-        const paymentDocId = `${orderId}_${Date.now()}`;
-        const paymentRef = db.collection('payments').doc(paymentDocId);
-        transaction.set(paymentRef, {
+    // 2. 새 플랜 결제 (일할계산)
+    let paymentResponse = null;
+    const paymentOrderId = `${newPlan.toUpperCase()}_${timestamp}_${tenantId}`;
+
+    if (proratedNewAmount && proratedNewAmount > 0) {
+      const orderName = `YAMOO ${getPlanName(newPlan)} 플랜`;
+
+      try {
+        paymentResponse = await payWithBillingKey(
+          subscription.billingKey,
+          email,
+          proratedNewAmount,
+          paymentOrderId,
+          orderName,
+          email
+        );
+        console.log('New plan payment completed:', paymentResponse.status);
+      } catch (paymentError) {
+        console.error('New plan payment failed:', paymentError);
+        // 결제 실패 시 에러 반환 (환불은 이미 처리됨 - 관리자 수동 처리 필요)
+        return NextResponse.json({
+          error: '새 플랜 결제에 실패했습니다. 고객센터에 문의해주세요.',
+          refundProcessed: !!refundResult,
+          refundAmount: creditAmount,
+        }, { status: 500 });
+      }
+    }
+
+    // 3. 트랜잭션으로 데이터 업데이트
+    await db.runTransaction(async (transaction) => {
+      // 환불 내역 저장 (기존 플랜)
+      if (creditAmount && creditAmount > 0 && refundResult) {
+        const refundDocId = `${refundOrderId}_${Date.now()}`;
+        const refundRef = db.collection('payments').doc(refundDocId);
+        transaction.set(refundRef, {
           tenantId,
           email,
-          orderId,
-          paymentKey: refundResult?.paymentKey || null,
-          amount: -refundAmount, // 음수로 저장 (환불)
-          plan: newPlan,
-          type: 'downgrade_refund',
+          orderId: refundOrderId,
+          paymentKey: refundResult.paymentKey || null,
+          amount: -creditAmount, // 음수로 저장 (환불)
+          plan: previousPlan,
+          type: 'plan_change_refund',
           previousPlan,
-          status: refundResult ? 'refunded' : 'pending_refund',
-          refundAmount,
-          refundReason: `플랜 다운그레이드: ${getPlanName(previousPlan)} → ${getPlanName(newPlan)}`,
+          newPlan,
+          status: 'refunded',
+          refundAmount: creditAmount,
+          refundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경 (미사용분)`,
           originalPaymentId,
           paidAt: now,
           createdAt: now,
         });
 
-        // 구독 정보 업데이트
-        const subscriptionRef = db.collection('subscriptions').doc(tenantId);
-        transaction.update(subscriptionRef, {
-          plan: newPlan,
-          amount: newAmount,
-          currentPeriodStart: now,  // 플랜 변경일부터 새로운 결제 주기 시작
-          previousPlan,
-          previousAmount,
-          planChangedAt: now,
-          updatedAt: now,
-          pendingPlan: null,
-          pendingAmount: null,
-          pendingMode: null,
-        });
-      });
-
-      // tenants 컬렉션 동기화
-      await syncPlanChange(tenantId, newPlan);
-
-      // n8n 웹훅
-      if (process.env.N8N_WEBHOOK_URL) {
-        try {
-          await fetch(process.env.N8N_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'plan_downgraded',
-              tenantId,
-              email,
-              previousPlan,
-              newPlan,
-              refundAmount,
-              newAmount,
-            }),
-          });
-        } catch {
-          // 웹훅 실패 무시
+        // 원결제 문서에 환불 정보 업데이트
+        if (originalPaymentId) {
+          const originalPaymentRef = db.collection('payments').doc(originalPaymentId);
+          const originalPaymentDoc = await transaction.get(originalPaymentRef);
+          if (originalPaymentDoc.exists) {
+            const existingRefunded = originalPaymentDoc.data()?.refundedAmount || 0;
+            transaction.update(originalPaymentRef, {
+              refundedAmount: existingRefunded + creditAmount,
+              lastRefundAt: now,
+              lastRefundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경`,
+              updatedAt: now,
+            });
+          }
         }
       }
 
-      return NextResponse.json({
-        success: true,
-        orderId,
-        refundAmount,
-        message: `${getPlanName(newPlan)} 플랜으로 변경되었습니다. ${refundAmount.toLocaleString()}원이 환불됩니다.`,
-      });
-    } else {
-      // 업그레이드: 차액 결제
-      let paymentResponse = null;
-
-      if (proratedAmount > 0) {
-        const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
-
-        console.log('Processing upgrade payment:', {
-          orderId,
+      // 새 플랜 결제 내역 저장
+      if (proratedNewAmount && proratedNewAmount > 0 && paymentResponse) {
+        const paymentDocId = `${paymentOrderId}_${Date.now()}`;
+        const paymentRef = db.collection('payments').doc(paymentDocId);
+        transaction.set(paymentRef, {
           tenantId,
-          amount: proratedAmount,
-          previousPlan,
-          newPlan,
-        });
-
-        paymentResponse = await payWithBillingKey(
-          subscription.billingKey,
           email,
-          proratedAmount,
-          orderId,
-          orderName,
-          email
-        );
-
-        console.log('Upgrade payment completed:', paymentResponse.status);
+          orderId: paymentOrderId,
+          paymentKey: paymentResponse.paymentKey,
+          amount: proratedNewAmount,
+          plan: newPlan,
+          type: 'plan_change',
+          previousPlan,
+          status: 'done',
+          method: paymentResponse.method,
+          cardInfo: paymentResponse.card || null,
+          receiptUrl: paymentResponse.receipt?.url || null,
+          paidAt: now,
+          createdAt: now,
+        });
       }
 
-      // 트랜잭션으로 데이터 업데이트
-      await db.runTransaction(async (transaction) => {
-        // 결제 내역 저장
-        if (proratedAmount > 0 && paymentResponse) {
-          const paymentDocId = `${orderId}_${Date.now()}`;
-          const paymentRef = db.collection('payments').doc(paymentDocId);
-          transaction.set(paymentRef, {
+      // 구독 정보 업데이트
+      const subscriptionRef = db.collection('subscriptions').doc(tenantId);
+      transaction.update(subscriptionRef, {
+        plan: newPlan,
+        amount: newAmount,
+        previousPlan,
+        previousAmount,
+        planChangedAt: now,
+        updatedAt: now,
+        pendingPlan: null,
+        pendingAmount: null,
+        pendingMode: null,
+      });
+    });
+
+    // tenants 컬렉션 동기화
+    await syncPlanChange(tenantId, newPlan);
+
+    // n8n 웹훅
+    if (process.env.N8N_WEBHOOK_URL) {
+      try {
+        await fetch(process.env.N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'plan_changed',
             tenantId,
             email,
-            orderId,
-            paymentKey: paymentResponse.paymentKey,
-            amount: proratedAmount,
-            plan: newPlan,
-            type: 'upgrade',
             previousPlan,
-            status: 'done',
-            method: paymentResponse.method,
-            cardInfo: paymentResponse.card || null,
-            receiptUrl: paymentResponse.receipt?.url || null,
-            paidAt: now,
-            createdAt: now,
-            // 업그레이드 상세 정보 (크레딧 표시용)
-            creditAmount: creditAmount || 0, // 기존 플랜 미사용분 크레딧
-            proratedNewAmount: proratedNewAmount || 0, // 새 플랜 일할 금액
-          });
-        }
-
-        // 구독 정보 업데이트
-        const subscriptionRef = db.collection('subscriptions').doc(tenantId);
-        transaction.update(subscriptionRef, {
-          plan: newPlan,
-          amount: newAmount,
-          currentPeriodStart: now,  // 플랜 변경일부터 새로운 결제 주기 시작
-          previousPlan,
-          previousAmount,
-          planChangedAt: now,
-          updatedAt: now,
-          pendingPlan: null,
-          pendingAmount: null,
-          pendingMode: null,
+            newPlan,
+            refundAmount: creditAmount || 0,
+            newPlanAmount: proratedNewAmount || 0,
+          }),
         });
-      });
-
-      // tenants 컬렉션 동기화
-      await syncPlanChange(tenantId, newPlan);
-
-      // n8n 웹훅
-      if (process.env.N8N_WEBHOOK_URL) {
-        try {
-          await fetch(process.env.N8N_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'plan_upgraded',
-              tenantId,
-              email,
-              previousPlan,
-              newPlan,
-              proratedAmount,
-              newAmount,
-            }),
-          });
-        } catch {
-          // 웹훅 실패 무시
-        }
+      } catch {
+        // 웹훅 실패 무시
       }
-
-      return NextResponse.json({
-        success: true,
-        orderId,
-        message: `${getPlanName(newPlan)} 플랜으로 변경되었습니다.`,
-      });
     }
+
+    return NextResponse.json({
+      success: true,
+      orderId: paymentOrderId,
+      refundAmount: creditAmount || 0,
+      paidAmount: proratedNewAmount || 0,
+      message: `${getPlanName(newPlan)} 플랜으로 변경되었습니다.`,
+    });
   } catch (error) {
     console.error('Plan change failed:', error);
 

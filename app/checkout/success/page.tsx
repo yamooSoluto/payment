@@ -26,6 +26,17 @@ function formatDate(date: Date): string {
   });
 }
 
+// 주문번호에서 tenantId 제거 (타임스탬프만 표시)
+function formatOrderId(orderId: string): string {
+  // 패턴: PREFIX_TIMESTAMP_TENANTID → PREFIX_TIMESTAMP
+  const parts = orderId.split('_');
+  if (parts.length >= 3) {
+    // 타임스탬프까지만 반환 (예: SUB_1767967504914)
+    return `${parts[0]}_${parts[1]}`;
+  }
+  return orderId;
+}
+
 // 이용기간 계산 (URL 파라미터 우선, 없으면 현재 시점 기준으로 계산)
 function getSubscriptionPeriod(startParam?: string | null, endParam?: string | null): { start: string; end: string; nextBilling: string } {
   // URL 파라미터가 있으면 사용
@@ -140,7 +151,7 @@ function SuccessContent() {
               <div className="flex justify-between items-center mb-1">
                 <span className="text-gray-400 text-xs">주문번호</span>
               </div>
-              <span className="text-gray-500 text-xs font-mono break-all">{orderId}</span>
+              <span className="text-gray-500 text-xs font-mono break-all">{formatOrderId(orderId)}</span>
             </div>
           )}
         </div>

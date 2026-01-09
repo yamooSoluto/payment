@@ -11,7 +11,8 @@ interface Payment {
   amount: number;
   plan: string;
   status: 'done' | 'completed' | 'canceled' | 'failed' | 'refunded';
-  type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund' | 'subscription' | 'cancel_refund' | 'downgrade_refund';
+  type?: 'upgrade' | 'downgrade' | 'recurring' | 'refund' | 'subscription' | 'cancel_refund' | 'downgrade_refund' | 'plan_change' | 'plan_change_refund';
+  newPlan?: string; // plan_change_refund에서 새 플랜 정보
   previousPlan?: string;
   refundReason?: string;
   cancelReason?: string;
@@ -58,8 +59,8 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
 
   // 환불 레코드를 원결제에 병합
   const mergedPayments = useMemo(() => {
-    // 환불 타입들 (cancel_refund, downgrade_refund, refund 등)
-    const refundTypes = ['refund', 'cancel_refund', 'downgrade_refund'];
+    // 환불 타입들 (cancel_refund, downgrade_refund, plan_change_refund, refund 등)
+    const refundTypes = ['refund', 'cancel_refund', 'downgrade_refund', 'plan_change_refund'];
 
     // 환불 레코드와 원결제 분리
     const refundRecords = payments.filter(p => refundTypes.includes(p.type || ''));
@@ -168,7 +169,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
       const status = p.hasRefund
         ? (p.totalRefundedAmount >= p.amount ? '전액환불' : '부분환불')
         : (p.status === 'done' || p.status === 'completed' ? '완료' : p.status === 'canceled' ? '취소' : '실패');
-      const type = p.type === 'upgrade' ? '업그레이드' : p.type === 'downgrade' ? '다운그레이드' : '정기결제';
+      const type = (p.type === 'upgrade' || p.type === 'plan_change') ? '플랜 변경' : p.type === 'downgrade' ? '다운그레이드' : '정기결제';
       const card = p.cardCompany ? `${p.cardCompany}카드 ${p.cardNumber || ''}` : '';
 
       return [tenantName || '', formattedDate, planName, amount, refundAmount, netAmount, status, type, card];
@@ -411,8 +412,8 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-gray-900 text-sm sm:text-base">
-                    {payment.type === 'upgrade' && payment.previousPlan
-                      ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 업그레이드`
+                    {(payment.type === 'upgrade' || payment.type === 'plan_change') && payment.previousPlan
+                      ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 플랜 변경`
                       : `${getPlanName(payment.plan)} 플랜`}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-500">
@@ -460,22 +461,6 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
                 )}
               </div>
             </div>
-
-            {/* 업그레이드 상세 정보 - 크레딧 정보 표시 */}
-            {payment.type === 'upgrade' && payment.creditAmount && payment.creditAmount > 0 && (
-              <div className="mt-2 ml-7 pl-3 border-l-2 border-blue-200">
-                <div className="text-xs sm:text-sm text-gray-500 space-y-1">
-                  <div className="flex justify-between">
-                    <span>└ {getPlanName(payment.plan)} ({payment.proratedNewAmount ? `일할계산` : ''})</span>
-                    <span className="text-gray-700">+{formatPrice(payment.proratedNewAmount || 0)}원</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="ml-3">{getPlanName(payment.previousPlan || '')} 미사용분</span>
-                    <span className="text-green-600">-{formatPrice(payment.creditAmount)}원</span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* 환불 내역 - 원결제 아래에 하위 행으로 표시 */}
             {payment.hasRefund && payment.refunds.map((refund, index) => (

@@ -197,7 +197,7 @@ export default function TossPaymentWidget({
 
     try {
       if (isChangePlan) {
-        // 플랜 변경: 업그레이드 또는 다운그레이드
+        // 플랜 변경: 기존 플랜 환불 + 새 플랜 결제
         const response = await fetch('/api/payments/change-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -206,10 +206,6 @@ export default function TossPaymentWidget({
             tenantId: effectiveTenantId,
             newPlan: plan,
             newAmount: fullAmount,
-            proratedAmount: amount,
-            isDowngrade,
-            refundAmount,
-            // 업그레이드 상세 정보 (크레딧 표시용)
             creditAmount: calculationDetails?.currentRefund || 0,
             proratedNewAmount: calculationDetails?.newPlanRemaining || 0,
           }),
