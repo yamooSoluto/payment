@@ -67,11 +67,21 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     } | null;
   }> = [];
 
-  // 사용자 정보 (첫 번째 tenant에서 가져옴)
+  // 사용자 정보 (users 컬렉션 우선, 없으면 tenants에서 가져옴)
   let userInfo: { name: string; phone: string } = { name: '', phone: '' };
 
   if (db) {
     try {
+      // users 컬렉션에서 사용자 정보 조회 (우선)
+      const userDoc = await db.collection('users').doc(email).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        userInfo = {
+          name: userData?.name || '',
+          phone: userData?.phone || '',
+        };
+      }
+
       // tenants 컬렉션에서 email로 매장 목록 조회
       const tenantsSnapshot = await db
         .collection('tenants')
@@ -79,12 +89,14 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         .get();
 
       if (!tenantsSnapshot.empty) {
-        // 첫 번째 tenant에서 사용자 정보 가져오기
-        const firstTenantData = tenantsSnapshot.docs[0].data();
-        userInfo = {
-          name: firstTenantData.name || firstTenantData.ownerName || '',
-          phone: firstTenantData.phone || '',
-        };
+        // users에서 정보가 없으면 첫 번째 tenant에서 가져오기
+        if (!userInfo.name || !userInfo.phone) {
+          const firstTenantData = tenantsSnapshot.docs[0].data();
+          userInfo = {
+            name: userInfo.name || firstTenantData.name || firstTenantData.ownerName || '',
+            phone: userInfo.phone || firstTenantData.phone || '',
+          };
+        }
 
         // 모든 tenant 데이터 수집 (삭제된 매장 제외, trial/subscription 정보 포함)
         const tenantDataList = tenantsSnapshot.docs
