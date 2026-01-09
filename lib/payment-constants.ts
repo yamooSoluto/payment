@@ -28,15 +28,32 @@ export function getPaymentScheduleText(options: {
   currentPeriodEnd?: string;
   nextBillingDate?: string;
   formatPrice: (price: number) => string;
+  // 플랜 변경 시 실제 결제/환불 내역 (채널톡 스타일)
+  newPlanPaymentAmount?: number; // 새 플랜 결제 금액 (일할 계산)
+  currentRefundAmount?: number;  // 기존 플랜 환불 금액
 }): string {
-  const { amount, fullAmount, isChangePlan, isDowngrade, refundAmount, isReserve, isTrialImmediate, hasBillingKey, currentPeriodEnd, nextBillingDate, formatPrice } = options;
+  const { amount, fullAmount, isChangePlan, isDowngrade, refundAmount, isReserve, isTrialImmediate, hasBillingKey, currentPeriodEnd, nextBillingDate, formatPrice, newPlanPaymentAmount, currentRefundAmount } = options;
 
-  // 플랜 변경 (업그레이드 또는 다운그레이드)
+  // 플랜 변경 (업그레이드 또는 다운그레이드) - 채널톡 스타일: 환불 + 결제 분리 안내
   if (isChangePlan && fullAmount) {
-    if (isDowngrade && refundAmount) {
-      return `플랜 변경 시 ${formatPrice(refundAmount)}원이 환불되며, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
+    const paymentAmt = newPlanPaymentAmount ?? amount;
+    const refundAmt = currentRefundAmount ?? 0;
+
+    if (isDowngrade && refundAmt > 0) {
+      // 다운그레이드: 환불이 결제보다 큰 경우
+      const netRefund = refundAmt - paymentAmt;
+      if (paymentAmt > 0) {
+        return `지금 ${formatPrice(paymentAmt)}원이 결제되고, 기존 플랜 미사용분 ${formatPrice(refundAmt)}원은 3~5일 내 환불됩니다. (실 환불: ${formatPrice(netRefund)}원) 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
+      }
+      return `기존 플랜 미사용분 ${formatPrice(refundAmt)}원은 3~5일 내 환불됩니다. 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
     }
-    return `지금 ${formatPrice(amount)}원이 결제되고, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
+
+    // 업그레이드: 결제가 환불보다 큰 경우
+    if (refundAmt > 0) {
+      const netPayment = paymentAmt - refundAmt;
+      return `지금 ${formatPrice(paymentAmt)}원이 결제되고, 기존 플랜 미사용분 ${formatPrice(refundAmt)}원은 3~5일 내 환불됩니다. (실 부담: ${formatPrice(netPayment)}원) 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
+    }
+    return `지금 ${formatPrice(paymentAmt)}원이 결제되고, 다음 결제일부터 매월 ${formatPrice(fullAmount)}원이 자동 결제됩니다.`;
   }
 
   // Trial에서 즉시 전환 (카드 등록됨)

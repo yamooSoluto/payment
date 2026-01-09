@@ -684,6 +684,9 @@ export default function TossPaymentWidget({
               currentPeriodEnd,
               nextBillingDate: period.nextBilling,
               formatPrice,
+              // 채널톡 스타일: 실제 결제/환불 금액 분리 안내
+              newPlanPaymentAmount: calculationDetails?.newPlanRemaining,
+              currentRefundAmount: calculationDetails?.currentRefund,
             })}</span>
           </li>
           {REFUND_POLICY_ITEMS

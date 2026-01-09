@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { payWithBillingKey, cancelPayment, getPlanName } from '@/lib/toss';
+import { payWithBillingKey, cancelPayment, getPayment, getPlanName } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 
 export async function POST(request: NextRequest) {
@@ -54,40 +54,101 @@ export async function POST(request: NextRequest) {
     // 1. 기존 결제에서 미사용분 부분 환불
     let refundResult = null;
     let originalPaymentId = null;
+    let actualRefundedAmount = 0; // 실제 환불된 금액
     const refundOrderId = `REFUND_${timestamp}_${tenantId}`;
 
     if (creditAmount && creditAmount > 0) {
-      // 가장 최근 결제 내역 조회
+      // 가장 최근 원결제 내역 조회 (환불이나 플랜변경 제외)
       const paymentsSnapshot = await db
         .collection('payments')
         .where('tenantId', '==', tenantId)
         .where('status', '==', 'done')
         .orderBy('createdAt', 'desc')
-        .limit(1)
+        .limit(5) // 여러 개 가져와서 필터링
         .get();
 
       if (!paymentsSnapshot.empty) {
-        const lastPaymentDoc = paymentsSnapshot.docs[0];
-        const lastPayment = lastPaymentDoc.data();
-        originalPaymentId = lastPaymentDoc.id;
+        // 환불 레코드 타입만 제외하고 원결제 찾기 (plan_change도 환불 가능한 결제임)
+        const excludeTypes = ['plan_change_refund', 'refund', 'cancel_refund', 'downgrade_refund'];
+        const originalPaymentDoc = paymentsSnapshot.docs.find(doc => {
+          const data = doc.data();
+          return !excludeTypes.includes(data.type || '');
+        });
 
-        // 부분 환불 시도
-        if (lastPayment.paymentKey) {
-          try {
-            refundResult = await cancelPayment(
-              lastPayment.paymentKey,
-              `플랜 변경: ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} (미사용분 환불)`,
-              creditAmount
-            );
-            console.log('Refund processed:', refundResult);
-          } catch (refundError) {
-            console.error('Refund failed:', refundError);
-            // 환불 실패 시 에러 반환 (결제 진행하지 않음)
-            return NextResponse.json({
-              error: '기존 플랜 환불 처리에 실패했습니다. 잠시 후 다시 시도해주세요.'
-            }, { status: 500 });
+        if (originalPaymentDoc) {
+          const lastPayment = originalPaymentDoc.data();
+          originalPaymentId = originalPaymentDoc.id;
+
+          // 이미 환불된 금액 확인
+          const alreadyRefunded = lastPayment.refundedAmount || 0;
+          const refundableAmount = lastPayment.amount - alreadyRefunded;
+
+          console.log('Refund check:', {
+            originalPaymentId,
+            paymentAmount: lastPayment.amount,
+            alreadyRefunded,
+            refundableAmount,
+            requestedRefund: creditAmount,
+          });
+
+          // 부분 환불 시도
+          if (lastPayment.paymentKey) {
+            try {
+              // Toss에서 실제 취소 가능 금액 확인
+              const tossPayment = await getPayment(lastPayment.paymentKey);
+              const tossCancellable = tossPayment.cancels
+                ? tossPayment.totalAmount - tossPayment.cancels.reduce((sum: number, c: { cancelAmount: number }) => sum + c.cancelAmount, 0)
+                : tossPayment.totalAmount;
+
+              console.log('Toss payment check:', {
+                paymentKey: lastPayment.paymentKey,
+                totalAmount: tossPayment.totalAmount,
+                tossCancellable,
+                dbRefundable: refundableAmount,
+                requestedRefund: creditAmount,
+              });
+
+              // 환불 가능한 금액이 없는 경우
+              if (tossCancellable <= 0) {
+                console.log('No cancellable amount in Toss, skipping refund');
+              } else {
+                // 실제 환불 금액 (요청 금액, DB 환불 가능 금액, Toss 취소 가능 금액 중 가장 작은 값)
+                actualRefundedAmount = Math.min(creditAmount, refundableAmount, tossCancellable);
+
+                if (actualRefundedAmount > 0) {
+                  refundResult = await cancelPayment(
+                    lastPayment.paymentKey,
+                    `플랜 변경: ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} (미사용분 환불)`,
+                    actualRefundedAmount
+                  );
+                  console.log('Refund processed:', refundResult);
+                }
+              }
+            } catch (refundError) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const tossError = (refundError as any)?.response?.data;
+              console.error('Refund failed:', {
+                error: refundError,
+                tossError,
+                paymentKey: lastPayment.paymentKey,
+              });
+
+              // Toss 에러 메시지 추출
+              const errorMessage = tossError?.message || '기존 플랜 환불 처리에 실패했습니다.';
+
+              return NextResponse.json({
+                error: `환불 실패: ${errorMessage}`,
+                tossErrorCode: tossError?.code,
+              }, { status: 500 });
+            }
+          } else {
+            console.log('No paymentKey found, skipping refund');
           }
+        } else {
+          console.log('No original payment found (all are refund/plan_change types)');
         }
+      } else {
+        console.log('No previous payment found for refund');
       }
     }
 
@@ -125,7 +186,7 @@ export async function POST(request: NextRequest) {
       let existingRefunded = 0;
       let originalPaymentRef = null;
 
-      if (creditAmount && creditAmount > 0 && refundResult && originalPaymentId) {
+      if (actualRefundedAmount > 0 && refundResult && originalPaymentId) {
         originalPaymentRef = db.collection('payments').doc(originalPaymentId);
         const originalPaymentDoc = await transaction.get(originalPaymentRef);
         if (originalPaymentDoc.exists) {
@@ -136,7 +197,7 @@ export async function POST(request: NextRequest) {
       // === 모든 쓰기 수행 ===
 
       // 환불 내역 저장 (기존 플랜)
-      if (creditAmount && creditAmount > 0 && refundResult) {
+      if (actualRefundedAmount > 0 && refundResult) {
         const refundDocId = `${refundOrderId}_${Date.now()}`;
         const refundRef = db.collection('payments').doc(refundDocId);
         transaction.set(refundRef, {
@@ -144,13 +205,13 @@ export async function POST(request: NextRequest) {
           email,
           orderId: refundOrderId,
           paymentKey: refundResult.paymentKey || null,
-          amount: -creditAmount, // 음수로 저장 (환불)
+          amount: -actualRefundedAmount, // 음수로 저장 (환불)
           plan: previousPlan,
           type: 'plan_change_refund',
           previousPlan,
           newPlan,
           status: 'refunded',
-          refundAmount: creditAmount,
+          refundAmount: actualRefundedAmount,
           refundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경 (미사용분)`,
           originalPaymentId,
           paidAt: now,
@@ -160,7 +221,7 @@ export async function POST(request: NextRequest) {
         // 원결제 문서에 환불 정보 업데이트
         if (originalPaymentRef) {
           transaction.update(originalPaymentRef, {
-            refundedAmount: existingRefunded + creditAmount,
+            refundedAmount: existingRefunded + actualRefundedAmount,
             lastRefundAt: now,
             lastRefundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경`,
             updatedAt: now,
@@ -220,7 +281,7 @@ export async function POST(request: NextRequest) {
             email,
             previousPlan,
             newPlan,
-            refundAmount: creditAmount || 0,
+            refundAmount: actualRefundedAmount,
             newPlanAmount: proratedNewAmount || 0,
           }),
         });
@@ -232,7 +293,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orderId: paymentOrderId,
-      refundAmount: creditAmount || 0,
+      refundAmount: actualRefundedAmount,
       paidAmount: proratedNewAmount || 0,
       message: `${getPlanName(newPlan)} 플랜으로 변경되었습니다.`,
     });
