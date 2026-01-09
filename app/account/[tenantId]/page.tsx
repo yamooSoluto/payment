@@ -6,6 +6,7 @@ import PaymentHistory from '@/components/account/PaymentHistory';
 import CardList from '@/components/account/CardList';
 import AccountTabs from '@/components/account/AccountTabs';
 import SubscriptionHistory from '@/components/account/SubscriptionHistory';
+import TenantHeader from '@/components/account/TenantHeader';
 import Link from 'next/link';
 import { NavArrowLeft, NavArrowRight, Sofa } from 'iconoir-react';
 
@@ -89,7 +90,8 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   let rawSubscription = subscriptionDoc.exists ? subscriptionDoc.data() : null;
 
   // subscriptions 컬렉션에 없으면 tenants의 subscription 정보 사용
-  if (!rawSubscription && tenantData.subscription) {
+  // 단, subscription.plan이 있는 경우에만 (빈 subscription 객체는 무시)
+  if (!rawSubscription && tenantData.subscription && tenantData.subscription.plan) {
     // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
 
     // trial 날짜: trial.trialEndsAt 또는 subscription.trial.trialEndsAt 또는 루트의 trialEndsAt
@@ -165,16 +167,14 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
         매장 목록으로 돌아가기
       </Link>
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
-            <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">{tenantData.brandName || '매장'}</h1>
-        </div>
-        <p className="text-gray-600">{email}</p>
-      </div>
+      {/* Header with Edit button */}
+      <TenantHeader
+        tenantId={tenantId}
+        brandName={tenantData.brandName || '매장'}
+        email={email}
+        industry={tenantData.industry}
+        authParam={authParam}
+      />
 
       {/* Content */}
       <div>

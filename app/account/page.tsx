@@ -86,8 +86,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           phone: firstTenantData.phone || '',
         };
 
-        // 모든 tenant 데이터 수집 (trial/subscription 정보 포함)
-        const tenantDataList = tenantsSnapshot.docs.map((doc) => {
+        // 모든 tenant 데이터 수집 (삭제된 매장 제외, trial/subscription 정보 포함)
+        const tenantDataList = tenantsSnapshot.docs
+          .filter((doc) => !doc.data().deleted)
+          .map((doc) => {
           const data = doc.data();
 
           // 체험 종료일 확인
@@ -172,12 +174,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           }
         });
 
-        // 최종 결과 조합 (subscriptions 없으면 tenants의 정보 사용)
+        // 최종 결과 조합 (subscriptions 컬렉션 우선, plan이 있는 경우만 사용)
         tenants = tenantDataList.map((tenant) => {
           const subFromCollection = subscriptionMap.get(tenant.tenantId);
 
-          // subscriptions 컬렉션에 있으면 그것 사용
-          if (subFromCollection) {
+          // subscriptions 컬렉션에 있고 plan이 있으면 사용
+          if (subFromCollection?.plan) {
             return {
               id: tenant.id,
               tenantId: tenant.tenantId,
@@ -188,22 +190,54 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             };
           }
 
-          // 없으면 tenants 컬렉션의 subscription 정보 사용 (trial 등)
+          // tenants 컬렉션의 subscription 정보 확인 (plan이 있는 경우만)
           const tenantSub = tenant.tenantSubscription;
+          if (tenantSub.plan && tenantSub.plan !== 'trial') {
+            // trial이 아닌 실제 플랜이 있는 경우에만 사용
+            return {
+              id: tenant.id,
+              tenantId: tenant.tenantId,
+              brandName: tenant.brandName,
+              email: tenant.email,
+              createdAt: tenant.createdAt,
+              subscription: {
+                plan: tenantSub.plan,
+                status: tenantSub.status,
+                amount: 0,
+                nextBillingDate: tenantSub.renewsAt,
+                currentPeriodEnd: tenantSub.trialEndsAt || tenantSub.renewsAt,
+                canceledAt: null,
+              },
+            };
+          }
+
+          // trialEndsAt이 있는 진짜 체험 중인 경우
+          if (tenantSub.trialEndsAt && tenantSub.status === 'trial') {
+            return {
+              id: tenant.id,
+              tenantId: tenant.tenantId,
+              brandName: tenant.brandName,
+              email: tenant.email,
+              createdAt: tenant.createdAt,
+              subscription: {
+                plan: 'trial',
+                status: 'trial',
+                amount: 0,
+                nextBillingDate: null,
+                currentPeriodEnd: tenantSub.trialEndsAt,
+                canceledAt: null,
+              },
+            };
+          }
+
+          // 그 외에는 미구독 (subscription: null)
           return {
             id: tenant.id,
             tenantId: tenant.tenantId,
             brandName: tenant.brandName,
             email: tenant.email,
             createdAt: tenant.createdAt,
-            subscription: {
-              plan: tenantSub.plan,
-              status: tenantSub.status,
-              amount: 0,
-              nextBillingDate: tenantSub.renewsAt,
-              currentPeriodEnd: tenantSub.trialEndsAt || tenantSub.renewsAt,
-              canceledAt: null,
-            },
+            subscription: null,
           };
         });
       }

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar } from 'iconoir-react';
+import { INDUSTRY_OPTIONS } from '@/lib/constants';
 
 interface Member {
   id: string;
@@ -28,6 +29,7 @@ interface TenantInfo {
   docId: string;
   tenantId: string;
   brandName: string;
+  industry?: string;
   address?: string;
   createdAt: string | null;
   subscription: TenantSubscription | null;
@@ -103,6 +105,28 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [loadingChargeInfo, setLoadingChargeInfo] = useState(false);
   const [processingCharge, setProcessingCharge] = useState(false);
   const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
+
+  // 매장 추가 모달 상태
+  const [addTenantModal, setAddTenantModal] = useState(false);
+  const [addTenantForm, setAddTenantForm] = useState({ brandName: '', industry: '' });
+  const [addingTenant, setAddingTenant] = useState(false);
+
+  // 매장 수정 모달 상태
+  const [editTenantModal, setEditTenantModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
+  const [editTenantForm, setEditTenantForm] = useState({ brandName: '' });
+  const [editingTenant, setEditingTenant] = useState(false);
+
+  // 구독 정보 수정 모달 상태
+  const [editSubModal, setEditSubModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
+  const [editSubForm, setEditSubForm] = useState({
+    plan: 'basic',
+    status: 'active',
+    amount: 39000,
+    currentPeriodStart: '',
+    currentPeriodEnd: '',
+    nextBillingDate: '',
+  });
+  const [editingSub, setEditingSub] = useState(false);
 
   useEffect(() => {
     fetchMemberDetail();
@@ -285,6 +309,153 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       ...chargeFormData,
       plan,
       amount: planPrices[plan] || chargeFormData.amount,
+    });
+  };
+
+  // 매장 추가
+  const handleAddTenant = async () => {
+    if (!addTenantForm.brandName.trim() || !addTenantForm.industry) {
+      alert('매장명과 업종을 입력해주세요.');
+      return;
+    }
+    setAddingTenant(true);
+    try {
+      const response = await fetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: member?.email,
+          brandName: addTenantForm.brandName.trim(),
+          industry: addTenantForm.industry,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('매장이 추가되었습니다.');
+        setAddTenantModal(false);
+        setAddTenantForm({ brandName: '', industry: '' });
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '매장 추가에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to add tenant:', error);
+      alert('오류가 발생했습니다.');
+    } finally {
+      setAddingTenant(false);
+    }
+  };
+
+  // 매장 수정
+  const handleEditTenant = async () => {
+    if (!editTenantModal.tenant || !editTenantForm.brandName.trim()) {
+      alert('매장명을 입력해주세요.');
+      return;
+    }
+    setEditingTenant(true);
+    try {
+      const response = await fetch(`/api/admin/tenants/${editTenantModal.tenant.tenantId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandName: editTenantForm.brandName.trim() }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('매장 정보가 수정되었습니다.');
+        setEditTenantModal({ isOpen: false, tenant: null });
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '매장 수정에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to edit tenant:', error);
+      alert('오류가 발생했습니다.');
+    } finally {
+      setEditingTenant(false);
+    }
+  };
+
+  // 매장 삭제
+  const handleDeleteTenant = async (tenant: TenantInfo) => {
+    if (!confirm(`'${tenant.brandName}' 매장을 삭제하시겠습니까?\n\n삭제 후 90일간 복구 가능합니다.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/tenants/${tenant.tenantId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('매장이 삭제되었습니다.');
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '매장 삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to delete tenant:', error);
+      alert('오류가 발생했습니다.');
+    }
+  };
+
+  // 구독 수정 모달 열기
+  const openEditSubModal = (tenant: TenantInfo) => {
+    const sub = tenant.subscription;
+    setEditSubModal({ isOpen: true, tenant });
+    setEditSubForm({
+      plan: sub?.plan || 'basic',
+      status: sub?.status || 'active',
+      amount: sub?.amount || 39000,
+      currentPeriodStart: '',
+      currentPeriodEnd: sub?.currentPeriodEnd?.split('T')[0] || '',
+      nextBillingDate: sub?.nextBillingDate?.split('T')[0] || '',
+    });
+  };
+
+  // 구독 정보 수정
+  const handleEditSubscription = async () => {
+    if (!editSubModal.tenant) return;
+    setEditingSub(true);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${editSubModal.tenant.tenantId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: editSubForm.plan,
+          status: editSubForm.status,
+          amount: editSubForm.amount,
+          currentPeriodStart: editSubForm.currentPeriodStart || undefined,
+          currentPeriodEnd: editSubForm.currentPeriodEnd || undefined,
+          nextBillingDate: editSubForm.nextBillingDate || undefined,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('구독 정보가 수정되었습니다.');
+        setEditSubModal({ isOpen: false, tenant: null });
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '구독 정보 수정에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to edit subscription:', error);
+      alert('오류가 발생했습니다.');
+    } finally {
+      setEditingSub(false);
+    }
+  };
+
+  // 구독 플랜 변경 시 금액 자동 설정
+  const handleSubPlanChange = (plan: string) => {
+    const planPrices: Record<string, number> = {
+      trial: 0,
+      basic: 39000,
+      business: 99000,
+      enterprise: 199000,
+    };
+    setEditSubForm({
+      ...editSubForm,
+      plan,
+      amount: planPrices[plan] || editSubForm.amount,
     });
   };
 
@@ -511,13 +682,30 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         <div className="space-y-6">
           {/* 매장 목록 */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <Sofa className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold">매장 목록</h2>
-              <span className="text-sm text-gray-400">({tenants.length})</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sofa className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold">매장 목록</h2>
+                <span className="text-sm text-gray-400">({tenants.length})</span>
+              </div>
+              <button
+                onClick={() => setAddTenantModal(true)}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                매장 추가
+              </button>
             </div>
             {tenants.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 매장이 없습니다.</p>
+              <div className="text-center py-4">
+                <p className="text-gray-500 mb-2">등록된 매장이 없습니다.</p>
+                <button
+                  onClick={() => setAddTenantModal(true)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  새 매장 추가하기
+                </button>
+              </div>
             ) : (
               <div className="space-y-2">
                 {tenants.map((tenant) => {
@@ -596,7 +784,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                                 </div>
                               )}
                               {/* 관리자 액션 버튼들 */}
-                              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
+                                  className="flex-1 px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <Calendar className="w-3 h-3" />
+                                  구독 정보
+                                </button>
                                 {tenant.subscription.status === 'active' && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); openPricePolicyModal(tenant); }}
@@ -615,6 +810,35 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                               </div>
                             </div>
                           )}
+                          {/* 매장 관리 버튼들 */}
+                          <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditTenantForm({ brandName: tenant.brandName });
+                                setEditTenantModal({ isOpen: true, tenant });
+                              }}
+                              className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors flex items-center justify-center gap-1"
+                            >
+                              <EditPencil className="w-3 h-3" />
+                              매장 수정
+                            </button>
+                            {!tenant.subscription && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
+                                className="flex-1 px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors flex items-center justify-center gap-1"
+                              >
+                                <Plus className="w-3 h-3" />
+                                구독 생성
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteTenant(tenant); }}
+                              className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center justify-center gap-1"
+                            >
+                              <Trash className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -902,6 +1126,251 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   <>
                     <HandCash className="w-4 h-4" />
                     {chargeFormData.amount.toLocaleString()}원 결제
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 매장 추가 모달 */}
+      {addTenantModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">새 매장 추가</h3>
+              <p className="text-sm text-gray-500 mt-1">{member?.email} 계정에 매장을 추가합니다</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  매장명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addTenantForm.brandName}
+                  onChange={(e) => setAddTenantForm({ ...addTenantForm, brandName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="매장 이름을 입력하세요"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  업종 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={addTenantForm.industry}
+                  onChange={(e) => setAddTenantForm({ ...addTenantForm, industry: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">업종을 선택하세요</option>
+                  {INDUSTRY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => {
+                  setAddTenantModal(false);
+                  setAddTenantForm({ brandName: '', industry: '' });
+                }}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleAddTenant}
+                disabled={addingTenant || !addTenantForm.brandName.trim() || !addTenantForm.industry}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {addingTenant ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    추가 중...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    매장 추가
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 매장 수정 모달 */}
+      {editTenantModal.isOpen && editTenantModal.tenant && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">매장 정보 수정</h3>
+              <p className="text-sm text-gray-500 mt-1">{editTenantModal.tenant.brandName}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  매장명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editTenantForm.brandName}
+                  onChange={(e) => setEditTenantForm({ ...editTenantForm, brandName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="매장 이름을 입력하세요"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">업종</label>
+                <p className="px-3 py-2 bg-gray-50 rounded-lg text-gray-600">
+                  {INDUSTRY_OPTIONS.find(opt => opt.value === editTenantModal.tenant?.industry)?.label || editTenantModal.tenant.industry || '미설정'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">업종은 변경할 수 없습니다</p>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setEditTenantModal({ isOpen: false, tenant: null })}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleEditTenant}
+                disabled={editingTenant || !editTenantForm.brandName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {editingTenant ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    저장 중...
+                  </>
+                ) : (
+                  <>
+                    <FloppyDisk className="w-4 h-4" />
+                    저장
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 구독 정보 수정 모달 */}
+      {editSubModal.isOpen && editSubModal.tenant && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">구독 정보 수정</h3>
+              <p className="text-sm text-gray-500 mt-1">{editSubModal.tenant.brandName}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* 플랜 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">플랜</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {['trial', 'basic', 'business', 'enterprise'].map((plan) => (
+                    <button
+                      key={plan}
+                      type="button"
+                      onClick={() => handleSubPlanChange(plan)}
+                      className={`px-3 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                        editSubForm.plan === plan
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {plan === 'trial' ? 'Trial' : plan === 'basic' ? 'Basic' : plan === 'business' ? 'Business' : 'Enterprise'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 상태 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">상태</label>
+                <select
+                  value={editSubForm.status}
+                  onChange={(e) => setEditSubForm({ ...editSubForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="trial">체험 중</option>
+                  <option value="active">구독 중</option>
+                  <option value="canceled">해지 예정</option>
+                  <option value="past_due">결제 실패</option>
+                  <option value="expired">만료</option>
+                </select>
+              </div>
+
+              {/* 금액 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">금액 (원)</label>
+                <input
+                  type="number"
+                  value={editSubForm.amount}
+                  onChange={(e) => setEditSubForm({ ...editSubForm, amount: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* 날짜 설정 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">구독 시작일</label>
+                  <input
+                    type="date"
+                    value={editSubForm.currentPeriodStart}
+                    onChange={(e) => setEditSubForm({ ...editSubForm, currentPeriodStart: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">구독 종료일</label>
+                  <input
+                    type="date"
+                    value={editSubForm.currentPeriodEnd}
+                    onChange={(e) => setEditSubForm({ ...editSubForm, currentPeriodEnd: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">다음 결제일</label>
+                <input
+                  type="date"
+                  value={editSubForm.nextBillingDate}
+                  onChange={(e) => setEditSubForm({ ...editSubForm, nextBillingDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setEditSubModal({ isOpen: false, tenant: null })}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleEditSubscription}
+                disabled={editingSub}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {editingSub ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    저장 중...
+                  </>
+                ) : (
+                  <>
+                    <FloppyDisk className="w-4 h-4" />
+                    저장
                   </>
                 )}
               </button>

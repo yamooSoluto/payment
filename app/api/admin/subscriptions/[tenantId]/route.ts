@@ -1,0 +1,189 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+const VALID_PLANS = ['trial', 'basic', 'business', 'enterprise'];
+const VALID_STATUSES = ['trial', 'active', 'canceled', 'past_due', 'expired'];
+const PLAN_PRICES: Record<string, number> = {
+  trial: 0,
+  basic: 39000,
+  business: 99000,
+  enterprise: 199000,
+};
+
+// 관리자: 구독 정보 수정
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+
+  try {
+    const { tenantId } = await params;
+    const body = await request.json();
+    const {
+      plan,
+      status,
+      amount,
+      currentPeriodStart,
+      currentPeriodEnd,
+      nextBillingDate,
+      trialEndDate,
+    } = body;
+
+    // 매장 존재 여부 확인
+    const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+    if (!tenantDoc.exists) {
+      return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    // 유효성 검증
+    if (plan && !VALID_PLANS.includes(plan)) {
+      return NextResponse.json({ error: '유효하지 않은 플랜입니다.' }, { status: 400 });
+    }
+
+    if (status && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json({ error: '유효하지 않은 상태입니다.' }, { status: 400 });
+    }
+
+    // 구독 문서 존재 여부 확인
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    const existingData = subscriptionDoc.exists ? subscriptionDoc.data() : null;
+
+    // 업데이트할 데이터 구성
+    const updateData: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'admin',
+    };
+
+    if (plan !== undefined) {
+      updateData.plan = plan;
+      // 플랜 변경 시 기본 금액 설정 (amount가 별도로 지정되지 않은 경우)
+      if (amount === undefined && !existingData?.amount) {
+        updateData.amount = PLAN_PRICES[plan] || 0;
+      }
+    }
+
+    if (status !== undefined) {
+      updateData.status = status;
+    }
+
+    if (amount !== undefined) {
+      updateData.amount = amount;
+    }
+
+    if (currentPeriodStart !== undefined) {
+      updateData.currentPeriodStart = currentPeriodStart ? new Date(currentPeriodStart) : null;
+    }
+
+    if (currentPeriodEnd !== undefined) {
+      updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+    }
+
+    if (nextBillingDate !== undefined) {
+      updateData.nextBillingDate = nextBillingDate ? new Date(nextBillingDate) : null;
+    }
+
+    if (trialEndDate !== undefined) {
+      updateData.trialEndDate = trialEndDate ? new Date(trialEndDate) : null;
+    }
+
+    // 구독 문서가 없으면 생성, 있으면 업데이트
+    const tenantData = tenantDoc.data();
+    if (!subscriptionDoc.exists) {
+      // 새 구독 생성
+      const newSubscription = {
+        tenantId,
+        email: tenantData?.email,
+        brandName: tenantData?.brandName,
+        plan: plan || 'basic',
+        status: status || 'active',
+        amount: amount ?? PLAN_PRICES[plan || 'basic'] ?? 39000,
+        createdAt: FieldValue.serverTimestamp(),
+        ...updateData,
+      };
+      await db.collection('subscriptions').doc(tenantId).set(newSubscription);
+    } else {
+      // 기존 구독 업데이트
+      await db.collection('subscriptions').doc(tenantId).update(updateData);
+    }
+
+    // 변경 로그 기록
+    await db.collection('subscription_changes').add({
+      tenantId,
+      brandName: tenantData?.brandName,
+      changedBy: 'admin',
+      changedAt: new Date(),
+      previousData: existingData || null,
+      newData: updateData,
+      reason: body.reason || '관리자 수정',
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: '구독 정보가 수정되었습니다.',
+    });
+  } catch (error) {
+    console.error('Failed to update subscription:', error);
+    return NextResponse.json(
+      { error: '구독 정보 수정에 실패했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 관리자: 구독 삭제 (구독 해지)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+
+  try {
+    const { tenantId } = await params;
+
+    // 구독 문서 존재 여부 확인
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    if (!subscriptionDoc.exists) {
+      return NextResponse.json({ error: '구독 정보를 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const existingData = subscriptionDoc.data();
+
+    // 구독 상태를 expired로 변경
+    await db.collection('subscriptions').doc(tenantId).update({
+      status: 'expired',
+      canceledAt: new Date(),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'admin',
+    });
+
+    // 변경 로그 기록
+    await db.collection('subscription_changes').add({
+      tenantId,
+      brandName: existingData?.brandName,
+      changedBy: 'admin',
+      changedAt: new Date(),
+      previousData: existingData,
+      action: 'cancel',
+      reason: '관리자 해지',
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: '구독이 해지되었습니다.',
+    });
+  } catch (error) {
+    console.error('Failed to cancel subscription:', error);
+    return NextResponse.json(
+      { error: '구독 해지에 실패했습니다.' },
+      { status: 500 }
+    );
+  }
+}
