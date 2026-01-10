@@ -1,11 +1,51 @@
-import { NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { NextResponse, NextRequest } from 'next/server';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { verifyToken } from '@/lib/auth';
+
+// 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
+async function authenticateRequest(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+
+  if (!authHeader) {
+    return null;
+  }
+
+  // Bearer 토큰인 경우 Firebase Auth로 처리
+  if (authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.substring(7);
+    try {
+      const auth = getAdminAuth();
+      if (!auth) {
+        console.error('Firebase Admin Auth not initialized');
+        return null;
+      }
+      const decodedToken = await auth.verifyIdToken(idToken);
+      return decodedToken.email || null;
+    } catch (error) {
+      console.error('Firebase Auth token verification failed:', error);
+      return null;
+    }
+  }
+
+  // 그 외는 SSO 토큰으로 처리
+  const email = await verifyToken(authHeader);
+  return email;
+}
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ email: string }> }
 ) {
   try {
+    // 인증 검증
+    const authenticatedEmail = await authenticateRequest(request);
+    if (!authenticatedEmail) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
     const { email } = await params;
 
     if (!email) {
@@ -16,6 +56,14 @@ export async function GET(
     }
 
     const decodedEmail = decodeURIComponent(email);
+
+    // 본인 정보만 조회 가능
+    if (decodedEmail !== authenticatedEmail) {
+      return NextResponse.json(
+        { error: '본인 정보만 조회할 수 있습니다.' },
+        { status: 403 }
+      );
+    }
 
     const db = adminDb || initializeFirebaseAdmin();
     if (!db) {

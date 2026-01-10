@@ -43,24 +43,37 @@ export async function POST(request: NextRequest) {
     const rawBody = await request.text();
     const body = JSON.parse(rawBody);
 
-    // HMAC 서명 검증 (프로덕션 환경에서만)
+    // HMAC 서명 검증 (필수)
     const webhookSecret = process.env.TOSS_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const signature = request.headers.get('X-Tosspayments-Signature');
-
-      if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
-        console.error('Webhook signature verification failed');
-        return NextResponse.json(
-          { error: 'Invalid webhook signature' },
-          { status: 401 }
-        );
-      }
-      console.log('Webhook signature verified successfully');
-    } else {
-      console.warn('TOSS_WEBHOOK_SECRET not set - skipping signature verification');
+    if (!webhookSecret) {
+      console.error('CRITICAL: TOSS_WEBHOOK_SECRET not configured');
+      return NextResponse.json(
+        { error: 'Webhook verification not configured' },
+        { status: 500 }
+      );
     }
 
-    console.log('Toss webhook received:', JSON.stringify(body, null, 2));
+    const signature = request.headers.get('X-Tosspayments-Signature');
+    if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+      console.error('Webhook signature verification failed');
+      return NextResponse.json(
+        { error: 'Invalid webhook signature' },
+        { status: 401 }
+      );
+    }
+
+    // 민감 정보 마스킹하여 로깅
+    const safeBody = {
+      eventType: body.eventType,
+      createdAt: body.createdAt,
+      data: body.data ? {
+        ...body.data,
+        billingKey: body.data.billingKey ? `****${body.data.billingKey.slice(-4)}` : undefined,
+        paymentKey: body.data.paymentKey ? `****${body.data.paymentKey.slice(-8)}` : undefined,
+        customerKey: body.data.customerKey ? body.data.customerKey.replace(/@.*/, '@***') : undefined,
+      } : undefined,
+    };
+    console.log('Toss webhook received:', JSON.stringify(safeBody, null, 2));
 
     const { eventType, data } = body;
 
@@ -100,7 +113,7 @@ export async function POST(request: NextRequest) {
               updatedAt: new Date(),
             });
 
-            console.log('Payment marked as canceled:', paymentKey);
+            console.log('Payment marked as canceled:', paymentKey ? `****${paymentKey.slice(-8)}` : 'unknown');
 
             // 구독 상태도 업데이트 (취소된 경우)
             if (status === 'CANCELED' || (typeof eventType === 'string' && eventType.includes('CANCELED'))) {
@@ -123,7 +136,7 @@ export async function POST(request: NextRequest) {
                     cancelReason: 'Payment canceled via Toss',
                     updatedAt: new Date(),
                   });
-                  console.log('Subscription marked as canceled for:', email);
+                  console.log('Subscription marked as canceled for:', email ? email.replace(/@.*/, '@***') : 'unknown');
                 }
               }
             }
@@ -142,7 +155,7 @@ export async function POST(request: NextRequest) {
       case 'CANCEL_STATUS_CHANGED': {
         // 취소 상태 변경
         const paymentKey = data?.paymentKey;
-        console.log('Cancel status changed:', paymentKey, data?.cancelStatus);
+        console.log('Cancel status changed:', paymentKey ? `****${paymentKey.slice(-8)}` : 'unknown', data?.cancelStatus);
 
         if (paymentKey) {
           const paymentsSnapshot = await db
@@ -166,7 +179,7 @@ export async function POST(request: NextRequest) {
         // 빌링키 삭제 (사용자가 토스에서 카드 삭제)
         const billingKey = data?.billingKey;
         const customerKey = data?.customerKey;
-        console.log('Billing key deleted:', billingKey, customerKey);
+        console.log('Billing key deleted:', billingKey ? `****${billingKey.slice(-4)}` : 'unknown', customerKey ? customerKey.replace(/@.*/, '@***') : 'unknown');
 
         if (customerKey) {
           // customerKey는 보통 email
@@ -180,7 +193,7 @@ export async function POST(request: NextRequest) {
               billingDeletedAt: new Date(),
               updatedAt: new Date(),
             });
-            console.log('Billing key removed from subscription:', customerKey);
+            console.log('Billing key removed from subscription:', customerKey ? customerKey.replace(/@.*/, '@***') : 'unknown');
           }
         }
         break;
@@ -189,7 +202,7 @@ export async function POST(request: NextRequest) {
       case 'BILLING_SUSPENDED': {
         // 빌링 정지 (결제 실패 등)
         const customerKey = data?.customerKey;
-        console.log('Billing suspended for:', customerKey);
+        console.log('Billing suspended for:', customerKey ? customerKey.replace(/@.*/, '@***') : 'unknown');
 
         if (customerKey) {
           await db.collection('subscriptions').doc(customerKey).update({

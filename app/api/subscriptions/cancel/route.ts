@@ -1,9 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
-import { cancelPayment } from '@/lib/toss';
+import { cancelPayment, PLAN_PRICES } from '@/lib/toss';
 import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+
+// 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
+async function authenticateRequest(request: NextRequest, bodyToken?: string): Promise<string | null> {
+  // 1. body에서 token 확인 (SSO 토큰)
+  if (bodyToken) {
+    const email = await verifyToken(bodyToken);
+    if (email) return email;
+  }
+
+  // 2. Authorization 헤더 확인
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader) {
+    return null;
+  }
+
+  // Bearer 토큰인 경우 Firebase Auth로 처리
+  if (authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.substring(7);
+    try {
+      const auth = getAdminAuth();
+      if (!auth) {
+        console.error('Firebase Admin Auth not initialized');
+        return null;
+      }
+      const decodedToken = await auth.verifyIdToken(idToken);
+      return decodedToken.email || null;
+    } catch (error) {
+      console.error('Firebase Auth token verification failed:', error);
+      return null;
+    }
+  }
+
+  // 그 외는 SSO 토큰으로 처리
+  const email = await verifyToken(authHeader);
+  return email;
+}
+
+// 환불 금액 계산 함수
+function calculateRefundAmount(
+  currentAmount: number,
+  currentPeriodStart: Date,
+  nextBillingDate: Date
+): number {
+  const startDateOnly = new Date(currentPeriodStart);
+  startDateOnly.setHours(0, 0, 0, 0);
+  const nextDateOnly = new Date(nextBillingDate);
+  nextDateOnly.setHours(0, 0, 0, 0);
+
+  // 총 기간 일수
+  const totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+  // 사용 일수 (오늘 포함)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  // 남은 일수
+  const daysLeft = Math.max(0, totalDaysInPeriod - usedDays);
+
+  // 0 나누기 방지
+  if (totalDaysInPeriod <= 0) {
+    return 0;
+  }
+
+  // 환불 금액: 남은 일수 비율로 계산
+  return Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
+}
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -13,21 +80,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId, reason, mode, refundAmount } = body;
+    const { token, tenantId, reason, mode } = body;
+    // emailParam, refundAmount는 클라이언트에서 받지만 무시
 
-    let email: string | null = null;
-
-    // 토큰으로 인증 (포탈 SSO)
-    if (token) {
-      email = await verifyToken(token);
-    }
-    // 이메일로 직접 인증 (Firebase Auth)
-    else if (emailParam) {
-      email = emailParam;
-    }
-
+    // 인증 검증
+    const email = await authenticateRequest(request, token);
     if (!email) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      return NextResponse.json({ error: 'Authentication required - valid token required' }, { status: 401 });
     }
 
     if (!tenantId) {
@@ -61,8 +120,20 @@ export async function POST(request: NextRequest) {
       let latestPayment: any = null;
       let latestPaymentId: string | null = null;
 
+      // 환불 금액 서버에서 계산
+      let refundAmount = 0;
+      const currentAmount = subscription.amount || PLAN_PRICES[subscription.plan] || 0;
+      const currentPeriodStart = subscription.currentPeriodStart?.toDate?.() ||
+                                 (subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart) : null);
+      const nextBillingDate = subscription.nextBillingDate?.toDate?.() ||
+                              (subscription.nextBillingDate ? new Date(subscription.nextBillingDate) : null);
+
+      if (currentPeriodStart && nextBillingDate && currentAmount > 0) {
+        refundAmount = calculateRefundAmount(currentAmount, currentPeriodStart, nextBillingDate);
+      }
+
       // 환불 금액이 있으면 부분 취소 시도
-      if (refundAmount && refundAmount > 0) {
+      if (refundAmount > 0) {
         // 최근 결제 내역에서 paymentKey 조회
         const paymentsSnapshot = await db
           .collection('payments')

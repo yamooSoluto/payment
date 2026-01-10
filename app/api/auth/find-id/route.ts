@@ -41,9 +41,9 @@ export async function POST(request: Request) {
       // 이메일 일부 마스킹 (예: te***@gmail.com)
       const maskedEmail = maskEmail(email);
 
+      // 보안: 전체 이메일 노출 방지 - 마스킹된 이메일만 반환
       return NextResponse.json({
         found: true,
-        email: email,
         maskedEmail: maskedEmail,
       });
     }
@@ -62,9 +62,9 @@ export async function POST(request: Request) {
 
       if (email) {
         const maskedEmail = maskEmail(email);
+        // 보안: 전체 이메일 노출 방지 - 마스킹된 이메일만 반환
         return NextResponse.json({
           found: true,
-          email: email,
           maskedEmail: maskedEmail,
         });
       }

@@ -204,16 +204,18 @@ export default function TossPaymentWidget({
       if (isChangePlan) {
         // 플랜 변경: 기존 플랜 환불 + 새 플랜 결제
         const idempotencyKey = generateIdempotencyKey('PLAN_CHANGE');
+        // authParam에서 token 추출 (token=xxx 형태)
+        const params = new URLSearchParams(authParam);
+        const token = params.get('token');
         const response = await fetch('/api/payments/change-plan', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': token }),
+          },
           body: JSON.stringify({
-            email,
             tenantId: effectiveTenantId,
             newPlan: plan,
-            newAmount: fullAmount,
-            creditAmount: calculationDetails?.currentRefund || 0,
-            proratedNewAmount: calculationDetails?.newPlanRemaining || 0,
             idempotencyKey,  // 멱등성 키 전달
           }),
         });

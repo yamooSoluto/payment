@@ -1,9 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { payWithBillingKey, cancelPayment, getPayment, getPlanName } from '@/lib/toss';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { payWithBillingKey, cancelPayment, getPayment, getPlanName, PLAN_PRICES } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+import { verifyToken } from '@/lib/auth';
+
+// 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
+async function authenticateRequest(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+
+  if (!authHeader) {
+    return null;
+  }
+
+  // Bearer 토큰인 경우 Firebase Auth로 처리
+  if (authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.substring(7);
+    try {
+      const auth = getAdminAuth();
+      if (!auth) {
+        console.error('Firebase Admin Auth not initialized');
+        return null;
+      }
+      const decodedToken = await auth.verifyIdToken(idToken);
+      return decodedToken.email || null;
+    } catch (error) {
+      console.error('Firebase Auth token verification failed:', error);
+      return null;
+    }
+  }
+
+  // 그 외는 SSO 토큰으로 처리
+  const email = await verifyToken(authHeader);
+  return email;
+}
+
+// 일할계산 함수
+function calculateProration(
+  currentAmount: number,
+  newPlanPrice: number,
+  currentPeriodStart: Date,
+  nextBillingDate: Date
+): { creditAmount: number; proratedNewAmount: number } {
+  const startDateOnly = new Date(currentPeriodStart);
+  startDateOnly.setHours(0, 0, 0, 0);
+  const nextDateOnly = new Date(nextBillingDate);
+  nextDateOnly.setHours(0, 0, 0, 0);
+
+  // 총 기간 일수
+  const totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+  // 사용 일수 (오늘 포함)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  // 남은 일수
+  const daysLeft = Math.max(0, totalDaysInPeriod - usedDays);
+
+  // 0 나누기 방지
+  if (totalDaysInPeriod <= 0) {
+    return { creditAmount: 0, proratedNewAmount: 0 };
+  }
+
+  // 기존 플랜 환불 금액: 남은 일수 비율로 계산
+  const creditAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
+
+  // 새 플랜 결제 금액: (남은 일수 + 오늘) 비율로 계산
+  const proratedNewAmount = Math.round((newPlanPrice / totalDaysInPeriod) * (daysLeft + 1));
+
+  return { creditAmount, proratedNewAmount };
+}
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -12,11 +80,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { email, tenantId, newPlan, newAmount, creditAmount, proratedNewAmount, idempotencyKey } = body;
+    // 인증 검증
+    const authenticatedEmail = await authenticateRequest(request);
+    if (!authenticatedEmail) {
+      return NextResponse.json({ error: 'Unauthorized - valid token required' }, { status: 401 });
+    }
 
-    if (!email || !tenantId || !newPlan || newAmount === undefined) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    const body = await request.json();
+    const { tenantId, newPlan, idempotencyKey } = body;
+    // email, newAmount, creditAmount, proratedNewAmount는 클라이언트에서 받지만 무시하고 서버에서 계산
+
+    if (!tenantId || !newPlan) {
+      return NextResponse.json({ error: 'Missing required fields: tenantId, newPlan' }, { status: 400 });
+    }
+
+    // 플랜 가격 검증
+    const newPlanPrice = PLAN_PRICES[newPlan];
+    if (newPlanPrice === undefined) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
     }
 
     // 멱등성 체크: 이미 처리된 결제가 있으면 기존 결과 반환
@@ -43,9 +124,9 @@ export async function POST(request: NextRequest) {
 
     const subscription = subscriptionDoc.data();
 
-    // 권한 확인
-    if (subscription?.email !== email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    // 권한 확인: 토큰에서 추출한 이메일과 구독 이메일 비교
+    if (subscription?.email !== authenticatedEmail) {
+      return NextResponse.json({ error: 'Unauthorized - not your subscription' }, { status: 403 });
     }
 
     if (!subscription?.billingKey) {
@@ -57,9 +138,28 @@ export async function POST(request: NextRequest) {
     }
 
     const previousPlan = subscription.plan;
-    const previousAmount = subscription.amount;
+    const previousAmount = subscription.amount || PLAN_PRICES[previousPlan] || 0;
     const now = new Date();
     const timestamp = Date.now();
+
+    // 서버에서 일할계산 수행
+    let creditAmount = 0;
+    let proratedNewAmount = 0;
+
+    // currentPeriodStart와 nextBillingDate가 있으면 일할계산
+    const currentPeriodStart = subscription.currentPeriodStart?.toDate?.() ||
+                               (subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart) : null);
+    const nextBillingDate = subscription.nextBillingDate?.toDate?.() ||
+                            (subscription.nextBillingDate ? new Date(subscription.nextBillingDate) : null);
+
+    if (currentPeriodStart && nextBillingDate) {
+      const proration = calculateProration(previousAmount, newPlanPrice, currentPeriodStart, nextBillingDate);
+      creditAmount = proration.creditAmount;
+      proratedNewAmount = proration.proratedNewAmount;
+    } else {
+      // 기간 정보가 없으면 전체 금액 사용
+      proratedNewAmount = newPlanPrice;
+    }
 
     console.log('Processing plan change:', {
       tenantId,
@@ -67,6 +167,7 @@ export async function POST(request: NextRequest) {
       newPlan,
       creditAmount,
       proratedNewAmount,
+      authenticatedEmail,
     });
 
     // 1. 기존 결제에서 미사용분 부분 환불
@@ -75,7 +176,7 @@ export async function POST(request: NextRequest) {
     let actualRefundedAmount = 0; // 실제 환불된 금액
     const refundOrderId = `REFUND_${timestamp}_${tenantId}`;
 
-    if (creditAmount && creditAmount > 0) {
+    if (creditAmount > 0) {
       // 가장 최근 원결제 내역 조회 (환불이나 플랜변경 제외)
       const paymentsSnapshot = await db
         .collection('payments')
@@ -180,11 +281,11 @@ export async function POST(request: NextRequest) {
       try {
         paymentResponse = await payWithBillingKey(
           subscription.billingKey,
-          email,
+          authenticatedEmail,
           proratedNewAmount,
           paymentOrderId,
           orderName,
-          email
+          authenticatedEmail
         );
         console.log('New plan payment completed:', paymentResponse.status);
       } catch (paymentError) {
@@ -220,7 +321,7 @@ export async function POST(request: NextRequest) {
         const refundRef = db.collection('payments').doc(refundDocId);
         transaction.set(refundRef, {
           tenantId,
-          email,
+          email: authenticatedEmail,
           orderId: refundOrderId,
           paymentKey: refundResult.paymentKey || null,
           amount: -actualRefundedAmount, // 음수로 저장 (환불)
@@ -253,7 +354,7 @@ export async function POST(request: NextRequest) {
         const paymentRef = db.collection('payments').doc(paymentDocId);
         transaction.set(paymentRef, {
           tenantId,
-          email,
+          email: authenticatedEmail,
           orderId: paymentOrderId,
           paymentKey: paymentResponse.paymentKey,
           amount: proratedNewAmount,
@@ -274,7 +375,7 @@ export async function POST(request: NextRequest) {
       const subscriptionRef = db.collection('subscriptions').doc(tenantId);
       transaction.update(subscriptionRef, {
         plan: newPlan,
-        amount: newAmount,
+        amount: newPlanPrice,
         previousPlan,
         previousAmount,
         planChangedAt: now,
@@ -297,7 +398,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             event: 'plan_changed',
             tenantId,
-            email,
+            email: authenticatedEmail,
             previousPlan,
             newPlan,
             refundAmount: actualRefundedAmount,

@@ -1,8 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { getPlanName } from '@/lib/toss';
+import { verifyToken } from '@/lib/auth';
+
+// 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
+async function authenticateRequest(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+
+  if (!authHeader) {
+    return null;
+  }
+
+  // Bearer 토큰인 경우 Firebase Auth로 처리
+  if (authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.substring(7);
+    try {
+      const auth = getAdminAuth();
+      if (!auth) {
+        console.error('Firebase Admin Auth not initialized');
+        return null;
+      }
+      const decodedToken = await auth.verifyIdToken(idToken);
+      return decodedToken.email || null;
+    } catch (error) {
+      console.error('Firebase Auth token verification failed:', error);
+      return null;
+    }
+  }
+
+  // 그 외는 SSO 토큰으로 처리
+  const email = await verifyToken(authHeader);
+  return email;
+}
 
 // jsPDF autotable 타입 확장
 declare module 'jspdf' {
@@ -66,6 +97,12 @@ export async function GET(
   }
 
   try {
+    // 인증 검증
+    const authenticatedEmail = await authenticateRequest(request);
+    if (!authenticatedEmail) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
     const { paymentId } = await params;
 
     if (!paymentId) {
@@ -82,6 +119,11 @@ export async function GET(
     const payment = paymentDoc.data();
     if (!payment) {
       return NextResponse.json({ error: 'Payment data not found' }, { status: 404 });
+    }
+
+    // 본인 결제만 조회 가능
+    if (payment.email !== authenticatedEmail) {
+      return NextResponse.json({ error: 'Unauthorized - not your payment' }, { status: 403 });
     }
 
     // 환불 레코드인 경우 원결제 정보 조회
