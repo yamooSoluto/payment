@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
-    const { email, name, phone } = await request.json();
+    const { email, name, phone, provider, password } = await request.json();
 
     if (!email || !name || !phone) {
       return NextResponse.json(
@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       email,
       name,
       phone,
+      provider: provider || 'email', // 로그인 제공자 저장
       createdAt: existingData?.createdAt || now,
       updatedAt: now,
       // 탈퇴 회원 재가입 시 trialApplied 유지 (무료체험 재신청 방지)
@@ -89,6 +90,23 @@ export async function POST(request: Request) {
       }),
       // deleted 플래그 제거 (재가입이므로)
     });
+
+    // Google 로그인 사용자의 경우 비밀번호 설정 (포탈 로그인용)
+    if (provider === 'google' && password) {
+      try {
+        const adminAuth = getAdminAuth();
+        if (adminAuth) {
+          const userRecord = await adminAuth.getUserByEmail(email);
+          await adminAuth.updateUser(userRecord.uid, {
+            password: password,
+          });
+        }
+      } catch (authError) {
+        console.error('비밀번호 설정 오류:', authError);
+        // 비밀번호 설정 실패해도 회원가입은 성공으로 처리
+        // 사용자에게 나중에 비밀번호 재설정하라고 안내 가능
+      }
+    }
 
     return NextResponse.json({
       success: true,

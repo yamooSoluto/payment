@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle, User, Phone, Refresh } from 'iconoir-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
 
-type Mode = 'login' | 'signup' | 'find-id' | 'reset-password';
+type Mode = 'login' | 'signup' | 'find-id' | 'reset-password' | 'complete-profile';
 
 function LoginForm() {
   const [mode, setMode] = useState<Mode>('login');
@@ -43,6 +43,9 @@ function LoginForm() {
   // 아이디 찾기 결과
   const [foundEmail, setFoundEmail] = useState('');
 
+  // Google 로그인 후 프로필 완성용
+  const [googleUser, setGoogleUser] = useState<{ email: string; displayName?: string } | null>(null);
+
   // 비밀번호 찾기 단계 (1: 정보입력+인증, 2: 새 비밀번호 입력)
   const [resetPasswordStep, setResetPasswordStep] = useState(1);
   const [newPassword, setNewPassword] = useState('');
@@ -77,8 +80,8 @@ function LoginForm() {
       return;
     }
 
-    // 아이디 찾기일 때는 이름도 필수
-    if (mode === 'find-id' && !name.trim()) {
+    // 아이디 찾기, 프로필 완성일 때는 이름도 필수
+    if ((mode === 'find-id' || mode === 'complete-profile') && !name.trim()) {
       setError('이름을 입력해주세요.');
       return;
     }
@@ -87,7 +90,7 @@ function LoginForm() {
     setError('');
 
     try {
-      const purpose = mode === 'signup' ? 'signup' : mode === 'find-id' ? 'find-id' : 'reset-password';
+      const purpose = (mode === 'signup' || mode === 'complete-profile') ? 'signup' : mode === 'find-id' ? 'find-id' : 'reset-password';
 
       const res = await fetch('/api/auth/sms-verify', {
         method: 'POST',
@@ -438,6 +441,27 @@ function LoginForm() {
     try {
       const user = await signInWithGoogle();
       const userEmail = user.email || '';
+
+      // 사용자 프로필 확인 (이름, 연락처 있는지)
+      const checkRes = await fetch('/api/auth/check-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail }),
+      });
+
+      const checkData = await checkRes.json();
+
+      if (checkData.needsProfile) {
+        // 프로필 완성 필요 - 이름/연락처 입력 모드로 전환
+        setGoogleUser({ email: userEmail, displayName: user.displayName || '' });
+        setEmail(userEmail);
+        setName(user.displayName || '');
+        setMode('complete-profile');
+        setLoading(false);
+        return;
+      }
+
+      // 프로필 완성됨 - 바로 이동
       const url = new URL(redirectUrl, window.location.origin);
       url.searchParams.set('email', userEmail);
       const finalUrl = url.pathname + url.search;
@@ -449,10 +473,71 @@ function LoginForm() {
     }
   };
 
+  // Google 로그인 후 프로필 완성 처리
+  const handleCompleteProfile = async () => {
+    if (!googleUser) return;
+
+    if (!name.trim()) {
+      setError('이름을 입력해주세요.');
+      return;
+    }
+    if (!isPhoneVerified) {
+      setError('연락처 인증을 완료해주세요.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    if (!agreeToTerms) {
+      setError('이용약관 및 개인정보처리방침에 동의해주세요.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // 1. 프로필 저장 + 비밀번호 설정 (서버에서 처리)
+      const saveRes = await fetch('/api/auth/save-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: googleUser.email,
+          name,
+          phone: phone.replace(/-/g, ''),
+          password,  // 비밀번호 추가
+          provider: 'google',
+        }),
+      });
+
+      if (!saveRes.ok) {
+        const saveData = await saveRes.json();
+        throw new Error(saveData.error || '프로필 저장에 실패했습니다.');
+      }
+
+      // 프로필 저장 완료 - 이동
+      const url = new URL(redirectUrl, window.location.origin);
+      url.searchParams.set('email', googleUser.email);
+      const finalUrl = url.pathname + url.search;
+      router.push(finalUrl);
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setError(error.message || '프로필 저장 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getTitle = () => {
     if (mode === 'find-id') return '아이디 찾기';
     if (mode === 'reset-password') return '비밀번호 찾기';
     if (mode === 'signup') return '회원가입';
+    if (mode === 'complete-profile') return '추가 정보 입력';
     return '로그인';
   };
 
@@ -463,6 +548,7 @@ function LoginForm() {
       return '가입 시 등록한 정보로 비밀번호를 재설정합니다';
     }
     if (mode === 'signup') return 'YAMOO 서비스를 시작해보세요';
+    if (mode === 'complete-profile') return '서비스 이용을 위해 추가 정보를 입력해주세요';
     return 'YAMOO 계정으로 로그인하세요';
   };
 
@@ -691,6 +777,167 @@ function LoginForm() {
 
                   {/* 인증번호 입력 UI */}
                   {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
+                </>
+              )}
+
+              {/* Google 로그인 후 프로필 완성 */}
+              {mode === 'complete-profile' && (
+                <>
+                  {/* 이메일 표시 (읽기전용) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이메일(ID)
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                        disabled
+                      />
+                    </div>
+                  </div>
+
+                  {/* 이름 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이름
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="홍길동"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* 연락처 + SMS 인증 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      연락처
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => {
+                            setPhone(formatPhone(e.target.value));
+                            setIsPhoneVerified(false);
+                            setVerificationSent(false);
+                          }}
+                          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all ${
+                            isPhoneVerified ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          }`}
+                          placeholder="010-1234-5678"
+                          disabled={isPhoneVerified}
+                          required
+                        />
+                      </div>
+                      {!verificationSent && (
+                        <button
+                          type="button"
+                          onClick={handleSendVerification}
+                          disabled={verificationLoading || isPhoneVerified}
+                          className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          {verificationLoading ? '발송중...' : isPhoneVerified ? '인증완료' : '인증요청'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 인증번호 입력 UI */}
+                  {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
+
+                  {/* 비밀번호 설정 (포탈 로그인용) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      비밀번호 <span className="text-gray-400 text-xs">(포탈 로그인용)</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="6자 이상"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeClosed width={20} height={20} strokeWidth={1.5} /> : <Eye width={20} height={20} strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 비밀번호 확인 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      비밀번호 확인
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none transition-all"
+                        placeholder="비밀번호 재입력"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* 이용약관 동의 */}
+                  <div className="flex items-start gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="agreeToTermsGoogle"
+                      checked={agreeToTerms}
+                      onChange={(e) => setAgreeToTerms(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
+                    />
+                    <label htmlFor="agreeToTermsGoogle" className="text-sm text-gray-600 cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setShowTermsModal('terms'); }}
+                        className="text-yamoo-dark hover:underline"
+                      >
+                        이용약관
+                      </button>
+                      {' '}및{' '}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setShowTermsModal('privacy'); }}
+                        className="text-yamoo-dark hover:underline"
+                      >
+                        개인정보처리방침
+                      </button>
+                      에 동의합니다. <span className="text-red-500">(필수)</span>
+                    </label>
+                  </div>
+
+                  {/* 완료 버튼 */}
+                  <button
+                    type="button"
+                    onClick={handleCompleteProfile}
+                    disabled={loading || !isPhoneVerified || !agreeToTerms}
+                    className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? '처리 중...' : '가입 완료'}
+                  </button>
                 </>
               )}
 
