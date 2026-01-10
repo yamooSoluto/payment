@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
           // N8N 웹훅 알림
           if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
           // N8N 웹훅 알림
           if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -238,7 +238,7 @@ export async function GET(request: NextRequest) {
         // N8N 웹훅 알림
         if (isN8NNotificationEnabled()) {
           try {
-            await fetch(process.env.N8N_WEBHOOK_URL, {
+            await fetch(process.env.N8N_WEBHOOK_URL!, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
         // N8N 웹훅 알림
         if (isN8NNotificationEnabled()) {
           try {
-            await fetch(process.env.N8N_WEBHOOK_URL, {
+            await fetch(process.env.N8N_WEBHOOK_URL!, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -430,7 +430,7 @@ export async function GET(request: NextRequest) {
           // n8n 웹훅 (정기결제 성공 알림)
           if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -481,7 +481,7 @@ export async function GET(request: NextRequest) {
           // 3회 실패 알림
           if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -508,7 +508,7 @@ export async function GET(request: NextRequest) {
           // 재시도 알림 (1회차, 2회차)
           if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
