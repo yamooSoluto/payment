@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { verifyBearerToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -11,12 +12,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { email, tenantId, newPlan, newAmount, proratedAmount, creditAmount, proratedNewAmount } = body;
+    // Bearer 토큰 인증
+    const authHeader = request.headers.get('authorization');
+    const authenticatedEmail = await verifyBearerToken(authHeader);
 
-    if (!email || !tenantId || !newPlan || !newAmount || proratedAmount === undefined) {
+    if (!authenticatedEmail) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { tenantId, newPlan, newAmount, proratedAmount, creditAmount, proratedNewAmount } = body;
+
+    if (!tenantId || !newPlan || !newAmount || proratedAmount === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    // 인증된 이메일 사용
+    const email = authenticatedEmail;
 
     // 구독 정보 조회 (tenantId로)
     const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
@@ -28,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     // 해당 사용자의 구독인지 확인
     if (subscription?.email !== email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
     if (!subscription?.billingKey) {

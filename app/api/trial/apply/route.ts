@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import crypto from 'crypto';
+import { verifyBearerToken } from '@/lib/auth';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -54,15 +55,29 @@ function formatDateKR(date: Date | null): string {
  */
 export async function POST(request: Request) {
   try {
-    const { tenantId, email, name, phone, brandName, industry } = await request.json();
+    // Bearer 토큰 인증
+    const authHeader = request.headers.get('authorization');
+    const authenticatedEmail = await verifyBearerToken(authHeader);
+
+    if (!authenticatedEmail) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
+    const { tenantId, name, phone, brandName, industry } = await request.json();
 
     // 필수 필드 검증
-    if (!tenantId || !email || !name || !phone || !brandName) {
+    if (!tenantId || !name || !phone || !brandName) {
       return NextResponse.json(
         { error: '필수 정보가 누락되었습니다.' },
         { status: 400 }
       );
     }
+
+    // 인증된 이메일 사용
+    const email = authenticatedEmail;
 
     // Firestore 초기화
     const db = adminDb || initializeFirebaseAdmin();
@@ -85,7 +100,7 @@ export async function POST(request: Request) {
 
     const tenantData = tenantSnapshot.docs[0].data();
 
-    // 해당 tenant의 이메일과 요청 이메일이 일치하는지 확인
+    // 해당 tenant의 이메일과 인증된 이메일이 일치하는지 확인
     if (tenantData.email !== email) {
       return NextResponse.json(
         { error: '권한이 없습니다.' },

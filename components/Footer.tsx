@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChatBubble, Mail, Copy, Check, Building, MapPin } from 'iconoir-react';
+import { ChatBubble, Mail, Copy, Check, Building, MapPin, Phone } from 'iconoir-react';
 import DynamicTermsModal from './modals/DynamicTermsModal';
 
 export default function Footer() {
@@ -65,20 +65,26 @@ export default function Footer() {
             {/* 우측: 고객센터 */}
             <div className="mt-4 pt-4 border-t border-gray-700 md:mt-0 md:pt-0 md:border-t-0 space-y-2">
               <p className="font-semibold text-white">고객센터</p>
-              <div className="flex items-start gap-2">
-                <ChatBubble width={16} height={16} strokeWidth={1.5} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <button
-                    onClick={openChannelTalk}
-                    className="text-yamoo-primary hover:underline font-medium"
-                  >
-                    야무 YAMOO
-                  </button>
-                  <p className="text-gray-400 text-xs mt-0.5">
-                    평일 10:00~17:00 (점심 12:00~13:00)
-                  </p>
-                  <p className="text-gray-500 text-xs">토, 일, 공휴일 휴무</p>
+              <div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <Phone width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
+                    <span>1544-1288</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ChatBubble width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
+                    <button
+                      onClick={openChannelTalk}
+                      className="text-yamoo-primary hover:underline font-medium"
+                    >
+                      야무 YAMOO
+                    </button>
+                  </div>
                 </div>
+                <p className="text-gray-400 text-xs mt-1 ml-5">
+                  평일 10:00~17:00 (점심 12:00~13:00)
+                </p>
+                <p className="text-gray-500 text-xs ml-5">토, 일, 공휴일 휴무</p>
               </div>
               <div className="flex items-center gap-2">
                 <Mail width={16} height={16} strokeWidth={1.5} className="text-gray-400 flex-shrink-0" />
