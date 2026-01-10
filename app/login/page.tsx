@@ -58,6 +58,19 @@ function LoginForm() {
   // 로그인 후 리다이렉트할 URL (없으면 /account)
   const redirectUrl = searchParams.get('redirect') || '/account';
 
+  // 프로필 미완성으로 리다이렉트된 경우 처리
+  const incompleteProfile = searchParams.get('incomplete') === 'true';
+  const incompleteEmail = searchParams.get('email');
+
+  // 프로필 미완성 상태로 리다이렉트된 경우 자동으로 complete-profile 모드 설정
+  useEffect(() => {
+    if (incompleteProfile && incompleteEmail) {
+      setGoogleUser({ email: incompleteEmail, displayName: '' });
+      setEmail(incompleteEmail);
+      setMode('complete-profile');
+    }
+  }, [incompleteProfile, incompleteEmail]);
+
   // 전화번호 포맷팅 (010-1234-5678)
   const formatPhone = (value: string) => {
     const numbers = value.replace(/[^0-9]/g, '');

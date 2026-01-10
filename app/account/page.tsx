@@ -87,6 +87,14 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         if (userData?.trialApplied === true) {
           hasTrialHistory = true;
         }
+
+        // 프로필 미완성 시 (이름 또는 연락처 없음) 로그인 페이지로 리다이렉트
+        if (!userData?.name || !userData?.phone) {
+          redirect(`/login?incomplete=true&email=${encodeURIComponent(email)}`);
+        }
+      } else {
+        // Firestore에 사용자 정보 없음 - 프로필 완성 필요
+        redirect(`/login?incomplete=true&email=${encodeURIComponent(email)}`);
       }
 
       // phone 기준으로 무료체험 이력 추가 확인 (users 컬렉션에서)
