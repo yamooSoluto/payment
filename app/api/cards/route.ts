@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
         try {
           const { payWithBillingKey, getPlanName, getEffectiveAmount } = await import('@/lib/toss');
 
-          const orderId = `RETRY_${Date.now()}_${tenantId}`;
+          const orderId = `RETRY_${Date.now()}`;
           const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 카드 변경 후 재결제`;
 
           const effectiveAmount = getEffectiveAmount({

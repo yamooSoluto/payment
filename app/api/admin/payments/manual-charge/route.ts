@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 결제 수행
-    const orderId = `ADMIN_${Date.now()}_${tenantId}`;
+    const orderId = `ADMIN_${Date.now()}`;
     const orderName = `YAMOO ${getPlanName(plan)} 플랜 - 관리자 수동 결제`;
 
     console.log('Admin manual charge:', {

@@ -328,7 +328,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const orderId = `SUB_${Date.now()}_${validTenantId}`;
+    const orderId = `SUB_${Date.now()}`;
     const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
 
     console.log('Processing first payment:', { orderId, paymentAmount, tenantId: validTenantId });

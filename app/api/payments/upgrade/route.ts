@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // 차액 결제 (proratedAmount가 0보다 클 때만)
     let paymentResponse = null;
-    const orderId = `UPGRADE_${Date.now()}_${tenantId}`;
+    const orderId = `UPGRADE_${Date.now()}`;
 
     if (proratedAmount > 0) {
       const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 업그레이드`;

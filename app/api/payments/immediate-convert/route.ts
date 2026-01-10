@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const paymentAmount = amount || planInfo.price;
 
     // 결제 수행
-    const orderId = `CONVERT_${Date.now()}_${tenantId}`;
+    const orderId = `CONVERT_${Date.now()}`;
     const orderName = `YAMOO ${planInfo.name} 플랜 - 즉시 전환`;
 
     console.log('Processing immediate conversion payment:', { orderId, paymentAmount, tenantId });

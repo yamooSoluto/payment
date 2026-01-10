@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
             }
 
             // 첫 결제 수행
-            const orderId = `TRIAL_CONVERT_${Date.now()}_${tenantId}`;
+            const orderId = `TRIAL_CONVERT_${Date.now()}`;
             const orderName = `YAMOO ${plan} 플랜 - 무료체험 전환`;
 
             const paymentResponse = await payWithBillingKey(
@@ -387,7 +387,7 @@ export async function GET(request: NextRequest) {
         }
 
         // 빌링키로 자동 결제
-        const orderId = `AUTO_${Date.now()}_${tenantId}`;
+        const orderId = `AUTO_${Date.now()}`;
         const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 정기결제`;
 
         // 가격 정책에 따른 실제 결제 금액 계산
