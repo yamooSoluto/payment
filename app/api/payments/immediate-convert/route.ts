@@ -4,6 +4,7 @@ import { payWithBillingKey } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById, verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment } from '@/lib/idempotency';
 
 // Trial에서 즉시 유료 전환 (기존 billingKey 사용)
 export async function POST(request: NextRequest) {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email: emailParam, tenantId, plan, amount, token } = body;
+    const { email: emailParam, tenantId, plan, amount, token, idempotencyKey } = body;
 
     // 인증 확인
     let email: string | null = null;
@@ -30,6 +31,22 @@ export async function POST(request: NextRequest) {
 
     if (!tenantId || !plan) {
       return NextResponse.json({ error: 'tenantId and plan are required' }, { status: 400 });
+    }
+
+    // 멱등성 체크: 이미 처리된 결제가 있으면 기존 결과 반환
+    if (idempotencyKey) {
+      const existingPayment = await findExistingPayment(db, idempotencyKey);
+      if (existingPayment) {
+        console.log('Duplicate conversion detected, returning existing result:', existingPayment.orderId);
+        return NextResponse.json({
+          success: true,
+          orderId: existingPayment.orderId,
+          paymentKey: existingPayment.paymentKey,
+          amount: existingPayment.amount,
+          plan: existingPayment.plan,
+          duplicate: true,
+        });
+      }
     }
 
     // 플랜 정보 조회
@@ -108,7 +125,7 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       });
 
-      // 결제 내역 저장
+      // 결제 내역 저장 (멱등성 키 포함)
       const paymentRef = db.collection('payments').doc(paymentDocId);
       transaction.set(paymentRef, {
         tenantId,
@@ -123,6 +140,7 @@ export async function POST(request: NextRequest) {
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,
         receiptUrl: paymentResponse.receipt?.url || null,
+        idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
         paidAt: now,
         createdAt: now,
       });

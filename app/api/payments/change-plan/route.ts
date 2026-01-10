@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, cancelPayment, getPayment, getPlanName } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment } from '@/lib/idempotency';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -12,10 +13,26 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, tenantId, newPlan, newAmount, creditAmount, proratedNewAmount } = body;
+    const { email, tenantId, newPlan, newAmount, creditAmount, proratedNewAmount, idempotencyKey } = body;
 
     if (!email || !tenantId || !newPlan || newAmount === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // 멱등성 체크: 이미 처리된 결제가 있으면 기존 결과 반환
+    if (idempotencyKey) {
+      const existingPayment = await findExistingPayment(db, idempotencyKey);
+      if (existingPayment) {
+        console.log('Duplicate plan change detected, returning existing result:', existingPayment.orderId);
+        return NextResponse.json({
+          success: true,
+          orderId: existingPayment.orderId,
+          refundAmount: existingPayment.refundAmount || 0,
+          paidAmount: existingPayment.amount || 0,
+          message: `이미 처리된 플랜 변경입니다.`,
+          duplicate: true,
+        });
+      }
     }
 
     // 구독 정보 조회
@@ -230,7 +247,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 새 플랜 결제 내역 저장
+      // 새 플랜 결제 내역 저장 (멱등성 키 포함)
       if (proratedNewAmount && proratedNewAmount > 0 && paymentResponse) {
         const paymentDocId = `${paymentOrderId}_${Date.now()}`;
         const paymentRef = db.collection('payments').doc(paymentDocId);
@@ -247,6 +264,7 @@ export async function POST(request: NextRequest) {
           method: paymentResponse.method,
           cardInfo: paymentResponse.card || null,
           receiptUrl: paymentResponse.receipt?.url || null,
+          idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
           paidAt: now,
           createdAt: now,
         });

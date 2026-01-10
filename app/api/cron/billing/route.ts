@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
 import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment, generateIdempotencyKey } from '@/lib/idempotency';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
 // 매일 00:00 (KST) 실행
@@ -46,6 +47,17 @@ export async function GET(request: NextRequest) {
             const billingKey = subscription.billingKey;
             const email = subscription.email;
 
+            // 멱등성 키 생성 (날짜 기반)
+            const idempotencyKey = generateIdempotencyKey('TRIAL_CONVERT', tenantId);
+
+            // 이미 오늘 처리된 결제가 있으면 스킵
+            const existingPayment = await findExistingPayment(db, idempotencyKey);
+            if (existingPayment) {
+              console.log(`Trial conversion already processed today for ${tenantId}, skipping`);
+              convertedTrials.push({ tenantId, plan });
+              continue;
+            }
+
             // 첫 결제 수행
             const orderId = `TRIAL_CONVERT_${Date.now()}_${tenantId}`;
             const orderName = `YAMOO ${plan} 플랜 - 무료체험 전환`;
@@ -79,7 +91,7 @@ export async function GET(request: NextRequest) {
                 updatedAt: now,
               });
 
-              // 결제 내역 저장
+              // 결제 내역 저장 (멱등성 키 포함)
               const paymentRef = db.collection('payments').doc(`${orderId}_${Date.now()}`);
               transaction.set(paymentRef, {
                 tenantId,
@@ -93,6 +105,7 @@ export async function GET(request: NextRequest) {
                 method: paymentResponse.method,
                 cardInfo: paymentResponse.card || null,
                 receiptUrl: paymentResponse.receipt?.url || null,
+                idempotencyKey,  // 멱등성 키 저장
                 paidAt: now,
                 createdAt: now,
               });
@@ -362,6 +375,17 @@ export async function GET(request: NextRequest) {
       const email = subscription.email;
 
       try {
+        // 멱등성 키 생성 (날짜 기반)
+        const idempotencyKey = generateIdempotencyKey('AUTO_BILLING', tenantId);
+
+        // 이미 오늘 처리된 결제가 있으면 스킵
+        const existingPayment = await findExistingPayment(db, idempotencyKey);
+        if (existingPayment) {
+          console.log(`Recurring billing already processed today for ${tenantId}, skipping`);
+          results.push({ tenantId, email, status: 'success' });
+          continue;
+        }
+
         // 빌링키로 자동 결제
         const orderId = `AUTO_${Date.now()}_${tenantId}`;
         const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 정기결제`;
@@ -400,7 +424,7 @@ export async function GET(request: NextRequest) {
             updatedAt: new Date(),
           });
 
-          // 결제 내역 저장
+          // 결제 내역 저장 (멱등성 키 포함)
           await db.collection('payments').add({
             tenantId,
             email,
@@ -411,6 +435,7 @@ export async function GET(request: NextRequest) {
             status: 'done',
             method: response.method,
             receiptUrl: response.receipt?.url || null,
+            idempotencyKey,  // 멱등성 키 저장
             paidAt: new Date(),
             createdAt: new Date(),
           });

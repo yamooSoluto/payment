@@ -4,6 +4,7 @@ import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment } from '@/lib/idempotency';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('token');
   const emailParam = searchParams.get('email');
   const mode = searchParams.get('mode'); // 'reserve' for trial reservation
+  const idempotencyKey = searchParams.get('idempotencyKey');
   // 신규 매장 생성 파라미터
   const brandNameParam = searchParams.get('brandName');
   const industryParam = searchParams.get('industry');
@@ -313,6 +315,19 @@ export async function GET(request: NextRequest) {
     }
 
     // 일반 모드: 첫 결제 수행
+    // 멱등성 체크: 이미 처리된 결제가 있으면 성공 페이지로 리다이렉트
+    if (idempotencyKey) {
+      const existingPayment = await findExistingPayment(db, idempotencyKey);
+      if (existingPayment) {
+        console.log('Duplicate payment detected, returning existing result:', existingPayment.orderId);
+        const authQuery = authParam ? `&${authParam}` : '';
+        const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
+        return NextResponse.redirect(
+          new URL(`/checkout/success?plan=${plan}&tenantId=${validTenantId}&orderId=${existingPayment.orderId}${tenantNameQuery}${authQuery}`, request.url)
+        );
+      }
+    }
+
     const orderId = `SUB_${Date.now()}_${validTenantId}`;
     const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
 
@@ -358,7 +373,7 @@ export async function GET(request: NextRequest) {
         updatedAt: now,
       });
 
-      // 결제 내역 저장
+      // 결제 내역 저장 (멱등성 키 포함)
       const paymentRef = db.collection('payments').doc(paymentDocId);
       transaction.set(paymentRef, {
         tenantId: validTenantId,
@@ -372,6 +387,7 @@ export async function GET(request: NextRequest) {
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,
         receiptUrl: paymentResponse.receipt?.url || null,
+        idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
         paidAt: now,
         createdAt: now,
       });

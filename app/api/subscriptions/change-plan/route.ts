@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/auth';
 import { PLAN_PRICES, cancelPayment } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment } from '@/lib/idempotency';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId, newPlan, newAmount, mode, refundAmount } = body;
+    const { token, email: emailParam, tenantId, newPlan, newAmount, mode, refundAmount, idempotencyKey } = body;
 
     let email: string | null = null;
 
@@ -82,6 +83,22 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // 다운그레이드 즉시 변경: 부분 환불 처리 후 새 플랜 적용
+        // 멱등성 체크: 이미 처리된 환불이 있으면 기존 결과 반환
+        if (idempotencyKey) {
+          const existingPayment = await findExistingPayment(db, idempotencyKey);
+          if (existingPayment) {
+            console.log('Duplicate downgrade detected, returning existing result:', existingPayment.orderId);
+            return NextResponse.json({
+              success: true,
+              requiresPayment: false,
+              refundProcessed: existingPayment.type === 'downgrade_refund',
+              refundAmount: existingPayment.refundAmount || Math.abs(existingPayment.amount) || 0,
+              message: '이미 처리된 플랜 변경입니다.',
+              duplicate: true,
+            });
+          }
+        }
+
         let refundResult = null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let latestPayment: any = null;
@@ -152,7 +169,7 @@ export async function POST(request: NextRequest) {
               tossResponse: refundResult,
             });
 
-            // 결제 내역에도 환불 기록 추가 (PaymentHistory에 표시)
+            // 결제 내역에도 환불 기록 추가 (PaymentHistory에 표시, 멱등성 키 포함)
             const paymentDocId = `REFUND_PAY_${Date.now()}_${tenantId}`;
             const paymentRef = db.collection('payments').doc(paymentDocId);
             transaction.set(paymentRef, {
@@ -167,6 +184,7 @@ export async function POST(request: NextRequest) {
               status: 'done',
               refundReason: `${subscription.plan} → ${newPlan} 다운그레이드`,
               originalPaymentId: latestPaymentId,  // 원결제 ID 연결
+              idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
               paidAt: now,
               createdAt: now,
             });
@@ -183,7 +201,7 @@ export async function POST(request: NextRequest) {
               });
             }
           } else {
-            // 환불 없는 다운그레이드도 플랜 변경 내역 저장 (구독 내역에 표시)
+            // 환불 없는 다운그레이드도 플랜 변경 내역 저장 (구독 내역에 표시, 멱등성 키 포함)
             const paymentDocId = `DOWNGRADE_${Date.now()}_${tenantId}`;
             const paymentRef = db.collection('payments').doc(paymentDocId);
             transaction.set(paymentRef, {
@@ -195,6 +213,7 @@ export async function POST(request: NextRequest) {
               previousPlan: subscription.plan,
               type: 'downgrade',
               status: 'done',
+              idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
               paidAt: now,
               createdAt: now,
             });

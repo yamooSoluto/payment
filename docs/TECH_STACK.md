@@ -83,7 +83,8 @@ yamoo-payment/
 │   ├── firebase-admin.ts   # Firebase Admin SDK
 │   ├── toss.ts             # Toss Payments 유틸
 │   ├── auth.ts             # 사용자 인증
-│   └── admin-auth.ts       # 관리자 인증
+│   ├── admin-auth.ts       # 관리자 인증
+│   └── idempotency.ts      # 멱등성 키 유틸
 └── public/                 # 정적 파일
 ```
 
@@ -106,3 +107,4 @@ yamoo-payment/
 | 카드 관리 | 다중 카드 등록/변경/삭제 |
 | 관리자 | 회원/운영자/상품/주문/플랜/약관 관리 |
 | 알림 | Postmark 이메일 발송 |
+| 결제 안정성 | 멱등성 키로 중복 결제 방지 |

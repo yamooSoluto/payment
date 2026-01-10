@@ -290,17 +290,23 @@
 - **문제**: 네트워크 타임아웃 → 사용자가 재시도 버튼 클릭 → 중복 결제
 - **해결책**: 멱등성 키(Idempotency Key) 사용
   ```typescript
-  const idempotencyKey = `${tenantId}_${timestamp}`;
-  // 이미 처리된 요청인지 확인
-  const existingPayment = await db.collection('payments')
-    .where('idempotencyKey', '==', idempotencyKey)
-    .limit(1)
-    .get();
-  if (!existingPayment.empty) {
-    return existingPayment.docs[0].data();
+  // 프론트엔드: 결제 버튼 클릭 시 키 생성
+  const idempotencyKey = `${operation}_${tenantId}_${Date.now()}`;
+
+  // 백엔드: lib/idempotency.ts
+  const existingPayment = await findExistingPayment(db, idempotencyKey);
+  if (existingPayment) {
+    return existingPayment; // 기존 결과 반환
   }
   ```
-- **구현 상태**: ❌ 미구현
+- **적용 API**:
+  - `/api/payments/confirm` - 첫 결제 확정
+  - `/api/payments/billing-confirm` - 빌링키 결제 확정
+  - `/api/payments/change-plan` - 플랜 변경 결제
+  - `/api/payments/immediate-convert` - 즉시 전환 결제
+  - `/api/subscriptions/change-plan` - 다운그레이드 환불
+  - `/api/cron/billing` - 정기 결제 (날짜 기반 키)
+- **구현 상태**: ✅ 완료
 
 ### 5.2 Toss Payments와 DB 상태 불일치
 #### 5.2.1 Toss 결제 성공 → DB 저장 실패
@@ -351,10 +357,20 @@
 - **해결책**: 항상 `Math.round()` 또는 `Math.floor()` 일관되게 사용
 - **구현 상태**: ✅ `Math.round()` 사용 중
 
-#### 5.4.2 음수 환불 금액
-- **케이스**: 계산 오류로 환불액이 음수
-- **해결책**: `Math.max(0, refundAmount)` 체크
-- **구현 상태**: ⚠️ 체크 없음
+#### 5.4.2 음수 환불 금액 및 0으로 나누기 방지
+- **케이스 1**: 계산 오류로 환불액이 음수
+- **해결책 1**: `Math.max(0, refundAmount)` 체크
+- **케이스 2**: `totalDays`가 0일 때 0으로 나누기 오류
+- **해결책 2**: `totalDays <= 0`이면 0원 환불 또는 전액 환불 처리
+  ```typescript
+  // 환불 금액 계산 시
+  if (totalDays <= 0) {
+    return 0; // 또는 전액 환불
+  }
+  const dailyRate = amount / totalDays;
+  const refundAmount = Math.round(dailyRate * daysLeft);
+  ```
+- **구현 상태**: ✅ 완료
 
 ### 5.5 결제 수단 변경
 #### 5.5.1 구독 중 카드 변경
@@ -616,23 +632,33 @@
     - payments 컬렉션에 모든 결제 기록
     - type 구분: `trial_conversion`, `upgrade`, `downgrade`, `downgrade_refund`, `recurring`, `card_update_retry`, `cancel_refund`
 
+#### 결제 안정성
+16. **중복 결제 방지 (멱등성 키)**
+    - `lib/idempotency.ts` 헬퍼 함수 구현
+    - 프론트엔드에서 결제 버튼 클릭 시 고유 키 생성
+    - 백엔드에서 동일 키로 요청 시 기존 결과 반환
+    - 모든 결제 API에 적용 완료
+17. **환불 금액 계산 오류 방지**
+    - 0으로 나누기 방지 (`totalDays <= 0` 체크)
+    - 음수 환불 방지 (`Math.max(0, refundAmount)`)
+
 #### 매장/회원 관리
-16. **매장 삭제 (Soft Delete)**
+18. **매장 삭제 (Soft Delete)**
     - 90일 보관 후 영구 삭제 예정
     - `tenant_deletions` 컬렉션에 로그 저장
-17. **회원 탈퇴 (Soft Delete)**
+19. **회원 탈퇴 (Soft Delete)**
     - 결제 이력에 따른 차등 보관 (5년/1년)
     - `account_deletions` 컬렉션에 로그 저장
 
 #### UI/UX
-18. **Toss Payments Webhook 연동**
-19. **결제 내역 표시 (환불 내역 중첩 표시)**
-20. **취소 모달 개선**
+20. **Toss Payments Webhook 연동**
+21. **결제 내역 표시 (환불 내역 중첩 표시)**
+22. **취소 모달 개선**
     - 90일 데이터 보관 정책 안내
     - 환불 계산 내역 인터랙티브 툴팁
-21. **구독 내역 정렬 개선**
+23. **구독 내역 정렬 개선**
     - 상태 우선순위: 사용중 > 사용완료 > 해지됨
-22. **가격 정책 (Price Policy)**
+24. **가격 정책 (Price Policy)**
     - `grandfathered`, `protected_until`, `standard` 지원
 
 ### ⚠️ 부분 구현
@@ -644,11 +670,25 @@
 
 ### ❌ 미구현
 1. **알림 이력 관리** (`payment_notifications` 컬렉션 및 중복 방지)
-2. **중복 결제 방지 (멱등성 키)**
-3. **결제 주기 마지막 날 플랜 변경 제한**
-4. **쿠폰/프로모션 코드**
-5. **연간 구독**
-6. **데이터 자동 삭제 스케줄러** (90일 후)
+2. **결제 주기 마지막 날 플랜 변경 제한**
+3. **쿠폰/프로모션 코드**
+4. **연간 구독**
+5. **데이터 자동 삭제 스케줄러** (아래 정책 참고)
+
+### 📋 데이터 보관 정책 (계획)
+
+| 데이터 유형 | 보관 기간 | 삭제 시점 | 비고 |
+|------------|----------|----------|------|
+| 결제/환불/구독 내역 | **5년** | 자동 삭제 | 전자상거래법 |
+| 무료체험만 계정 | **1년** | 자동 삭제 | 부정 이용 방지 (phone 기준) |
+| 매장 기본 정보 | **90일** | 매장 삭제/탈퇴 시 즉시 | 복구 불가 |
+| 서비스 데이터 (FAQ, 대화 등) | **90일** | 매장 삭제/탈퇴 시 즉시 | 복구 불가 |
+| 카드 정보 | 즉시 | 탈퇴 시 즉시 | 이미 구현됨 |
+
+**주요 원칙:**
+- 결제 관련 데이터는 법적 요구로 절대 삭제 불가
+- 매장 삭제/계정 탈퇴 시 서비스 데이터는 즉시 삭제 (복구 요청 불가)
+- 무료체험 계정은 phone 기준 중복 체크용으로 1년 보관
 
 ---
 
@@ -1004,9 +1044,9 @@ Fields:
 ## 12. 다음 구현 우선순위
 
 ### Phase 1: 안정성 (Critical)
-1. **중복 결제 방지** (멱등성 키)
+1. ~~**중복 결제 방지** (멱등성 키)~~ ✅ 완료
 2. **동시성 제어 강화** (Optimistic Locking)
-3. **음수 환불 방지** 체크 로직
+3. ~~**환불 금액 계산 오류 방지** (0으로 나누기, 음수 방지)~~ ✅ 완료
 
 ### Phase 2: 사용자 경험 (High Priority)
 4. **알림 이력 관리 시스템** (`payment_notifications` 컬렉션)
@@ -1024,3 +1064,40 @@ Fields:
 ### Phase 4: 글로벌 확장 (Low Priority) (선택사항)
 9. **세금/VAT 처리**
 10. **다중 통화 지원**
+
+## 기타 - 도메인 이전 체크리스트
+
+### 현재 상태
+- 도메인: yamoo.ai.kr (가비아에서 관리)
+- 현재 네임서버: 아임웹 (ns1.imweb.me, ns2.imweb.me)
+- 가비아 DNS에 Vercel 레코드 추가 완료
+
+### 남은 작업
+
+```
+1. 네임서버 변경
+   ├─ 가비아 도메인 관리 → 네임서버 설정
+   └─ 아임웹 네임서버 → 가비아 자체 네임서버로 변경
+       (ns.gabia.co.kr, ns1.gabia.co.kr)
+
+2. Vercel 도메인 추가
+   ├─ Vercel 프로젝트 → Settings → Domains
+   ├─ yamoo.ai.kr 추가
+   └─ 필요한 서브도메인 추가 (pay.yamoo.ai.kr 등)
+
+3. DNS 전파 대기
+   └─ 최대 48시간 (보통 몇 시간 내 완료)
+
+4. 확인 작업
+   ├─ yamoo.ai.kr 접속 테스트
+   ├─ SSL 인증서 자동 발급 확인 (Vercel에서 자동 처리)
+   └─ 기존 서브도메인 정상 작동 확인
+
+5. 아임웹 서비스 해지
+   └─ 모든 확인 완료 후 진행
+```
+
+### 주의사항
+- SSL 인증서는 Vercel에서 자동 발급 (아임웹에서 이전 불필요)
+- 네임서버 변경 시 기존 아임웹 서비스 즉시 중단됨
+- DNS 전파 시간 동안 일시적으로 접속 불안정할 수 있음

@@ -3,12 +3,14 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
 import { getPlanById } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { findExistingPayment } from '@/lib/idempotency';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const authKey = searchParams.get('authKey');
   const customerKey = searchParams.get('customerKey');
   const plan = searchParams.get('plan');
+  const idempotencyKey = searchParams.get('idempotencyKey');
 
   if (!authKey || !customerKey || !plan) {
     return NextResponse.redirect(
@@ -24,6 +26,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 멱등성 체크: 이미 처리된 결제가 있으면 바로 성공 페이지로
+    if (idempotencyKey) {
+      const existingPayment = await findExistingPayment(db, idempotencyKey);
+      if (existingPayment) {
+        console.log('Duplicate payment detected, returning existing result:', existingPayment.orderId);
+        return NextResponse.redirect(
+          `https://app.yamoo.ai.kr/mypage?payment=success`
+        );
+      }
+    }
+
     // 1. 토스 빌링키 발급
     const billingData = await issueBillingKey(authKey, customerKey);
     const { billingKey, card } = billingData;
@@ -71,7 +84,7 @@ export async function GET(request: NextRequest) {
       { merge: true }
     );
 
-    // 4. 결제 내역 저장
+    // 4. 결제 내역 저장 (멱등성 키 포함)
     await db.collection('payments').add({
       email: customerKey,
       orderId,
@@ -84,6 +97,7 @@ export async function GET(request: NextRequest) {
       cardCompany: card.company,
       cardNumber: card.number,
       receiptUrl: paymentResponse.receipt?.url || null,
+      idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
       paidAt: now,
       createdAt: now,
     });

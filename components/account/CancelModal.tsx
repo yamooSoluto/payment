@@ -64,8 +64,8 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
     // 남은 기간 (일)
     const daysLeft = Math.max(0, totalDays - daysUsed);
 
-    // 일할 계산된 환불 금액
-    const refundAmount = Math.floor((amount * daysLeft) / totalDays);
+    // 일할 계산된 환불 금액 (0 나누기 방지)
+    const refundAmount = totalDays > 0 ? Math.floor((amount * daysLeft) / totalDays) : 0;
 
     return { daysLeft, refundAmount, daysUsed, totalDays };
   }, [currentPeriodStart, currentPeriodEnd, amount]);

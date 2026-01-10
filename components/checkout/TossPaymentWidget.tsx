@@ -186,6 +186,11 @@ export default function TossPaymentWidget({
   // 신규 매장인 경우 tenantId를 'new'로 처리
   const effectiveTenantId = tenantId || (isNewTenant ? 'new' : '');
 
+  // 멱등성 키 생성 (결제 시도당 고유한 키)
+  const generateIdempotencyKey = (operation: string) => {
+    return `${operation}_${effectiveTenantId}_${Date.now()}`;
+  };
+
   const handlePayment = async () => {
     if (!agreed) {
       setError('결제/환불 규정에 동의해주세요.');
@@ -198,6 +203,7 @@ export default function TossPaymentWidget({
     try {
       if (isChangePlan) {
         // 플랜 변경: 기존 플랜 환불 + 새 플랜 결제
+        const idempotencyKey = generateIdempotencyKey('PLAN_CHANGE');
         const response = await fetch('/api/payments/change-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -208,6 +214,7 @@ export default function TossPaymentWidget({
             newAmount: fullAmount,
             creditAmount: calculationDetails?.currentRefund || 0,
             proratedNewAmount: calculationDetails?.newPlanRemaining || 0,
+            idempotencyKey,  // 멱등성 키 전달
           }),
         });
 
@@ -227,6 +234,7 @@ export default function TossPaymentWidget({
         }
       } else if (hasBillingKey && isReserve) {
         // 이미 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
+        const idempotencyKey = generateIdempotencyKey('SCHEDULED_CHANGE');
         const response = await fetch('/api/subscriptions/change-plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -236,6 +244,7 @@ export default function TossPaymentWidget({
             newPlan: plan,
             newAmount: fullAmount,
             mode: 'scheduled',
+            idempotencyKey,  // 멱등성 키 전달
           }),
         });
 
@@ -257,6 +266,7 @@ export default function TossPaymentWidget({
         }
       } else if (hasBillingKey && isTrialImmediate) {
         // Trial에서 즉시 전환 + 이미 카드 등록됨: 기존 빌링키로 바로 결제
+        const idempotencyKey = generateIdempotencyKey('IMMEDIATE_CONVERT');
         const response = await fetch('/api/payments/immediate-convert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -265,6 +275,7 @@ export default function TossPaymentWidget({
             tenantId: effectiveTenantId,
             plan,
             amount,
+            idempotencyKey,  // 멱등성 키 전달
           }),
         });
 
@@ -286,13 +297,14 @@ export default function TossPaymentWidget({
         const tossPayments = getTossPayments();
 
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
+        const idempotencyKey = generateIdempotencyKey('BILLING_CONFIRM');
         const authQuery = authParam ? `&${authParam}` : '';
         const reserveQuery = isReserve ? `&mode=reserve` : '';
         // 신규 매장인 경우 brandName과 industry 전달
         const newTenantQuery = isNewTenant && brandName ? `&brandName=${encodeURIComponent(brandName)}&industry=${encodeURIComponent(industry || '')}` : '';
         await tossPayments.requestBillingAuth('카드', {
           customerKey: email,
-          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}`,
+          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`,
           failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,
         });

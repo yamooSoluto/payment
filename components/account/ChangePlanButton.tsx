@@ -62,13 +62,18 @@ export default function ChangePlanButton({
     message: '',
   });
 
-  // 즉시 변경 시 계산 (실제 결제 기간 기준)
+  // 즉시 변경 시 계산 (실제 결제 기간 기준, 0 나누기 방지)
   // 기존 플랜: 변경일(오늘)까지 사용 → usedDays만큼 차감 후 daysLeft만큼 환불
-  const refundAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
+  const refundAmount = totalDaysInPeriod > 0 ? Math.round((currentAmount / totalDaysInPeriod) * daysLeft) : 0;
   // 새 플랜: 변경일(오늘)부터 종료일까지 이용 → (daysLeft + 1)일 결제
-  const proratedNewAmount = Math.round((newAmount / totalDaysInPeriod) * (daysLeft + 1));
+  const proratedNewAmount = totalDaysInPeriod > 0 ? Math.round((newAmount / totalDaysInPeriod) * (daysLeft + 1)) : 0;
   // 실제 결제/환불 금액
   const immediatePayment = proratedNewAmount - refundAmount;
+
+  // 멱등성 키 생성
+  const generateIdempotencyKey = (operation: string) => {
+    return `${operation}_${tenantId}_${Date.now()}`;
+  };
 
   const handleChangePlan = async (mode: 'immediate' | 'scheduled') => {
     setIsLoading(true);
@@ -83,6 +88,9 @@ export default function ChangePlanButton({
         ? Math.abs(immediatePayment)
         : 0;
 
+      // 멱등성 키 생성
+      const idempotencyKey = generateIdempotencyKey(mode === 'immediate' ? 'IMMEDIATE_CHANGE' : 'SCHEDULED_CHANGE');
+
       const response = await fetch('/api/subscriptions/change-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,6 +102,7 @@ export default function ChangePlanButton({
           newAmount,
           mode,
           refundAmount: actualRefundAmount, // 즉시 다운그레이드 시 환불 금액
+          idempotencyKey,  // 멱등성 키 전달
         }),
       });
 
