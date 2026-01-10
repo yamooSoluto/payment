@@ -114,10 +114,10 @@ export async function POST(request: Request) {
         // 개발 환경에서는 콘솔에 인증번호 출력
         if (process.env.NODE_ENV === 'development') {
           console.log(`[DEV] 인증번호: ${verificationCode}`);
+          // 보안: 인증번호를 응답에 포함하지 않음 (서버 콘솔에서만 확인)
           return NextResponse.json({
             success: true,
-            message: '인증번호가 발송되었습니다. (개발모드)',
-            devCode: verificationCode, // 개발 환경에서만 반환
+            message: '인증번호가 발송되었습니다. (개발모드 - 서버 콘솔 확인)',
           });
         }
         return NextResponse.json(

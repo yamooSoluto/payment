@@ -75,7 +75,13 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
       if (user?.email) {
         setIsLoadingUserInfo(true);
         try {
-          const response = await fetch(`/api/users/${encodeURIComponent(user.email)}`);
+          // Firebase ID 토큰 가져오기
+          const idToken = await user.getIdToken();
+          const response = await fetch(`/api/users/${encodeURIComponent(user.email)}`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+            },
+          });
           if (response.ok) {
             const userData = await response.json();
             setFormData(prev => ({
@@ -88,13 +94,13 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             if (userData.phone) {
               setIsPhoneVerified(true);
             }
-            // 유료 구독 이력이 있는 경우
-            if (userData.hasPaidSubscription) {
-              setHasPaidSubscription(true);
-              setAlreadyApplied(true); // 무료체험도 불가
+            // 이미 무료체험 신청한 경우 (우선 체크)
+            if (userData.trialApplied) {
+              setAlreadyApplied(true);
             }
-            // 이미 무료체험 신청한 경우 (전화번호 기준으로 체크됨)
-            else if (userData.trialApplied) {
+            // 유료 구독 이력만 있는 경우
+            else if (userData.hasPaidSubscription) {
+              setHasPaidSubscription(true);
               setAlreadyApplied(true);
             }
           }
