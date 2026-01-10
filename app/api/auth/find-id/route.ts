@@ -86,7 +86,7 @@ export async function POST(request: Request) {
 
 /**
  * 이메일 마스킹 함수
- * example@gmail.com -> ex***le@gmail.com
+ * soluto1357@gmail.com -> so******57@gmail.com (가려진 글자 수만큼 * 표시)
  */
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split('@');
@@ -95,10 +95,12 @@ function maskEmail(email: string): string {
   if (localPart.length <= 2) {
     return `${localPart[0]}*@${domain}`;
   } else if (localPart.length <= 4) {
-    return `${localPart.slice(0, 2)}***@${domain}`;
+    const hiddenCount = localPart.length - 2;
+    return `${localPart.slice(0, 2)}${'*'.repeat(hiddenCount)}@${domain}`;
   } else {
     const visibleStart = localPart.slice(0, 2);
     const visibleEnd = localPart.slice(-2);
-    return `${visibleStart}***${visibleEnd}@${domain}`;
+    const hiddenCount = localPart.length - 4;
+    return `${visibleStart}${'*'.repeat(hiddenCount)}${visibleEnd}@${domain}`;
   }
 }

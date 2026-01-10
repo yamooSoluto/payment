@@ -37,6 +37,7 @@ function LoginForm() {
   // UI 상태
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [phoneMessage, setPhoneMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showResetOption, setShowResetOption] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -100,7 +101,7 @@ function LoginForm() {
     }
 
     setVerificationLoading(true);
-    setError('');
+    setPhoneMessage(null);
 
     try {
       const purpose = (mode === 'signup' || mode === 'complete-profile') ? 'signup' : mode === 'find-id' ? 'find-id' : 'reset-password';
@@ -118,7 +119,7 @@ function LoginForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || '인증번호 발송에 실패했습니다.');
+        setPhoneMessage({ type: 'error', text: data.error || '인증번호 발송에 실패했습니다.' });
         if (data.error?.includes('이미 가입된')) {
           setShowResetOption(true);
         }
@@ -127,7 +128,7 @@ function LoginForm() {
 
       setVerificationSent(true);
       setVerificationCode(['', '', '', '', '', '']);
-      setSuccess('인증번호가 발송되었습니다.');
+      setPhoneMessage({ type: 'success', text: '인증번호가 발송되었습니다.' });
 
       // 30초 재전송 타이머 시작
       setResendTimer(30);
@@ -138,7 +139,7 @@ function LoginForm() {
       // 첫 번째 입력창으로 포커스
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch {
-      setError('인증번호 발송 중 오류가 발생했습니다.');
+      setPhoneMessage({ type: 'error', text: '인증번호 발송 중 오류가 발생했습니다.' });
     } finally {
       setVerificationLoading(false);
     }
@@ -229,7 +230,7 @@ function LoginForm() {
     }
 
     setVerificationLoading(true);
-    setError('');
+    setPhoneMessage(null);
 
     try {
       const res = await fetch('/api/auth/sms-verify', {
@@ -245,11 +246,12 @@ function LoginForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || '인증에 실패했습니다.');
+        setPhoneMessage({ type: 'error', text: data.error || '인증에 실패했습니다.' });
         return;
       }
 
       setIsPhoneVerified(true);
+      setPhoneMessage({ type: 'success', text: '인증이 완료되었습니다.' });
 
       // 아이디 찾기인 경우 바로 아이디 조회
       if (mode === 'find-id') {
@@ -259,10 +261,9 @@ function LoginForm() {
       // 비밀번호 찾기인 경우 다음 단계로
       if (mode === 'reset-password') {
         setResetPasswordStep(2);
-        setSuccess('인증이 완료되었습니다. 새 비밀번호를 입력해주세요.');
       }
     } catch {
-      setError('인증 확인 중 오류가 발생했습니다.');
+      setPhoneMessage({ type: 'error', text: '인증 확인 중 오류가 발생했습니다.' });
     } finally {
       setVerificationLoading(false);
     }
@@ -290,7 +291,7 @@ function LoginForm() {
         return;
       }
 
-      setFoundEmail(data.email);
+      setFoundEmail(data.maskedEmail);
       setSuccess('아이디를 찾았습니다!');
     } catch {
       setError('아이디 찾기 중 오류가 발생했습니다.');
@@ -579,6 +580,7 @@ function LoginForm() {
     setMode(newMode);
     setError('');
     setSuccess('');
+    setPhoneMessage(null);
     setShowResetOption(false);
     setFoundEmail('');
     setResetPasswordStep(1);
@@ -589,9 +591,13 @@ function LoginForm() {
     setVerificationSent(false);
     setExpiryTimer(0);
     setResendTimer(0);
-    if (newMode !== 'signup' && newMode !== 'find-id' && newMode !== 'reset-password') {
-      setName('');
-      setPhone('');
+    // 모드 변경 시 항상 입력 필드 초기화
+    setName('');
+    setPhone('');
+    if (newMode !== 'complete-profile') {
+      setEmail('');
+    }
+    if (newMode !== 'signup') {
       setAgreeToTerms(false);
     }
   };
@@ -795,6 +801,13 @@ function LoginForm() {
                         </button>
                       )}
                     </div>
+                    {/* SMS 인증 메시지 */}
+                    {phoneMessage && (
+                      <p className={`mt-2 text-sm flex items-center gap-1 ${phoneMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {phoneMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <WarningCircle className="w-4 h-4" />}
+                        {phoneMessage.text}
+                      </p>
+                    )}
                   </div>
 
                   {/* 인증번호 입력 UI */}
@@ -874,11 +887,11 @@ function LoginForm() {
                         </button>
                       )}
                     </div>
-                    {/* 인증 완료 메시지 */}
-                    {isPhoneVerified && (
-                      <p className="mt-2 text-sm text-green-600 flex items-center gap-1">
-                        <CheckCircle className="w-4 h-4" />
-                        연락처 인증이 완료되었습니다.
+                    {/* SMS 인증 메시지 */}
+                    {phoneMessage && (
+                      <p className={`mt-2 text-sm flex items-center gap-1 ${phoneMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {phoneMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <WarningCircle className="w-4 h-4" />}
+                        {phoneMessage.text}
                       </p>
                     )}
                   </div>
@@ -1043,6 +1056,13 @@ function LoginForm() {
                         </button>
                       )}
                     </div>
+                    {/* SMS 인증 메시지 */}
+                    {phoneMessage && (
+                      <p className={`mt-2 text-sm flex items-center gap-1 ${phoneMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {phoneMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <WarningCircle className="w-4 h-4" />}
+                        {phoneMessage.text}
+                      </p>
+                    )}
                   </div>
 
                   {/* 인증번호 입력 UI */}
@@ -1160,6 +1180,13 @@ function LoginForm() {
                       </button>
                     )}
                   </div>
+                  {/* SMS 인증 메시지 */}
+                  {phoneMessage && (
+                    <p className={`mt-2 text-sm flex items-center gap-1 ${phoneMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                      {phoneMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <WarningCircle className="w-4 h-4" />}
+                      {phoneMessage.text}
+                    </p>
+                  )}
 
                   {/* 인증번호 입력 */}
                   {verificationSent && !isPhoneVerified && renderVerificationCodeInput()}
