@@ -2,10 +2,32 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sofa, EditPencil, Trash } from 'iconoir-react';
+import { Sofa, EditPencil, Trash, SleeperChair, Shop, CoffeeCup, Gym, Scissor, Book, Key, Cart, Home } from 'iconoir-react';
 import EditTenantModal from './EditTenantModal';
 import DeleteTenantModal from './DeleteTenantModal';
 import { INDUSTRIES, type IndustryCode } from '@/lib/constants';
+
+// 업종별 아이콘 컴포넌트 매핑
+const INDUSTRY_ICON_COMPONENTS: Record<string, React.ElementType> = {
+  study_cafe: SleeperChair,
+  self_store: Shop,
+  cafe_restaurant: CoffeeCup,
+  fitness: Gym,
+  beauty: Scissor,
+  education: Book,
+  rental_space: Key,
+  retail_business: Cart,
+  other: Sofa,
+  '스터디카페 / 독서실': SleeperChair,
+  '무인매장 / 셀프운영 매장': Shop,
+  '카페 / 음식점': CoffeeCup,
+  '피트니스 / 운동공간': Gym,
+  '뷰티 / 미용': Scissor,
+  '교육 / 학원': Book,
+  '공간대여 / 숙박': Key,
+  '소매 / 유통 / 판매업': Cart,
+  '기타': Sofa,
+};
 
 interface Subscription {
   plan: string;
@@ -41,9 +63,14 @@ export default function TenantHeader({
     <>
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
-            <Sofa width={20} height={20} strokeWidth={1.5} className="text-white" />
-          </div>
+          {(() => {
+            const IndustryIcon = (industry && INDUSTRY_ICON_COMPONENTS[industry]) || Sofa;
+            return (
+              <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
+                <IndustryIcon width={20} height={20} strokeWidth={1.5} className="text-white" />
+              </div>
+            );
+          })()}
           <h1 className="text-3xl font-bold text-gray-900">{currentBrandName}</h1>
 
           {/* 수정 버튼 */}

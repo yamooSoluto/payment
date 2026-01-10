@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
 import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
 // 매일 00:00 (KST) 실행
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
           await syncTrialExpired(tenantId);
 
           // N8N 웹훅 알림
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
@@ -170,7 +171,7 @@ export async function GET(request: NextRequest) {
         // 30일 전 또는 7일 전 알림
         if (diffDays === 30 || diffDays === 7) {
           // N8N 웹훅 알림
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
@@ -235,7 +236,7 @@ export async function GET(request: NextRequest) {
         await syncPlanChange(tenantId, newPlan);
 
         // N8N 웹훅 알림
-        if (process.env.N8N_WEBHOOK_URL) {
+        if (isN8NNotificationEnabled()) {
           try {
             await fetch(process.env.N8N_WEBHOOK_URL, {
               method: 'POST',
@@ -285,7 +286,7 @@ export async function GET(request: NextRequest) {
         await syncSubscriptionSuspended(tenantId);
 
         // N8N 웹훅 알림
-        if (process.env.N8N_WEBHOOK_URL) {
+        if (isN8NNotificationEnabled()) {
           try {
             await fetch(process.env.N8N_WEBHOOK_URL, {
               method: 'POST',
@@ -427,7 +428,7 @@ export async function GET(request: NextRequest) {
           await syncPaymentSuccess(tenantId, nextBillingDate);
 
           // n8n 웹훅 (정기결제 성공 알림)
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
@@ -478,7 +479,7 @@ export async function GET(request: NextRequest) {
 
         if (newRetryCount >= 3) {
           // 3회 실패 알림
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
@@ -505,7 +506,7 @@ export async function GET(request: NextRequest) {
           // 1~2회 실패 알림
 
           // 재시도 알림 (1회차, 2회차)
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
               await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',

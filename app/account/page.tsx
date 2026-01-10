@@ -56,6 +56,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     tenantId: string;
     brandName: string;
     email: string;
+    industry: string | null;
     createdAt: string | null;
     subscription: {
       plan: string;
@@ -164,6 +165,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             tenantId: data.tenantId || doc.id,
             brandName: data.brandName || '이름 없음',
             email: data.email,
+            industry: data.industry || null,
             createdAt: serializeTimestamp(data.createdAt),
             // tenants 컬렉션의 구독/체험 정보 (fallback용)
             tenantSubscription: {
@@ -217,6 +219,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               tenantId: tenant.tenantId,
               brandName: tenant.brandName,
               email: tenant.email,
+              industry: tenant.industry,
               createdAt: tenant.createdAt,
               subscription: subFromCollection,
             };
@@ -231,6 +234,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               tenantId: tenant.tenantId,
               brandName: tenant.brandName,
               email: tenant.email,
+              industry: tenant.industry,
               createdAt: tenant.createdAt,
               subscription: {
                 plan: tenantSub.plan,
@@ -250,6 +254,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               tenantId: tenant.tenantId,
               brandName: tenant.brandName,
               email: tenant.email,
+              industry: tenant.industry,
               createdAt: tenant.createdAt,
               subscription: {
                 plan: 'trial',
@@ -268,6 +273,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             tenantId: tenant.tenantId,
             brandName: tenant.brandName,
             email: tenant.email,
+            industry: tenant.industry,
             createdAt: tenant.createdAt,
             subscription: null,
           };

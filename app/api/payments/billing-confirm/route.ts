@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById } from '@/lib/auth';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -405,9 +406,9 @@ export async function GET(request: NextRequest) {
     }
 
     // n8n 웹훅 호출 (구독 성공 알림)
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

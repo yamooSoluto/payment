@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey } from '@/lib/toss';
 import { verifyToken } from '@/lib/auth';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // 카드 추가/변경 처리 (새 빌링키 발급 후 카드 컬렉션에 저장)
 export async function GET(request: NextRequest) {
@@ -144,9 +145,9 @@ export async function GET(request: NextRequest) {
     });
 
     // n8n 웹훅 호출 (카드 추가 알림)
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

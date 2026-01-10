@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { cancelPayment } from '@/lib/toss';
 import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -161,9 +162,9 @@ export async function POST(request: NextRequest) {
       }
 
       // n8n 웹훅 호출 (즉시 해지 알림)
-      if (process.env.N8N_WEBHOOK_URL) {
+      if (isN8NNotificationEnabled()) {
         try {
-          await fetch(process.env.N8N_WEBHOOK_URL, {
+          await fetch(process.env.N8N_WEBHOOK_URL!, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -201,9 +202,9 @@ export async function POST(request: NextRequest) {
       await syncSubscriptionCancellation(tenantId);
 
       // n8n 웹훅 호출 (해지 예약 알림)
-      if (process.env.N8N_WEBHOOK_URL) {
+      if (isN8NNotificationEnabled()) {
         try {
-          await fetch(process.env.N8N_WEBHOOK_URL, {
+          await fetch(process.env.N8N_WEBHOOK_URL!, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

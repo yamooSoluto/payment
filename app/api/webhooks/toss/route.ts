@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import crypto from 'crypto';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // HMAC 서명 검증 함수
 function verifyWebhookSignature(
@@ -197,9 +198,9 @@ export async function POST(request: NextRequest) {
           });
 
           // N8N 웹훅 호출 (결제 실패 알림)
-          if (process.env.N8N_WEBHOOK_URL) {
+          if (isN8NNotificationEnabled()) {
             try {
-              await fetch(process.env.N8N_WEBHOOK_URL, {
+              await fetch(process.env.N8N_WEBHOOK_URL!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

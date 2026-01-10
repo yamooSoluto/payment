@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, cancelPayment, getPayment, getPlanName } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -270,9 +271,9 @@ export async function POST(request: NextRequest) {
     await syncPlanChange(tenantId, newPlan);
 
     // n8n 웹훅
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

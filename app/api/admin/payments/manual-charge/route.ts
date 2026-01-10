@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, PLAN_PRICES, getPlanName } from '@/lib/toss';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // POST: 관리자 수동 결제 처리
 export async function POST(request: NextRequest) {
@@ -160,9 +161,9 @@ export async function POST(request: NextRequest) {
     }
 
     // n8n 웹훅 호출 (선택적)
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

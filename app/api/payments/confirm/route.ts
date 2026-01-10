@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
 import { getPlanById } from '@/lib/auth';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -88,9 +89,9 @@ export async function GET(request: NextRequest) {
     });
 
     // 5. n8n 웹훅 호출 (비즈엠 알림톡)
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

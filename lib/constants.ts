@@ -23,3 +23,21 @@ export const INDUSTRY_OPTIONS = Object.entries(INDUSTRIES).map(([code, label]) =
   value: code,
   label,
 }));
+
+// 한글 라벨 → 코드 역매핑 (DB에 한글로 저장된 경우 대응)
+export const INDUSTRY_LABEL_TO_CODE: Record<string, IndustryCode> = Object.fromEntries(
+  Object.entries(INDUSTRIES).map(([code, label]) => [label, code as IndustryCode])
+) as Record<string, IndustryCode>;
+
+// 업종별 아이콘 이름 매핑 (iconoir-react)
+export const INDUSTRY_ICONS: Record<IndustryCode, string> = {
+  study_cafe: 'SleeperChair',
+  self_store: 'Shop',
+  cafe_restaurant: 'CoffeeCup',
+  fitness: 'Gym',
+  beauty: 'Scissor',
+  education: 'Book',
+  rental_space: 'Key',
+  retail_business: 'Cart',
+  other: 'Sofa',
+};

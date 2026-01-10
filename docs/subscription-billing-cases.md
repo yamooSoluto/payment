@@ -8,11 +8,13 @@
 3. [구독 해지 시나리오](#3-구독-해지-시나리오)
 4. [결제 실패 처리](#4-결제-실패-처리)
 5. [엣지 케이스](#5-엣지-케이스)
-6. [현재 구현 상태](#6-현재-구현-상태)
-7. [Vercel Cron Job 상세](#7-vercel-cron-job-상세)
-8. [알림 이력 관리 시스템 (TODO)](#8-알림-이력-관리-시스템-todo)
-9. [참고 자료](#9-참고-자료)
-10. [다음 구현 우선순위](#10-다음-구현-우선순위)
+6. [매장 삭제 / 회원 탈퇴](#6-매장-삭제--회원-탈퇴)
+7. [현재 구현 상태](#7-현재-구현-상태)
+8. [Vercel Cron Job 상세](#8-vercel-cron-job-상세)
+9. [Firestore 컬렉션 구조](#9-firestore-컬렉션-구조)
+10. [알림 이력 관리 시스템 (TODO)](#10-알림-이력-관리-시스템-todo)
+11. [참고 자료](#11-참고-자료)
+12. [다음 구현 우선순위](#12-다음-구현-우선순위)
 
 ---
 
@@ -78,58 +80,66 @@
 
 ## 2. 플랜 변경 시나리오
 
-### 2.1 업그레이드 (즉시)
+### 2.1 플랜 정보
+| 플랜 | 월 가격 (VAT 포함) |
+|------|-------------------|
+| Trial | 0원 |
+| Basic | 39,000원 |
+| Business | 99,000원 |
+
+### 2.2 업그레이드 (즉시)
 - **케이스**: Basic → Business 플랜 변경
-- **계산 로직**:
+- **계산 로직** (기존 플랜 부분 환불 + 새 플랜 결제 분리):
   ```
   남은 일수 = currentPeriodEnd - 오늘
+  총 일수 = currentPeriodEnd - currentPeriodStart
+
   기존 플랜 환불액 = (현재 플랜 가격 / 총 일수) × 남은 일수
   새 플랜 결제액 = (새 플랜 가격 / 총 일수) × (남은 일수 + 1)
-  실제 결제 금액 = 새 플랜 결제액 - 기존 플랜 환불액
   ```
 - **처리**:
-  - 즉시 차액 결제
-  - `currentPeriodStart` = 오늘로 업데이트
-  - `amount` = 새 플랜 정가 (다음 결제부터 적용)
-  - 플랜 상태 즉시 변경
+  1. 기존 플랜 부분 환불 (Toss cancelPayment)
+  2. 새 플랜 일할 결제 (Toss 빌링키 결제)
+  3. `plan`, `amount` 즉시 변경
+  4. `previousPlan`, `previousAmount` 저장
+  5. payments 컬렉션에 환불/결제 내역 저장
+  6. tenants 컬렉션 동기화
 - **구현 상태**: ✅ 완료
 
-### 2.2 다운그레이드 (즉시)
+### 2.3 다운그레이드 (즉시)
 - **케이스**: Business → Basic 플랜 변경
 - **계산 로직**:
   ```
-  남은 일수 = currentPeriodEnd - 오늘
-  기존 플랜 환불액 = (현재 플랜 가격 / 총 일수) × 남은 일수
-  새 플랜 결제액 = (새 플랜 가격 / 총 일수) × (남은 일수 + 1)
-  실제 환불 금액 = 기존 플랜 환불액 - 새 플랜 결제액
+  환불 금액 = 기존 플랜 환불액 - 새 플랜 결제액
   ```
 - **처리**:
   - Toss Payments API로 부분 환불 요청
-  - `currentPeriodStart` = 오늘로 업데이트
-  - `amount` = 새 플랜 정가
+  - `plan`, `amount` 즉시 변경
   - payments 컬렉션에 환불 내역 저장 (`type: 'downgrade_refund'`)
   - `originalPaymentId` 연결
+  - refunds 컬렉션에도 환불 내역 저장
 - **구현 상태**: ✅ 완료
 
-### 2.3 플랜 변경 예약 (다음 결제일부터 적용)
+### 2.4 플랜 변경 예약 (다음 결제일부터 적용)
 - **케이스**: 사용자가 즉시 변경이 아닌 예약 선택
 - **처리**:
-  - `pendingPlan`, `pendingAmount` 필드에 저장
+  - `pendingPlan`, `pendingAmount`, `pendingMode` 필드에 저장
+  - `pendingChangeAt` = nextBillingDate
   - 현재 구독은 그대로 유지
   - 다음 결제일에 자동으로 플랜 변경 + 새 금액 결제
 - **구현 상태**: ✅ 완료
 
-### 2.4 엣지 케이스: 결제 주기 마지막 날 변경
+### 2.5 엣지 케이스: 결제 주기 마지막 날 변경
 - **케이스**: currentPeriodEnd - 1일에 플랜 변경
 - **문제점**: 남은 일수가 0일 또는 1일
 - **처리**:
   - 남은 일수 0일: 새 플랜 1일치만 결제 (daysLeft + 1 = 1일)
   - 업그레이드: 새 플랜 1일치 결제
   - 다운그레이드: 환불 없이 플랜만 변경
-  - 토스 최소 결제액(100원)은 플랜 가격(49,000원~)으로 인해 문제없음
+  - 토스 최소 결제액(100원)은 플랜 가격(39,000원~)으로 인해 문제없음
 - **구현 상태**: ✅ 구현됨
 
-### 2.5 엣지 케이스: 결제 주기 첫날 변경
+### 2.6 엣지 케이스: 결제 주기 첫날 변경
 - **케이스**: 방금 결제하고 바로 플랜 변경
 - **계산 로직** (30일 기준):
   - 현재 플랜: 1일 사용으로 간주, 29일치 환불
@@ -148,7 +158,7 @@
 - **케이스**: 사용자가 해지 신청, 현재 기간은 유지
 - **처리**:
   - 구독 상태: `canceled`
-  - `canceledAt`, `cancelReason` 저장
+  - `canceledAt`, `cancelReason`, `cancelMode: 'scheduled'` 저장
   - `currentPeriodEnd`까지 서비스 이용 가능
   - 다음 자동 결제 중단
 - **구현 상태**: ✅ 완료
@@ -164,22 +174,35 @@
   - Toss Payments API로 부분 환불
   - 구독 상태: `expired`
   - `expiredAt` = 오늘
+  - `currentPeriodEnd` = 오늘 (실제 종료일 업데이트)
   - 즉시 서비스 이용 중단
+  - payments 컬렉션에 환불 내역 저장 (`type: 'cancel_refund'`)
   - refunds 컬렉션에 환불 내역 저장
 - **구현 상태**: ✅ 완료
 
-### 3.3 환불 계산 엣지 케이스
-#### 3.3.1 플랜 변경 후 즉시 해지
+### 3.3 해지 취소 (구독 재활성화)
+- **케이스**: 해지 예약 후 마음 변경
+- **조건**: `status === 'canceled'` AND `currentPeriodEnd > 오늘`
+- **처리**:
+  - 구독 상태: `canceled` → `active`
+  - `canceledAt`, `cancelReason` = null
+  - `reactivatedAt` = 오늘
+  - tenants 컬렉션 동기화 (`syncSubscriptionReactivation`)
+- **API**: `POST /api/subscriptions/reactivate`
+- **구현 상태**: ✅ 완료
+
+### 3.4 환불 계산 엣지 케이스
+#### 3.4.1 플랜 변경 후 즉시 해지
 - **문제**: 플랜 변경으로 일할 계산된 금액으로 결제했는데, `subscription.amount`에는 정가가 저장됨
 - **해결**: `currentPeriodStart`를 플랜 변경일로 업데이트하여 정확한 기간 계산
-- **구현 상태**: ✅ 완료 (오늘 수정)
+- **구현 상태**: ✅ 완료
 
-#### 3.3.2 마지막 날 즉시 해지
+#### 3.4.2 마지막 날 즉시 해지
 - **케이스**: 결제 주기 마지막 날 즉시 해지
 - **처리**: 환불액 = 0원
 - **구현 상태**: ✅ 로직상 처리됨
 
-#### 3.3.3 결제 직후 즉시 해지
+#### 3.4.3 결제 직후 즉시 해지
 - **케이스**: 결제하고 몇 분 내로 즉시 해지
 - **처리**: 거의 전액 환불
 - **구현 상태**: ✅ 로직상 처리됨
@@ -339,7 +362,7 @@
   - 새 카드로 빌링키 발급
   - 기존 빌링키 비활성화
   - 다음 결제부터 새 카드 사용
-- **구현 상태**: ⚠️ 확인 필요
+- **구현 상태**: ✅ 완료
 
 #### 5.5.2 카드 만료 전 갱신
 - **처리**:
@@ -370,23 +393,135 @@
   - `billingCycle: 'yearly'`
 - **구현 상태**: ❌ 미구현 (구현 계획 아직 없음)
 
-### 5.8 데이터 보관/삭제 정책
-#### 5.8.1 구독 해지 후 데이터 보관
-- **정책**: 90일간 보관 후 삭제
-- **처리**:
-  - `dataRetentionUntil` = 해지일 + 90일
-  - Cron job으로 매일 삭제 대상 확인
-- **구현 상태**: ⚠️ UI 안내는 있지만 자동 삭제 없음
-
-#### 5.8.2 재구독 시 데이터 복구
-- **처리**:
-  - 90일 이내 재구독: 데이터 복구
-  - 90일 이후: 신규 시작
-- **구현 상태**: ⚠️ 확인 필요
+### 5.8 가격 정책 (Price Policy)
+- **타입**: `grandfathered` | `protected_until` | `standard`
+- **설명**:
+  - `grandfathered`: 가격 보호 (영구) - 기존 가격 평생 유지
+  - `protected_until`: 기간 한정 가격 보호 - 특정 날짜까지 기존 가격 유지
+  - `standard`: 일반 (최신 가격 적용)
+- **구현 상태**: ✅ 완료 (`lib/toss.ts`)
 
 ---
 
-## 6. 현재 구현 상태
+## 6. 매장 삭제 / 회원 탈퇴
+
+### 6.1 매장 삭제 (Tenant Deletion)
+
+**API**: `DELETE /api/tenants/[tenantId]` (사용자) / `DELETE /api/admin/tenants/[tenantId]` (관리자)
+
+#### 삭제 조건
+- 구독 상태가 `expired`이거나 구독이 없는 경우만 삭제 가능
+- 삭제 불가 상태: `trial`, `active`, `canceled`, `past_due`
+
+#### 처리 방식: **Soft Delete**
+
+**tenants 컬렉션 업데이트:**
+```typescript
+{
+  deleted: true,
+  deletedAt: Date,
+  deletedBy: email | 'admin',
+  permanentDeleteAt: Date, // 90일 후
+  updatedAt: serverTimestamp
+}
+```
+
+**tenant_deletions 컬렉션 추가 (로그):**
+```typescript
+{
+  tenantId: string,
+  brandName: string,
+  email: string,
+  deletedAt: Date,
+  permanentDeleteAt: Date, // 90일 후
+  reason: 'user_request' | 'admin_delete'
+}
+```
+
+#### 특징
+- 매장 데이터 자체는 삭제하지 않고 `deleted: true` 표시
+- `permanentDeleteAt` (90일 후)까지 복구 가능 기간
+- 추후 배치 작업으로 `permanentDeleteAt` 지난 데이터 영구 삭제 예정
+
+**구현 상태**: ✅ 완료
+
+---
+
+### 6.2 회원 탈퇴 (Account Deletion)
+
+**API**: `DELETE /api/account/delete`
+
+#### 탈퇴 조건
+- 모든 매장이 구독/체험 종료 상태여야 함
+- 탈퇴 불가: `active`, `trial`, `canceled` 상태의 구독이 있는 경우
+
+#### 처리 방식: **Soft Delete + 법령 준수 보관**
+
+**1) tenants 컬렉션:**
+```typescript
+{
+  deleted: true,
+  deletedAt: Date,
+  deletedEmail: '원본 이메일',
+  email: 'deleted_{timestamp}_{email}' // 마스킹
+}
+```
+
+**2) subscriptions 컬렉션:**
+```typescript
+{
+  deleted: true,
+  deletedAt: Date
+}
+```
+
+**3) cards 컬렉션:** **완전 삭제** (카드 정보는 보관 불필요)
+
+**4) users 컬렉션:** (결제 이력에 따라 보관 기간 차등)
+```typescript
+{
+  deleted: true,
+  deletedAt: Date,
+  retentionEndDate: Date,
+  retentionReason: '전자상거래법_5년' | '부정이용방지_1년',
+  // email, phone, name, trialApplied 모두 유지
+  // - deleted 상태라 신규 가입은 가능
+  // - phone으로 무료체험 이력 추적
+}
+```
+
+| 유형 | 보관 기간 | 근거 |
+|------|----------|------|
+| 결제 고객 | 5년 | 전자상거래법 |
+| 무료체험만 | 1년 | 부정 이용 방지 |
+
+**5) account_deletions 컬렉션 추가 (로그):**
+```typescript
+{
+  email: string,
+  tenantIds: string[],
+  deletedAt: Date,
+  reason: 'User requested deletion'
+}
+```
+
+**6) N8N 웹훅 호출:** `account_deleted` 이벤트
+
+**구현 상태**: ✅ 완료
+
+---
+
+### 6.3 재가입/복구 관련
+
+| 항목 | 처리 |
+|------|------|
+| 매장 복구 | `permanentDeleteAt` 이전에 관리자가 `deleted: false`로 변경 |
+| 회원 재가입 | `deleted: true`인 이메일로 재가입 가능 (신규 가입 취급) |
+| 무료체험 중복 방지 | `phone` 기준으로 `trialApplied` 체크 |
+
+---
+
+## 7. 현재 구현 상태
 
 ### ✅ 완료된 기능
 
@@ -398,48 +533,67 @@
    - 즉시 전환: 카드 등록 + 즉시 결제
    - 예약 전환: `pendingPlan` 저장 → 체험 종료일에 자동 전환
 3. **플랜 업그레이드/다운그레이드 (즉시)**
-   - 일할 계산 환불/결제
+   - 일할 계산 환불/결제 (기존 환불 + 새 결제 분리)
    - `currentPeriodStart` 업데이트로 정확한 환불 계산
+   - 트랜잭션 기반 원자성 보장
 4. **플랜 변경 예약 (다음 결제일부터)**
    - `pendingPlan`, `pendingAmount`, `pendingMode` 저장
    - Cron Job에서 자동 적용
 5. **구독 해지**
    - 예약 해지: `currentPeriodEnd`까지 이용 가능
    - 즉시 해지: 일할 환불 + 즉시 서비스 중단
-   - 환불 내역 저장 (`type: 'downgrade_refund'`, `originalPaymentId` 연결)
+   - 환불 내역 저장 (`type: 'cancel_refund'`, `originalPaymentId` 연결)
+6. **구독 재활성화**
+   - 해지 예약 상태에서 재활성화 가능
+   - `status: 'canceled' → 'active'`
 
 #### 결제 자동화 (Vercel Cron Job)
-6. **정기 결제 자동 처리**
+7. **정기 결제 자동 처리**
    - 실행 주기: 매일 00:00 KST (`vercel.json`)
    - Firebase Composite Index 설정 완료
    - CRON_SECRET 인증 적용
-7. **무료체험 만료 처리**
+8. **무료체험 만료 처리**
    - `pendingPlan` 있으면: 자동 전환 + 첫 결제
    - `pendingPlan` 없으면: `status = 'expired'`
-8. **카드 만료 사전 알림**
+9. **카드 만료 사전 알림**
    - 30일 전, 7일 전 알림 전송
-9. **예약 플랜 변경 자동 적용**
-   - `pendingChangeAt` 도달 시 자동 적용
-10. **결제 실패 재시도 (Dunning) 및 유예 기간**
+10. **예약 플랜 변경 자동 적용**
+    - `pendingChangeAt` 도달 시 자동 적용
+11. **결제 실패 재시도 (Dunning) 및 유예 기간**
     - D+0, D+1, D+2 재시도 (3회)
     - 1회 실패 시 즉시 `status = 'past_due'` 변경 및 `gracePeriodUntil = D+6` 설정
     - 유예 기간: D+0 ~ D+6 (총 7일)
     - D+7 (8일차)에 유예 기간 만료 시 `status = 'suspended'`
     - 유예 기간 중 서비스 계속 이용 가능
-11. **카드 업데이트 시 자동 재결제**
+12. **카드 업데이트 시 자동 재결제**
     - `past_due` 상태에서 카드 변경 시 즉시 재결제 시도
     - 성공 시 `status = 'active'` 복구
     - 실패 시 다음 재시도 일정에 따라 진행
 
 #### 데이터 동기화 & 알림
-12. **tenants 컬렉션 자동 동기화**
+13. **tenants 컬렉션 자동 동기화**
     - `syncNewSubscription`: 무료체험 전환 시
     - `syncTrialExpired`: 체험 만료 시
     - `syncPlanChange`: 플랜 변경 시
     - `syncPaymentSuccess`: 결제 성공 시
     - `syncPaymentFailure`: 결제 실패 시
+    - `syncSubscriptionCancellation`: 해지 예약 시
+    - `syncSubscriptionReactivation`: 구독 재활성화 시
+    - `syncSubscriptionExpired`: 구독 만료 시
     - `syncSubscriptionSuspended`: 유예 기간 만료 시
-13. **N8N 웹훅 알림**
+14. **N8N 웹훅 알림** (⚠️ 현재 알림성 웹훅 비활성화됨)
+
+    **활성화/비활성화 설정**: `lib/n8n.ts`
+    ```typescript
+    export const ENABLE_N8N_NOTIFICATION_WEBHOOKS = false;  // true로 변경 시 활성화
+    ```
+
+    **항상 활성 (tenant/trial 생성용):**
+    - `trial/create` - 무료체험 신청 → n8n에서 tenant 생성
+    - `trial/apply` - 기존 매장에 체험 적용
+    - `tenants/route` - 매장 추가 → n8n에서 tenant 생성
+
+    **비활성화된 알림 웹훅 (ENABLE_N8N_NOTIFICATION_WEBHOOKS로 제어):**
     - `trial_expired`: 무료체험 만료
     - `card_expiring_soon`: 카드 만료 임박 (30일/7일 전)
     - `pending_plan_applied`: 예약 플랜 적용
@@ -448,46 +602,65 @@
     - `payment_failed_grace_period`: 3회 실패 후 유예 기간 시작
     - `grace_period_expired`: 유예 기간 만료
     - `card_update_retry_success`: 카드 변경 후 자동 재결제 성공
-14. **결제 내역 자동 저장**
+    - `plan_changed_immediate`: 즉시 플랜 변경
+    - `plan_change_scheduled`: 예약 플랜 변경
+    - `subscription_canceled_immediate`: 즉시 해지
+    - `subscription_canceled_scheduled`: 예약 해지
+    - `account_deleted`: 회원 탈퇴
+
+    **알림 웹훅 활성화 방법:**
+    1. N8N에서 각 이벤트 처리 워크플로우 생성
+    2. `lib/n8n.ts`에서 `ENABLE_N8N_NOTIFICATION_WEBHOOKS = true` 설정
+    3. 환경변수 `N8N_WEBHOOK_URL` 확인
+15. **결제 내역 자동 저장**
     - payments 컬렉션에 모든 결제 기록
-    - type 구분: `trial_conversion`, `upgrade`, `downgrade`, `downgrade_refund`, `recurring`, `card_update_retry`
+    - type 구분: `trial_conversion`, `upgrade`, `downgrade`, `downgrade_refund`, `recurring`, `card_update_retry`, `cancel_refund`
+
+#### 매장/회원 관리
+16. **매장 삭제 (Soft Delete)**
+    - 90일 보관 후 영구 삭제 예정
+    - `tenant_deletions` 컬렉션에 로그 저장
+17. **회원 탈퇴 (Soft Delete)**
+    - 결제 이력에 따른 차등 보관 (5년/1년)
+    - `account_deletions` 컬렉션에 로그 저장
 
 #### UI/UX
-15. **Toss Payments Webhook 연동**
-16. **결제 내역 표시 (환불 내역 중첩 표시)**
-17. **취소 모달 개선**
+18. **Toss Payments Webhook 연동**
+19. **결제 내역 표시 (환불 내역 중첩 표시)**
+20. **취소 모달 개선**
     - 90일 데이터 보관 정책 안내
     - 환불 계산 내역 인터랙티브 툴팁
-18. **구독 내역 정렬 개선**
+21. **구독 내역 정렬 개선**
     - 상태 우선순위: 사용중 > 사용완료 > 해지됨
+22. **가격 정책 (Price Policy)**
+    - `grandfathered`, `protected_until`, `standard` 지원
 
 ### ⚠️ 부분 구현
 1. **동시성 제어**: 트랜잭션은 있지만 Optimistic Locking 없음
 2. **Toss-DB 상태 동기화**: Webhook은 있지만 환불 처리 확인 필요
 3. **날짜 경계 처리**: 기본 구현됨, 엣지 케이스 테스트 필요
-4. **데이터 보관 정책**: UI 안내만 있음
-5. **N8N 웹훅 알림**: 웹훅 전송 코드는 있지만 Firestore 저장 없음, 중복 방지 없음
+4. **데이터 보관 정책**: UI 안내만 있음, 자동 삭제 스케줄러 없음
+5. **N8N 알림 웹훅**: 코드 구현됨, 현재 비활성화 상태 (`lib/n8n.ts`에서 제어), N8N 워크플로우 미설정
 
 ### ❌ 미구현
 1. **알림 이력 관리** (`payment_notifications` 컬렉션 및 중복 방지)
 2. **중복 결제 방지 (멱등성 키)**
 3. **결제 주기 마지막 날 플랜 변경 제한**
-4. **세금/VAT 처리**
-5. **쿠폰/프로모션 코드**
-6. **연간 구독**
-7. **데이터 자동 삭제 스케줄러** (90일 후)
+4. **쿠폰/프로모션 코드**
+5. **연간 구독**
+6. **데이터 자동 삭제 스케줄러** (90일 후)
 
 ---
 
-## 7. Vercel Cron Job 상세
+## 8. Vercel Cron Job 상세
 
-### 7.1 설정
+### 8.1 설정
 - **파일**: `vercel.json`
 - **실행 주기**: 매일 00:00 KST (15:00 UTC)
 - **엔드포인트**: `/api/cron/billing`
 - **인증**: CRON_SECRET 환경변수로 보호
 
-### 7.2 처리 프로세스
+### 8.2 처리 프로세스
 
 #### Phase 1: 무료체험 처리
 ```typescript
@@ -589,7 +762,7 @@ try {
 }
 ```
 
-### 7.3 Firebase Composite Index
+### 8.3 Firebase Composite Index
 ```
 Collection: subscriptions
 Fields:
@@ -598,7 +771,7 @@ Fields:
   - __name__ (Ascending)
 ```
 
-### 7.4 응답 형식
+### 8.4 응답 형식
 ```json
 {
   "success": true,
@@ -619,16 +792,102 @@ Fields:
 }
 ```
 
-### 7.5 모니터링
+### 8.5 모니터링
 - **Vercel 로그**: Deployments → Functions → Cron
 - **수동 실행**: `curl -X GET -H "Authorization: Bearer $CRON_SECRET" https://your-domain.com/api/cron/billing`
 - **N8N 웹훅**: 각 이벤트별 알림 수신
 
 ---
 
-## 8. 알림 이력 관리 시스템 (TODO)
+## 9. Firestore 컬렉션 구조
 
-### 8.1 payment_notifications 컬렉션 구조
+### 9.1 주요 컬렉션
+
+| 컬렉션 | 용도 | 삭제 시 처리 |
+|--------|------|-------------|
+| `tenants` | 매장 정보 | Soft delete (`deleted: true`) |
+| `subscriptions` | 구독 정보 | Soft delete |
+| `users` | 회원 정보 | Soft delete + 법령 보관 |
+| `cards` | 카드 정보 | **완전 삭제** |
+| `payments` | 결제 이력 | 삭제 안함 (법령 보관) |
+| `refunds` | 환불 이력 | 삭제 안함 |
+
+### 9.2 로그 컬렉션
+
+| 컬렉션 | 용도 |
+|--------|------|
+| `tenant_deletions` | 매장 삭제 로그 |
+| `account_deletions` | 회원 탈퇴 로그 |
+| `payment_notifications` | 알림 이력 (TODO) |
+
+### 9.3 subscriptions 컬렉션 필드
+
+```typescript
+{
+  // 기본 정보
+  tenantId: string,
+  email: string,
+  brandName: string,
+
+  // 플랜 정보
+  plan: 'trial' | 'basic' | 'business',
+  amount: number,
+  pricePolicy?: 'grandfathered' | 'protected_until' | 'standard',
+  priceProtectedUntil?: Date,
+
+  // 구독 상태
+  status: 'trial' | 'active' | 'canceled' | 'past_due' | 'suspended' | 'expired',
+
+  // 기간 정보
+  currentPeriodStart: Date,
+  currentPeriodEnd: Date,
+  nextBillingDate: Date,
+  trialEndDate?: Date,
+
+  // 해지 정보
+  canceledAt?: Date,
+  cancelReason?: string,
+  cancelMode?: 'immediate' | 'scheduled',
+  expiredAt?: Date,
+  reactivatedAt?: Date,
+
+  // 플랜 변경 예약
+  pendingPlan?: string,
+  pendingAmount?: number,
+  pendingMode?: 'immediate' | 'scheduled',
+  pendingChangeAt?: Date,
+  previousPlan?: string,
+  previousAmount?: number,
+
+  // 결제 정보
+  billingKey?: string,
+  cardInfo?: object,
+
+  // 결제 실패 처리
+  retryCount?: number,
+  gracePeriodUntil?: Date,
+  lastPaymentError?: string,
+  suspendedAt?: Date,
+
+  // 환불 정보
+  refundAmount?: number,
+  refundProcessed?: boolean,
+
+  // 삭제 정보
+  deleted?: boolean,
+  deletedAt?: Date,
+
+  // 타임스탬프
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+---
+
+## 10. 알림 이력 관리 시스템 (TODO)
+
+### 10.1 payment_notifications 컬렉션 구조
 
 ```typescript
 {
@@ -656,7 +915,7 @@ type NotificationEvent =
   | 'pending_plan_applied';      // 예약 플랜 적용
 ```
 
-### 8.2 구현 계획
+### 10.2 구현 계획
 
 #### 1단계: 헬퍼 함수 생성
 ```typescript
@@ -703,7 +962,7 @@ if (!recentNotification.empty) {
 }
 ```
 
-### 8.3 혜택
+### 10.3 혜택
 
 1. **알림 추적**: 어떤 사용자에게 언제 어떤 알림을 보냈는지 기록
 2. **중복 방지**: 카드 만료 알림 등 매일 중복 발송 방지
@@ -711,7 +970,7 @@ if (!recentNotification.empty) {
 4. **통계 분석**: 알림 발송률, 성공률 등 분석 가능
 5. **고객 지원**: 고객 문의 시 알림 이력 확인 가능
 
-### 8.4 Firebase Composite Index
+### 10.4 Firebase Composite Index
 
 ```
 Collection: payment_notifications
@@ -723,7 +982,7 @@ Fields:
 
 ---
 
-## 9. 참고 자료
+## 11. 참고 자료
 
 ### 글로벌 베스트 프랙티스
 - [Stripe: Prorations Documentation](https://docs.stripe.com/billing/subscriptions/prorations) - 플랜 변경 시 일할 계산 가이드
@@ -742,7 +1001,7 @@ Fields:
 
 ---
 
-## 10. 다음 구현 우선순위
+## 12. 다음 구현 우선순위
 
 ### Phase 1: 안정성 (Critical)
 1. **중복 결제 방지** (멱등성 키)

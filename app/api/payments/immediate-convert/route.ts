@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById, verifyToken } from '@/lib/auth';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // Trial에서 즉시 유료 전환 (기존 billingKey 사용)
 export async function POST(request: NextRequest) {
@@ -131,9 +132,9 @@ export async function POST(request: NextRequest) {
     await syncNewSubscription(tenantId, plan, nextBillingDate);
 
     // n8n 웹훅 호출 (선택적)
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (isN8NNotificationEnabled()) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(process.env.N8N_WEBHOOK_URL!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

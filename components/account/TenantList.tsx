@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Xmark, Box3dCenter } from 'iconoir-react';
+import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Xmark, Box3dCenter, Shop, CoffeeCup, Gym, Scissor, Book, Key, Cart, Home, SleeperChair } from 'iconoir-react';
+import { INDUSTRY_LABEL_TO_CODE, type IndustryCode } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
 import AddTenantModal from './AddTenantModal';
 
@@ -79,10 +80,35 @@ interface Tenant {
   tenantId: string;
   brandName: string;
   email: string;
+  industry?: string | null;
   createdAt: string | null;
   subscription: Subscription | null;
   isPending?: boolean; // Optimistic UI용
 }
+
+// 업종별 아이콘 컴포넌트 매핑 (코드 + 한글 라벨 모두 지원)
+const INDUSTRY_ICON_COMPONENTS: Record<string, React.ElementType> = {
+  // 코드로 접근
+  study_cafe: SleeperChair,
+  self_store: Shop,
+  cafe_restaurant: CoffeeCup,
+  fitness: Gym,
+  beauty: Scissor,
+  education: Book,
+  rental_space: Key,
+  retail_business: Cart,
+  other: Sofa,
+  // 한글 라벨로 접근 (DB에 한글로 저장된 경우)
+  '스터디카페 / 독서실': SleeperChair,
+  '무인매장 / 셀프운영 매장': Shop,
+  '카페 / 음식점': CoffeeCup,
+  '피트니스 / 운동공간': Gym,
+  '뷰티 / 미용': Scissor,
+  '교육 / 학원': Book,
+  '공간대여 / 숙박': Key,
+  '소매 / 유통 / 판매업': Cart,
+  '기타': Sofa,
+};
 
 interface TenantListProps {
   authParam: string;
@@ -138,6 +164,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
         tenantId: newTenant.tenantId,
         brandName: newTenant.brandName,
         email,
+        industry: newTenant.industry as IndustryCode,
         createdAt: new Date().toISOString(),
         subscription: null,
         isPending: true,
@@ -237,6 +264,9 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
           const statusConfig = STATUS_CONFIG[status];
           const StatusIcon = statusConfig?.icon || Sofa;
 
+          // 업종에 따른 아이콘 선택
+          const IndustryIcon = (tenant.industry && INDUSTRY_ICON_COMPONENTS[tenant.industry]) || Sofa;
+
           return (
             <Link
               key={tenant.tenantId}
@@ -246,7 +276,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center">
-                    <Sofa width={24} height={24} strokeWidth={1.5} className="text-white" />
+                    <IndustryIcon width={24} height={24} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 flex items-center gap-2">

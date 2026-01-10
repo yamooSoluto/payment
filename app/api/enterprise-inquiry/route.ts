@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as postmark from 'postmark';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 const client = new postmark.ServerClient(process.env.POSTMARK_SERVER_TOKEN || '');
 
@@ -93,26 +94,28 @@ ${message}
     });
 
     // Also send to n8n webhook for additional processing
-    const n8nData = {
-      name,
-      phone,
-      companyName,
-      storeCount,
-      monthlyInquiries,
-      message,
-      timestamp,
-      source: 'website_enterprise_inquiry',
-    };
+    if (isN8NNotificationEnabled()) {
+      const n8nData = {
+        name,
+        phone,
+        companyName,
+        storeCount,
+        monthlyInquiries,
+        message,
+        timestamp,
+        source: 'website_enterprise_inquiry',
+      };
 
-    try {
-      await fetch(N8N_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(n8nData),
-      });
-    } catch (n8nError) {
-      // n8n 웹훅 실패해도 이메일은 발송되었으므로 에러 로깅만
-      console.error('n8n webhook error:', n8nError);
+      try {
+        await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(n8nData),
+        });
+      } catch (n8nError) {
+        // n8n 웹훅 실패해도 이메일은 발송되었으므로 에러 로깅만
+        console.error('n8n webhook error:', n8nError);
+      }
     }
 
     return NextResponse.json({

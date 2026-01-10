@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sofa, NavArrowRight, Xmark, Sparks, Crown, Check } from 'iconoir-react';
+import { CreditCard, NavArrowRight, Xmark, Sparks, Crown, Check } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { PLAN_PRICES } from '@/lib/toss';
@@ -224,7 +224,7 @@ export default function NoSubscriptionCard({
     <>
       <div className="bg-white rounded-xl shadow-lg p-8 text-center">
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Sofa width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
+          <CreditCard width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-6">
           이 매장에 구독 중인 플랜이 없습니다

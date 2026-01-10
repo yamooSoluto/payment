@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncPaymentSuccess } from '@/lib/tenant-sync';
+import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 // 결제 실패 후 수동 재시도
 export async function POST(request: NextRequest) {
@@ -121,9 +122,9 @@ export async function POST(request: NextRequest) {
       await syncPaymentSuccess(tenantId, nextBillingDate);
 
       // n8n 웹훅 호출 (재결제 성공 알림)
-      if (process.env.N8N_WEBHOOK_URL) {
+      if (isN8NNotificationEnabled()) {
         try {
-          await fetch(process.env.N8N_WEBHOOK_URL, {
+          await fetch(process.env.N8N_WEBHOOK_URL!, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
