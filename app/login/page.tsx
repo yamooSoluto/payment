@@ -455,10 +455,16 @@ function LoginForm() {
       const user = await signInWithGoogle();
       const userEmail = user.email || '';
 
+      // Firebase ID 토큰 가져오기
+      const idToken = await user.getIdToken();
+
       // 사용자 프로필 확인 (이름, 연락처 있는지)
       const checkRes = await fetch('/api/auth/check-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
         body: JSON.stringify({ email: userEmail }),
       });
 

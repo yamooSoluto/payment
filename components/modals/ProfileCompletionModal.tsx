@@ -35,9 +35,14 @@ export default function ProfileCompletionModal() {
       if (!user?.email) return;
 
       try {
+        // Firebase ID 토큰 가져오기
+        const idToken = await user.getIdToken();
         const res = await fetch('/api/auth/check-profile', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
           body: JSON.stringify({ email: user.email }),
         });
         const data = await res.json();
