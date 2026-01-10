@@ -5,6 +5,7 @@ import { CreditCard, NavArrowRight, Xmark, Sparks, Crown, Check } from 'iconoir-
 import { Loader2 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { PLAN_PRICES } from '@/lib/toss';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 플랜 정보
 const PLANS = [
@@ -152,6 +153,7 @@ export default function NoSubscriptionCard({
   userPhone,
   industry,
 }: NoSubscriptionCardProps) {
+  const { user } = useAuth();
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [isApplyingTrial, setIsApplyingTrial] = useState(false);
   const [trialSuccess, setTrialSuccess] = useState(false);
@@ -168,9 +170,15 @@ export default function NoSubscriptionCard({
 
     try {
       // 기존 tenant에 trial 적용 (새 tenant 생성 안 함)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch('/api/trial/apply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           tenantId,
           email,

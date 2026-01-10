@@ -23,7 +23,12 @@ export default function Header() {
       }
 
       try {
-        const res = await fetch(`/api/tenants?email=${encodeURIComponent(user.email)}`);
+        const idToken = await user.getIdToken();
+        const res = await fetch(`/api/tenants?email=${encodeURIComponent(user.email)}`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+          },
+        });
         if (res.ok) {
           const data = await res.json();
           setHasTenants(data.tenants && data.tenants.length > 0);

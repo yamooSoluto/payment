@@ -1,10 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { PLAN_PRICES, cancelPayment } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+
+// 인증 함수: Authorization 헤더 또는 body의 token 처리
+async function authenticateRequest(request: NextRequest, bodyToken?: string, bodyEmail?: string): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+
+  // Authorization 헤더가 있으면 우선 처리
+  if (authHeader) {
+    // Bearer 토큰인 경우 Firebase Auth로 처리
+    if (authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.substring(7);
+      try {
+        const auth = getAdminAuth();
+        if (!auth) {
+          console.error('Firebase Admin Auth not initialized');
+          return null;
+        }
+        const decodedToken = await auth.verifyIdToken(idToken);
+        return decodedToken.email || null;
+      } catch (error) {
+        console.error('Firebase Auth token verification failed:', error);
+        return null;
+      }
+    }
+    // 그 외는 SSO 토큰으로 처리
+    return await verifyToken(authHeader);
+  }
+
+  // body의 token 처리 (SSO 토큰)
+  if (bodyToken) {
+    return await verifyToken(bodyToken);
+  }
+
+  // body의 email 처리 (Firebase Auth - 이전 호환)
+  if (bodyEmail) {
+    return bodyEmail;
+  }
+
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -16,16 +55,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { token, email: emailParam, tenantId, newPlan, newAmount, mode, refundAmount, idempotencyKey } = body;
 
-    let email: string | null = null;
-
-    // 토큰으로 인증 (포탈 SSO)
-    if (token) {
-      email = await verifyToken(token);
-    }
-    // 이메일로 직접 인증 (Firebase Auth)
-    else if (emailParam) {
-      email = emailParam;
-    }
+    // 인증 처리
+    const email = await authenticateRequest(request, token, emailParam);
 
     if (!email) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

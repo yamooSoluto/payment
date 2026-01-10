@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { NavArrowDown, NavArrowUp, Edit, Phone, CheckCircle, WarningCircle, Refresh, Eye, EyeClosed, Lock, Xmark } from 'iconoir-react';
 import { auth } from '@/lib/firebase';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserProfileProps {
   email: string;
@@ -13,6 +14,7 @@ interface UserProfileProps {
 }
 
 export default function UserProfile({ email, name, phone, onPhoneChange }: UserProfileProps) {
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true);
   const [showPhone, setShowPhone] = useState(false);
   const [isChangingPhone, setIsChangingPhone] = useState(false);
@@ -208,9 +210,15 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
       setIsPhoneVerified(true);
 
       // 2. 연락처 변경
+      const changeHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user) {
+        const idToken = await user.getIdToken();
+        changeHeaders['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const changeRes = await fetch('/api/auth/change-phone', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: changeHeaders,
         body: JSON.stringify({
           email,
           newPhone: newPhone.replace(/-/g, ''),
@@ -274,9 +282,15 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
     setNameError('');
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const res = await fetch('/api/auth/change-name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           email,
           newName: newName.trim(),

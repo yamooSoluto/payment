@@ -1,37 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 
-// 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
-async function authenticateRequest(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get('Authorization');
-
-  if (!authHeader) {
-    return null;
-  }
-
-  // Bearer 토큰인 경우 Firebase Auth로 처리
-  if (authHeader.startsWith('Bearer ')) {
-    const idToken = authHeader.substring(7);
-    try {
-      const auth = getAdminAuth();
-      if (!auth) {
-        console.error('Firebase Admin Auth not initialized');
-        return null;
-      }
-      const decodedToken = await auth.verifyIdToken(idToken);
-      return decodedToken.email || null;
-    } catch (error) {
-      console.error('Firebase Auth token verification failed:', error);
-      return null;
-    }
-  }
-
-  // 그 외는 SSO 토큰으로 처리
-  const email = await verifyToken(authHeader);
-  return email;
-}
-
+// 프로필 완성 여부만 확인하는 API (민감한 데이터 반환 없음)
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -39,14 +9,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // 인증 검증
-    const authenticatedEmail = await authenticateRequest(request);
-    if (!authenticatedEmail) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const { email } = await request.json();
 
-    // 토큰에서 추출한 이메일 사용 (클라이언트 요청 무시)
-    const email = authenticatedEmail;
+    if (!email) {
+      return NextResponse.json({ error: 'Email required' }, { status: 400 });
+    }
 
     // users 컬렉션에서 사용자 조회
     const userDoc = await db.collection('users').doc(email).get();

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { adminDb, initializeFirebaseAdmin } from './firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from './firebase-admin';
 
 // JWT_SECRET은 필수 환경변수 - 없으면 서버 시작 시 에러
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -75,6 +75,30 @@ export async function verifyToken(token: string): Promise<string | null> {
     return payload.email;
   } catch (error) {
     console.error('Token verification failed:', error);
+    return null;
+  }
+}
+
+// Firebase ID 토큰 검증 함수 (Bearer 토큰)
+export async function verifyBearerToken(authHeader: string | null): Promise<string | null> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const idToken = authHeader.substring(7); // 'Bearer ' 제거
+  if (!idToken) return null;
+
+  try {
+    const auth = getAdminAuth();
+    if (!auth) {
+      console.error('Firebase Admin Auth not initialized');
+      return null;
+    }
+
+    const decodedToken = await auth.verifyIdToken(idToken);
+    return decodedToken.email || null;
+  } catch (error) {
+    console.error('Bearer token verification failed:', error);
     return null;
   }
 }

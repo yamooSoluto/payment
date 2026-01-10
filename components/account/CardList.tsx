@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { CreditCard, Check, Trash, Plus, WarningCircle, EditPencil, Xmark } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CardInfo {
   company: string;
@@ -28,6 +29,7 @@ interface CardListProps {
 }
 
 export default function CardList({ tenantId, email, authParam, onCardChange }: CardListProps) {
+  const { user } = useAuth();
   const { isReady: sdkReady, isLoading: sdkLoading } = useTossSDK();
   const [cards, setCards] = useState<Card[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,8 +49,16 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   const fetchCards = useCallback(async () => {
     setIsLoading(true);
     try {
+      const headers: Record<string, string> = {};
+      // SSO token이 없으면 Firebase Auth Bearer token 사용
+      if (!authParam.includes('token=') && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(
-        `/api/cards?${authParam}&tenantId=${encodeURIComponent(tenantId)}`
+        `/api/cards?${authParam}&tenantId=${encodeURIComponent(tenantId)}`,
+        { headers }
       );
       if (!response.ok) {
         throw new Error('Failed to fetch cards');
@@ -67,7 +77,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     } finally {
       setIsLoading(false);
     }
-  }, [authParam, tenantId]);
+  }, [authParam, tenantId, user]);
 
   useEffect(() => {
     fetchCards();
@@ -115,9 +125,16 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     setCards(updatedCards);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      // SSO token이 없으면 Firebase Auth Bearer token 사용
+      if (!authParam.includes('token=') && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/cards/${cardId}/primary`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...(authParam.includes('token=')
             ? { token: authParam.replace('token=', '') }
@@ -171,9 +188,16 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     closeDeleteConfirm();
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      // SSO token이 없으면 Firebase Auth Bearer token 사용
+      if (!authParam.includes('token=') && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/cards/${cardId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...(authParam.includes('token=')
             ? { token: authParam.replace('token=', '') }
@@ -206,9 +230,16 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     setEditingCardId(null);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      // SSO token이 없으면 Firebase Auth Bearer token 사용
+      if (!authParam.includes('token=') && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/cards/${cardId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...(authParam.includes('token=')
             ? { token: authParam.replace('token=', '') }

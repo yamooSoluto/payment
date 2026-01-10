@@ -81,7 +81,7 @@ export default function PricingClient({
     }
 
     // 클라이언트에서 로그인한 경우에만 조회
-    if (!userEmail) {
+    if (!userEmail || !user) {
       return;
     }
 
@@ -89,7 +89,12 @@ export default function PricingClient({
 
     const fetchTenants = async () => {
       try {
-        const response = await fetch(`/api/tenants?email=${encodeURIComponent(userEmail)}`);
+        const idToken = await user.getIdToken();
+        const response = await fetch(`/api/tenants?email=${encodeURIComponent(userEmail)}`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           setTenants(data.tenants || []);
@@ -105,11 +110,11 @@ export default function PricingClient({
     };
 
     fetchTenants();
-  }, [userEmail]);
+  }, [userEmail, user]);
 
   // 사용자 데이터 조회 (trialApplied 확인용)
   useEffect(() => {
-    if (hasFetchedUserRef.current || !userEmail) {
+    if (hasFetchedUserRef.current || !userEmail || !user) {
       return;
     }
 
@@ -117,7 +122,12 @@ export default function PricingClient({
 
     const fetchUserData = async () => {
       try {
-        const response = await fetch(`/api/users/${encodeURIComponent(userEmail)}`);
+        const idToken = await user.getIdToken();
+        const response = await fetch(`/api/users/${encodeURIComponent(userEmail)}`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           setTrialApplied(data.trialApplied || false);
@@ -128,7 +138,7 @@ export default function PricingClient({
     };
 
     fetchUserData();
-  }, [userEmail]);
+  }, [userEmail, user]);
 
   const handleSelectWithoutTenant = (planId: string) => {
     setSelectedPlan(planId);

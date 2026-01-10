@@ -5,6 +5,7 @@ import { formatPrice } from '@/lib/utils';
 import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
 import { Check, InfoCircle, NavArrowDown, NavArrowUp } from 'iconoir-react';
 import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleTexts } from '@/lib/payment-constants';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 플랜별 상세 기능 (요금제 페이지와 동일)
 const PLAN_FEATURES: Record<string, string[]> = {
@@ -157,6 +158,7 @@ export default function TossPaymentWidget({
   brandName,
   industry,
 }: TossPaymentWidgetProps) {
+  const { user } = useAuth();
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(sdkError);
@@ -201,17 +203,24 @@ export default function TossPaymentWidget({
     setError(null);
 
     try {
+      // Firebase ID 토큰 가져오기
+      let idToken = '';
+      if (user) {
+        idToken = await user.getIdToken();
+      }
+
       if (isChangePlan) {
         // 플랜 변경: 기존 플랜 환불 + 새 플랜 결제
         const idempotencyKey = generateIdempotencyKey('PLAN_CHANGE');
-        // authParam에서 token 추출 (token=xxx 형태)
+        // authParam에서 SSO token 추출 (token=xxx 형태) - Firebase 토큰이 없을 때 fallback
         const params = new URLSearchParams(authParam);
-        const token = params.get('token');
+        const ssoToken = params.get('token');
+        const authHeader = idToken ? `Bearer ${idToken}` : ssoToken || '';
         const response = await fetch('/api/payments/change-plan', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token && { 'Authorization': token }),
+            ...(authHeader && { 'Authorization': authHeader }),
           },
           body: JSON.stringify({
             tenantId: effectiveTenantId,
@@ -237,9 +246,13 @@ export default function TossPaymentWidget({
       } else if (hasBillingKey && isReserve) {
         // 이미 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
         const idempotencyKey = generateIdempotencyKey('SCHEDULED_CHANGE');
+        const authHeader = idToken ? `Bearer ${idToken}` : '';
         const response = await fetch('/api/subscriptions/change-plan', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
           body: JSON.stringify({
             email,
             tenantId: effectiveTenantId,
@@ -269,9 +282,13 @@ export default function TossPaymentWidget({
       } else if (hasBillingKey && isTrialImmediate) {
         // Trial에서 즉시 전환 + 이미 카드 등록됨: 기존 빌링키로 바로 결제
         const idempotencyKey = generateIdempotencyKey('IMMEDIATE_CONVERT');
+        const authHeader = idToken ? `Bearer ${idToken}` : '';
         const response = await fetch('/api/payments/immediate-convert', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
           body: JSON.stringify({
             email,
             tenantId: effectiveTenantId,

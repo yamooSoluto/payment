@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { WarningTriangle, Xmark } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Subscription {
   plan: string;
@@ -23,6 +24,7 @@ interface DeleteTenantModalProps {
 }
 
 export default function DeleteTenantModal({ tenant, onClose, onSuccess, authParam }: DeleteTenantModalProps) {
+  const { user } = useAuth();
   const [confirmText, setConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +58,19 @@ export default function DeleteTenantModal({ tenant, onClose, onSuccess, authPara
     try {
       const { token, email } = parseAuthParam();
 
+      // Firebase Auth 사용자는 Bearer 토큰 사용
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (!token && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/tenants/${tenant.tenantId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           token,
-          email,
+          email: email || user?.email,
           confirmText,
         }),
       });

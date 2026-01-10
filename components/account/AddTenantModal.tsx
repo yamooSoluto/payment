@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Xmark, Sofa } from 'iconoir-react';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 
 const LOADING_MESSAGES = [
   { title: '매장 생성 중', message: '잠시만 기다려주세요 💪' },
@@ -26,6 +27,7 @@ interface AddTenantModalProps {
 
 export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTenantModalProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [brandName, setBrandName] = useState('');
   const [industry, setIndustry] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,8 +77,22 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
   const checkTenantExists = useCallback(async (tenantId: string): Promise<boolean> => {
     try {
       const { token, email } = parseAuthParam();
-      const queryParam = token ? `token=${token}` : `email=${encodeURIComponent(email || '')}`;
-      const response = await fetch(`/api/tenants?${queryParam}`);
+
+      // Firebase Auth 사용자는 Bearer 토큰 사용
+      const headers: Record<string, string> = {};
+      let queryParam = '';
+
+      if (token) {
+        queryParam = `token=${token}`;
+      } else if (user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+        queryParam = `email=${encodeURIComponent(user.email || '')}`;
+      } else {
+        queryParam = `email=${encodeURIComponent(email || '')}`;
+      }
+
+      const response = await fetch(`/api/tenants?${queryParam}`, { headers });
       if (response.ok) {
         const data = await response.json();
         return data.tenants?.some((t: { tenantId: string }) => t.tenantId === tenantId) || false;
@@ -85,7 +101,7 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
       // 에러 무시하고 계속 폴링
     }
     return false;
-  }, [authParam]);
+  }, [authParam, user]);
 
   // 매장 생성 완료 후 폴링 시작
   useEffect(() => {
@@ -148,12 +164,19 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
     try {
       const { token, email } = parseAuthParam();
 
+      // Firebase Auth 사용자는 Bearer 토큰 사용
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (!token && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch('/api/tenants', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           token,
-          email,
+          email: email || user?.email,
           brandName: brandName.trim(),
           industry,
         }),

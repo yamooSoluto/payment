@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { verifyBearerToken } from '@/lib/auth';
 
 /**
  * 이름 변경 API
@@ -7,12 +8,31 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
  */
 export async function POST(request: Request) {
   try {
+    // Bearer 토큰 인증
+    const authHeader = request.headers.get('authorization');
+    const authenticatedEmail = await verifyBearerToken(authHeader);
+
+    if (!authenticatedEmail) {
+      return NextResponse.json(
+        { error: '인증이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
     const { email, newName } = await request.json();
 
     if (!email || !newName) {
       return NextResponse.json(
         { error: '이메일과 새 이름을 입력해주세요.' },
         { status: 400 }
+      );
+    }
+
+    // 인증된 이메일과 요청 이메일이 일치하는지 확인
+    if (authenticatedEmail !== email) {
+      return NextResponse.json(
+        { error: '권한이 없습니다.' },
+        { status: 403 }
       );
     }
 

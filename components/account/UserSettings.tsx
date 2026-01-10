@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { User, Trash, WarningTriangle, Xmark } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserSettingsProps {
   email: string;
@@ -11,6 +12,7 @@ interface UserSettingsProps {
 }
 
 export default function UserSettings({ email, authParam, hasActiveSubscriptions }: UserSettingsProps) {
+  const { user } = useAuth();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -41,12 +43,19 @@ export default function UserSettings({ email, authParam, hasActiveSubscriptions 
     try {
       const { token, email: emailFromParam } = parseAuthParam();
 
+      // Firebase Auth 사용자는 Bearer 토큰 사용
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (!token && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch('/api/account/delete', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           token,
-          email: emailFromParam,
+          email: emailFromParam || user?.email,
           confirmText: deleteConfirmText,
         }),
       });

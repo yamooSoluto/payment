@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Calendar, WarningCircle, Clock, Check, Xmark, Sparks, Crown } from 'iconoir-react';
 import { formatPrice, formatDate, getStatusText, getStatusColor, calculateDaysLeft } from '@/lib/utils';
 import { getPlanName, PLAN_PRICES } from '@/lib/toss';
+import { useAuth } from '@/contexts/AuthContext';
 import CancelModal from './CancelModal';
 
 // 플랜 선택 모달
@@ -440,6 +441,7 @@ interface SubscriptionCardProps {
 }
 
 export default function SubscriptionCard({ subscription, authParam, tenantId }: SubscriptionCardProps) {
+  const { user } = useAuth();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPlanSelectModal, setShowPlanSelectModal] = useState<{ isOpen: boolean; mode: 'schedule' | 'immediate' }>({ isOpen: false, mode: 'schedule' });
   const [showCancelReservationModal, setShowCancelReservationModal] = useState(false);
@@ -467,6 +469,34 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
     };
   };
 
+  // API 호출을 위한 인증 헤더/바디 준비
+  const getAuthForRequest = async (): Promise<{
+    headers: Record<string, string>;
+    body: { token?: string | null; email?: string | null };
+  }> => {
+    const { token, email } = parseAuthParam();
+
+    // SSO 토큰이 있으면 body에 포함
+    if (token) {
+      return { headers: { 'Content-Type': 'application/json' }, body: { token, email } };
+    }
+
+    // Firebase Auth 사용자는 Bearer 토큰 사용
+    if (user) {
+      const idToken = await user.getIdToken();
+      return {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: { email: user.email },
+      };
+    }
+
+    // 둘 다 없으면 email만
+    return { headers: { 'Content-Type': 'application/json' }, body: { email } };
+  };
+
   const handleCancel = async (
     reason: string,
     reasonDetail?: string,
@@ -475,17 +505,16 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   ) => {
     setIsLoading(true);
     try {
-      const { token, email } = parseAuthParam();
+      const auth = await getAuthForRequest();
 
       // 취소 사유 조합 (기타인 경우 상세 사유 포함)
       const cancelReason = reasonDetail ? `${reason}: ${reasonDetail}` : reason;
 
       const response = await fetch('/api/subscriptions/cancel', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: auth.headers,
         body: JSON.stringify({
-          token,
-          email,
+          ...auth.body,
           tenantId,
           reason: cancelReason,
           mode: mode || 'scheduled',
@@ -520,12 +549,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   const handleReactivate = async () => {
     setIsLoading(true);
     try {
-      const { token, email } = parseAuthParam();
+      const auth = await getAuthForRequest();
 
       const response = await fetch('/api/subscriptions/reactivate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, email, tenantId }),
+        headers: auth.headers,
+        body: JSON.stringify({ ...auth.body, tenantId }),
       });
 
       const data = await response.json();
@@ -549,12 +578,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   const handleCancelPendingPlan = async () => {
     setIsCancelingPending(true);
     try {
-      const { token, email } = parseAuthParam();
+      const auth = await getAuthForRequest();
 
       const response = await fetch('/api/subscriptions/cancel-pending-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, email, tenantId }),
+        headers: auth.headers,
+        body: JSON.stringify({ ...auth.body, tenantId }),
       });
 
       if (response.ok) {
@@ -576,12 +605,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
 
     setIsRetrying(true);
     try {
-      const { token, email } = parseAuthParam();
+      const auth = await getAuthForRequest();
 
       const response = await fetch('/api/payments/retry', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, email, tenantId }),
+        headers: auth.headers,
+        body: JSON.stringify({ ...auth.body, tenantId }),
       });
 
       const data = await response.json();
@@ -601,12 +630,12 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
 
   // 예약 플랜 변경 (billingKey가 이미 있는 경우)
   const handleUpdatePendingPlan = async (newPlan: string) => {
-    const { token, email } = parseAuthParam();
+    const auth = await getAuthForRequest();
 
     const response = await fetch('/api/subscriptions/update-pending-plan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, email, tenantId, newPlan }),
+      headers: auth.headers,
+      body: JSON.stringify({ ...auth.body, tenantId, newPlan }),
     });
 
     if (!response.ok) {

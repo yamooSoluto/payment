@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Xmark, EditPencil } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Tenant {
   tenantId: string;
@@ -19,6 +20,7 @@ interface EditTenantModalProps {
 }
 
 export default function EditTenantModal({ tenant, onClose, onSuccess, authParam }: EditTenantModalProps) {
+  const { user } = useAuth();
   const [brandName, setBrandName] = useState(tenant.brandName);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +52,19 @@ export default function EditTenantModal({ tenant, onClose, onSuccess, authParam 
     try {
       const { token, email } = parseAuthParam();
 
+      // Firebase Auth 사용자는 Bearer 토큰 사용
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (!token && user) {
+        const idToken = await user.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch(`/api/tenants/${tenant.tenantId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           token,
-          email,
+          email: email || user?.email,
           brandName: brandName.trim(),
         }),
       });
