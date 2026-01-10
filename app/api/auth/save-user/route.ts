@@ -33,8 +33,13 @@ export async function POST(request: Request) {
     const isDeletedUser = existingUserEmail.exists && existingUserEmail.data()?.deleted === true;
     const isDeletedPhoneUser = !existingUserPhone.empty && existingUserPhone.docs[0].data()?.deleted === true;
 
-    // 이메일 중복 체크 (탈퇴 회원은 재가입 허용)
-    if (existingUserEmail.exists && !isDeletedUser) {
+    // Google 사용자 프로필 완성 체크 (name, phone 없으면 프로필 미완성)
+    const isGoogleIncompleteProfile = existingUserEmail.exists &&
+      existingUserEmail.data()?.provider === 'google' &&
+      (!existingUserEmail.data()?.name || !existingUserEmail.data()?.phone);
+
+    // 이메일 중복 체크 (탈퇴 회원, Google 프로필 미완성은 허용)
+    if (existingUserEmail.exists && !isDeletedUser && !isGoogleIncompleteProfile) {
       return NextResponse.json(
         { error: '이미 가입된 이메일입니다.' },
         { status: 400 }
@@ -52,12 +57,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // 연락처 중복 체크 (탈퇴 회원은 재가입 허용)
+    // 연락처 중복 체크 (탈퇴 회원은 재가입 허용, 본인 제외)
     if (!existingUserPhone.empty && !isDeletedPhoneUser) {
-      return NextResponse.json(
-        { error: '이미 가입된 연락처입니다.' },
-        { status: 400 }
-      );
+      // 본인이 아닌 다른 사용자가 해당 연락처를 사용 중인지 확인
+      const otherUserWithPhone = existingUserPhone.docs.find(doc => doc.id !== email);
+      if (otherUserWithPhone) {
+        return NextResponse.json(
+          { error: '이미 가입된 연락처입니다.' },
+          { status: 400 }
+        );
+      }
     }
 
     if (!existingTenantPhone.empty) {

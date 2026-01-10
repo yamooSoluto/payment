@@ -250,7 +250,6 @@ function LoginForm() {
       }
 
       setIsPhoneVerified(true);
-      setSuccess('인증이 완료되었습니다.');
 
       // 아이디 찾기인 경우 바로 아이디 조회
       if (mode === 'find-id') {
@@ -465,6 +464,16 @@ function LoginForm() {
       const checkData = await checkRes.json();
 
       if (checkData.needsProfile) {
+        // Google 로그인 시 기본 정보 먼저 저장 (email, provider만)
+        await fetch('/api/auth/save-google-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: userEmail,
+            displayName: user.displayName || '',
+          }),
+        });
+
         // 프로필 완성 필요 - 이름/연락처 입력 모드로 전환
         setGoogleUser({ email: userEmail, displayName: user.displayName || '' });
         setEmail(userEmail);
@@ -561,7 +570,7 @@ function LoginForm() {
       return '가입 시 등록한 정보로 비밀번호를 재설정합니다';
     }
     if (mode === 'signup') return 'YAMOO 서비스를 시작해보세요';
-    if (mode === 'complete-profile') return '서비스 이용을 위해 추가 정보를 입력해주세요';
+    if (mode === 'complete-profile') return '회원가입을 완료하려면 아래 정보를 입력해주세요';
     return 'YAMOO 계정으로 로그인하세요';
   };
 
@@ -815,7 +824,7 @@ function LoginForm() {
                   {/* 이름 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      이름
+                      이름 <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -833,7 +842,7 @@ function LoginForm() {
                   {/* 연락처 + SMS 인증 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      연락처
+                      연락처 <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
@@ -865,6 +874,13 @@ function LoginForm() {
                         </button>
                       )}
                     </div>
+                    {/* 인증 완료 메시지 */}
+                    {isPhoneVerified && (
+                      <p className="mt-2 text-sm text-green-600 flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4" />
+                        연락처 인증이 완료되었습니다.
+                      </p>
+                    )}
                   </div>
 
                   {/* 인증번호 입력 UI */}
@@ -873,7 +889,7 @@ function LoginForm() {
                   {/* 비밀번호 설정 (포탈 로그인용) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      비밀번호 <span className="text-gray-400 text-xs">(포탈 로그인용)</span>
+                      비밀번호 <span className="text-red-500">*</span> <span className="text-gray-400 text-xs">(포탈 로그인용)</span>
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -898,7 +914,7 @@ function LoginForm() {
                   {/* 비밀번호 확인 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      비밀번호 확인
+                      비밀번호 확인 <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
