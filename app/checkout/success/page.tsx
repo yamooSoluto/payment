@@ -73,8 +73,6 @@ function SuccessContent() {
   const orderId = searchParams.get('orderId') || '';
   const tenantId = searchParams.get('tenantId') || '';
   const tenantName = searchParams.get('tenantName') || '';
-  const token = searchParams.get('token');
-  const email = searchParams.get('email');
   const startParam = searchParams.get('start');
   const endParam = searchParams.get('end');
   const reserved = searchParams.get('reserved') === 'true'; // 플랜 예약 모드
@@ -96,13 +94,7 @@ function SuccessContent() {
       })()
     : getSubscriptionPeriod(startParam, endParam);
 
-  // 인증 파라미터 생성
-  const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
-  const accountUrl = tenantId && authParam
-    ? `/account/${tenantId}?${authParam}`
-    : authParam
-    ? `/account?${authParam}`
-    : '/account';
+  const accountUrl = '/account';
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

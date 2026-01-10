@@ -54,8 +54,7 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
       const data = await response.json();
 
       if (response.ok) {
-        alert('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
-        window.location.href = '/';
+        window.location.href = '/account/deleted';
       } else {
         setDeleteError(data.error || '회원 탈퇴에 실패했습니다.');
       }
@@ -89,7 +88,7 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
               <p className="text-sm text-gray-600 mb-3">
                 {hasActiveSubscriptions
                   ? '구독 중, 체험 중, 또는 해지 예정인 매장이 있어 탈퇴할 수 없습니다. 모든 구독/체험이 종료된 후 탈퇴가 가능합니다.'
-                  : '계정을 삭제하면 모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.'}
+                  : '탈퇴 시 서비스 이용이 중단되며, 일부 정보는 관련 법령에 따라 일정 기간 보관 후 파기됩니다.'}
               </p>
               <button
                 onClick={() => setShowDeleteModal(true)}
@@ -132,8 +131,8 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
                 정말 탈퇴하시겠습니까?
               </h3>
               <p className="text-gray-600 text-center text-sm mb-6">
-                회원 탈퇴 시 모든 데이터가 영구적으로 삭제되며<br />
-                복구할 수 없습니다.
+                탈퇴 후에는 계정 복구가 불가능합니다.<br />
+                일부 정보는 관련 법령에 따라 보관 후 파기됩니다.
               </p>
 
               <div className="mb-4">

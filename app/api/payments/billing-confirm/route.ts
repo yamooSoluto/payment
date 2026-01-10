@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
   const industryParam = searchParams.get('industry');
 
   // 인증 파라미터 생성 (리다이렉트 시 사용)
-  const authParam = token ? `token=${token}` : emailParam ? `email=${encodeURIComponent(emailParam)}` : '';
+  // emailParam이 없으면 customerKey(이메일)를 폴백으로 사용
+  const email = emailParam || customerKey || '';
+  const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
   const isReserveMode = mode === 'reserve';
   const isNewTenant = tenantId === 'new';
 
@@ -62,8 +64,6 @@ export async function GET(request: NextRequest) {
     // 1.5. 신규 매장 생성 (tenantId가 'new'인 경우)
     if (isNewTenant && brandNameParam) {
       console.log('Creating new tenant:', { brandName: brandNameParam, industry: industryParam });
-
-      const email = customerKey;
 
       // users 컬렉션에서 사용자 정보 조회 (name, phone)
       const userDoc = await db.collection('users').doc(email).get();
@@ -149,7 +149,6 @@ export async function GET(request: NextRequest) {
 
     // 3. 결제 금액 확인 (URL에서 전달된 금액이 있으면 사용, 없으면 플랜 가격)
     const paymentAmount = amount ? parseInt(amount) : planInfo.price;
-    const email = customerKey;
 
     // tenant 정보 조회 (매장명, 이름, 전화번호 가져오기)
     let tenantName = '';

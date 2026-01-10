@@ -65,6 +65,9 @@ export default function TenantSelectModal({
   onSelectTenant,
   onCheckTrialBeforeSubscribe,
 }: TenantSelectModalProps) {
+  // authParam이 비어있으면 email로 폴백 (Firebase Auth 로그인 상태)
+  const effectiveAuthParam = authParam || (email ? `email=${encodeURIComponent(email)}` : '');
+
   const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
     type: 'same-plan',
@@ -124,7 +127,7 @@ export default function TenantSelectModal({
     }
 
     // 매장 정보와 함께 결제 페이지로 이동
-    const url = `/checkout?plan=${selectedPlan}&${authParam}&newTenant=true&brandName=${encodeURIComponent(brandName.trim())}&industry=${encodeURIComponent(industry)}`;
+    const url = `/checkout?plan=${selectedPlan}&${effectiveAuthParam}&newTenant=true&brandName=${encodeURIComponent(brandName.trim())}&industry=${encodeURIComponent(industry)}`;
     window.location.href = url;
   };
 
@@ -175,7 +178,7 @@ export default function TenantSelectModal({
 
     // 미구독 → 결제 진행 (무료체험 체크)
     onSelectTenant(tenant.tenantId);
-    const url = `/checkout?plan=${selectedPlan}&${authParam}&tenantId=${tenant.tenantId}`;
+    const url = `/checkout?plan=${selectedPlan}&${effectiveAuthParam}&tenantId=${tenant.tenantId}`;
 
     // 무료체험 이력이 없으면 팝업 표시 (trial 플랜 제외)
     if (selectedPlan !== 'trial' && !trialApplied && onCheckTrialBeforeSubscribe) {
@@ -187,21 +190,21 @@ export default function TenantSelectModal({
 
   const handleAlertConfirm = () => {
     if (alertModal.type === 'same-plan') {
-      window.location.href = `/account/${alertModal.tenantId}?${authParam}`;
+      window.location.href = `/account/${alertModal.tenantId}?${effectiveAuthParam}`;
     } else if (alertModal.type === 'trial-upgrade') {
       // 무료체험 즉시 전환: 바로 결제 진행
-      window.location.href = `/checkout?plan=${alertModal.targetPlan}&${authParam}&tenantId=${alertModal.tenantId}&mode=immediate`;
+      window.location.href = `/checkout?plan=${alertModal.targetPlan}&${effectiveAuthParam}&tenantId=${alertModal.tenantId}&mode=immediate`;
     } else if (alertModal.type === 'active-change') {
       // 유료 플랜 즉시 변경: 플랜 변경 페이지로 이동
-      window.location.href = `/account/change-plan?${authParam}&tenantId=${alertModal.tenantId}`;
+      window.location.href = `/account/change-plan?${effectiveAuthParam}&tenantId=${alertModal.tenantId}`;
     } else {
-      window.location.href = `/account/change-plan?${authParam}&tenantId=${alertModal.tenantId}`;
+      window.location.href = `/account/change-plan?${effectiveAuthParam}&tenantId=${alertModal.tenantId}`;
     }
   };
 
   const handleSchedule = () => {
     // 플랜 예약: 현재 구독/체험 종료 후 자동 전환 예약
-    window.location.href = `/checkout?plan=${alertModal.targetPlan}&${authParam}&tenantId=${alertModal.tenantId}&mode=reserve`;
+    window.location.href = `/checkout?plan=${alertModal.targetPlan}&${effectiveAuthParam}&tenantId=${alertModal.tenantId}&mode=reserve`;
   };
 
   const handleAlertClose = () => {

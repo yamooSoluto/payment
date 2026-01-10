@@ -53,7 +53,15 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   }
 
   if (!email) {
-    redirect('/login?redirect=/checkout?plan=' + plan);
+    // 모든 쿼리 파라미터 보존하여 로그인 후 돌아올 수 있도록
+    const queryParams = new URLSearchParams();
+    queryParams.set('plan', plan);
+    if (tenantId) queryParams.set('tenantId', tenantId);
+    if (mode) queryParams.set('mode', mode);
+    if (newTenant) queryParams.set('newTenant', newTenant);
+    if (brandName) queryParams.set('brandName', brandName);
+    if (industry) queryParams.set('industry', industry);
+    redirect(`/login?redirect=/checkout?${queryParams.toString()}`);
   }
 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
