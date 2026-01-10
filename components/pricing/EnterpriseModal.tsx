@@ -117,7 +117,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-gray-900 to-gray-800">
           <div className="flex items-center gap-3">
@@ -138,7 +138,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {isSuccess ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -222,11 +222,12 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
                     매장 수 <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="text"
+                    type="number"
                     name="storeCount"
                     value={formData.storeCount}
                     onChange={handleInputChange}
-                    placeholder="예: 5개"
+                    placeholder="5"
+                    min="1"
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none ${
                       errors.storeCount ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -304,7 +305,7 @@ export default function EnterpriseModal({ isOpen, onClose }: EnterpriseModalProp
               </button>
 
               <p className="text-center text-sm text-gray-500">
-                담당자가 확인 후 빠르게 연락드립니다.
+                담당자가 확인 후 연락드리겠습니다.
               </p>
             </form>
           )}

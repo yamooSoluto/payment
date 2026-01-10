@@ -215,9 +215,9 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       <TenantHeader
         tenantId={tenantId}
         brandName={tenantData.brandName || '매장'}
-        email={email}
         industry={tenantData.industry}
         authParam={authParam}
+        subscription={subscription}
       />
 
       {/* Content */}

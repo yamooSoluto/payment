@@ -106,72 +106,92 @@ export default function DeleteTenantModal({ tenant, onClose, onSuccess, authPara
         {/* Content */}
         <div className="px-6 pb-6">
           <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
-            매장을 삭제하시겠습니까?
+            {canDelete ? '매장을 삭제하시겠습니까?' : '매장을 삭제할 수 없습니다'}
           </h3>
-          <p className="text-gray-600 text-center text-sm mb-2">
-            <span className="font-semibold text-gray-900">{tenant.brandName}</span>
+          <p className="text-center mb-4">
+            <span className="text-lg font-bold text-gray-900">[ {tenant.brandName} ]</span>
           </p>
 
-          {/* 안내사항 */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <ul className="text-sm text-gray-600 space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-gray-400">•</span>
-                <span>삭제된 매장 데이터는 <strong>90일간 보관</strong>됩니다.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-gray-400">•</span>
-                <span>90일 이내에 재구독 시 데이터를 복구할 수 있습니다.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-gray-400">•</span>
-                <span>90일 후 모든 데이터가 영구적으로 삭제됩니다.</span>
-              </li>
-            </ul>
-          </div>
+          {canDelete ? (
+            <>
+              {/* 삭제 가능 - 복구 불가 안내 */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <ul className="text-sm text-gray-700 space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-400">•</span>
+                    <span>삭제된 매장은 더 이상 사용할 수 없으며 <strong className="text-red-600">복구가 불가능</strong>합니다.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-400">•</span>
+                    <span>일부 데이터는 관련 법령에 따라 보관 후 파기됩니다.</span>
+                  </li>
+                </ul>
+              </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              확인을 위해 <span className="text-red-600 font-bold">&apos;매장삭제&apos;</span>를 입력해주세요
-            </label>
-            <input
-              type="text"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="매장삭제"
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              disabled={isDeleting}
-            />
-          </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  확인을 위해 <span className="text-red-600 font-bold">&apos;매장삭제&apos;</span>를 입력해주세요
+                </label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="매장삭제"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  disabled={isDeleting}
+                />
+              </div>
 
-          {error && (
-            <p className="text-sm text-red-600 mb-4">{error}</p>
-          )}
-
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              disabled={isDeleting}
-              className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
-            >
-              취소
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting || confirmText !== '매장삭제' || !canDelete}
-              className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  삭제 중...
-                </>
-              ) : (
-                '삭제'
+              {error && (
+                <p className="text-sm text-red-600 mb-4">{error}</p>
               )}
-            </button>
-          </div>
+
+              {/* Buttons - 삭제 가능 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting || confirmText !== '매장삭제'}
+                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      삭제 중...
+                    </>
+                  ) : (
+                    '삭제'
+                  )}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 삭제 불가 - 구독 상태 안내 */}
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-orange-800">
+                  <strong>구독 중, 체험 중, 또는 해지 예정인 매장</strong>은 삭제할 수 없습니다.
+                </p>
+                <p className="text-sm text-orange-700 mt-2">
+                  매장을 삭제하려면 먼저 구독을 해지하고 이용 기간이 종료된 후 다시 시도해주세요.
+                </p>
+              </div>
+
+              {/* Button - 확인만 */}
+              <button
+                onClick={onClose}
+                className="w-full py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                확인
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

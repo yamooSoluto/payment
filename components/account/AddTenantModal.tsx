@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Xmark, Sofa } from 'iconoir-react';
-import { Loader2 } from 'lucide-react';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
 
 const LOADING_MESSAGES = [
@@ -33,19 +32,35 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
   const [error, setError] = useState<string | null>(null);
   const [createdTenantId, setCreatedTenantId] = useState<string | null>(null);
   const [messageIndex, setMessageIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
 
-  // 로딩 메시지 순환
+  // 로딩 메시지 순환 및 진행바 업데이트
   useEffect(() => {
     if (!isSubmitting) {
       setMessageIndex(0);
+      setProgress(0);
       return;
     }
 
-    const interval = setInterval(() => {
+    // 메시지 순환
+    const messageInterval = setInterval(() => {
       setMessageIndex((prev) => Math.min(prev + 1, LOADING_MESSAGES.length - 1));
     }, 8000); // 8초마다 메시지 변경
 
-    return () => clearInterval(interval);
+    // 진행바 업데이트 (0% -> 90%까지 약 25초에 걸쳐 증가)
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 90) return prev;
+        // 처음엔 빠르게, 나중엔 느리게 증가
+        const increment = prev < 30 ? 3 : prev < 60 ? 2 : 1;
+        return Math.min(prev + increment, 90);
+      });
+    }, 500);
+
+    return () => {
+      clearInterval(messageInterval);
+      clearInterval(progressInterval);
+    };
   }, [isSubmitting]);
 
   const parseAuthParam = () => {
@@ -86,7 +101,9 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
         const exists = await checkTenantExists(createdTenantId);
 
         if (exists) {
-          // 매장이 생성됨 - 모달 닫고 새로고침
+          // 매장이 생성됨 - 진행률 100%로 설정 후 모달 닫기
+          setProgress(100);
+          await new Promise(resolve => setTimeout(resolve, 300)); // 100% 표시 잠깐 보여주기
           router.refresh();
           onClose();
           onSuccess();
@@ -165,10 +182,31 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
         <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="py-16 px-6 flex flex-col items-center justify-center">
-            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mb-6 animate-pulse">
+            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mb-4 animate-pulse">
               <Sofa width={40} height={40} strokeWidth={1.5} className="text-white" />
             </div>
-            <Loader2 className="w-8 h-8 animate-spin text-gray-400 mb-4" />
+
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-1">
+              매장 추가중
+            </h3>
+            <p className="text-sm text-gray-400 text-center mb-6">
+              창을 닫으면 정상적으로 완료되지 않을 수 있어요
+            </p>
+
+            {/* 진행바 */}
+            <div className="w-full max-w-xs mb-6">
+              <div className="flex justify-between text-sm text-gray-500 mb-2">
+                <span>진행률</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-black rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
             <h3 className="text-xl font-bold text-gray-900 text-center mb-2 transition-all">
               {currentMessage.title}
             </h3>
