@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle } from 'iconoir-react';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 
 // 플랜 이름 (클라이언트용)
 function getPlanName(plan: string): string {
@@ -77,6 +77,8 @@ function SuccessContent() {
   const endParam = searchParams.get('end');
   const reserved = searchParams.get('reserved') === 'true'; // 플랜 예약 모드
   const changed = searchParams.get('changed') === 'true'; // 즉시 플랜 변경 모드
+  const token = searchParams.get('token');
+  const email = searchParams.get('email');
 
   // 이용 기간 계산 (URL 파라미터 사용)
   // 플랜 예약 모드에서는 start가 첫 결제일(= 이용 시작일)
@@ -94,7 +96,26 @@ function SuccessContent() {
       })()
     : getSubscriptionPeriod(startParam, endParam);
 
-  const accountUrl = '/account';
+  // 인증 정보를 마이페이지 URL에 포함
+  const authQuery = token
+    ? `?token=${token}`
+    : email
+    ? `?email=${encodeURIComponent(email)}`
+    : '';
+  const accountUrl = `/account${authQuery}`;
+
+  // URL에서 민감한 정보(token, email) 제거 (보안)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('token') || url.searchParams.has('email')) {
+      url.searchParams.delete('token');
+      url.searchParams.delete('email');
+      const cleanUrl = url.searchParams.toString()
+        ? `${url.pathname}?${url.searchParams.toString()}`
+        : url.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

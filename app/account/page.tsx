@@ -4,6 +4,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import TenantList from '@/components/account/TenantList';
 import UserProfile from '@/components/account/UserProfile';
 import AccountDeletion from '@/components/account/AccountDeletion';
+import UrlCleaner from '@/components/account/UrlCleaner';
 
 // Force dynamic rendering - this page requires searchParams
 export const dynamic = 'force-dynamic';
@@ -302,34 +303,38 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">마이페이지</h1>
-        <p className="text-gray-600">{email}</p>
-      </div>
+    <>
+      {/* URL에서 토큰/이메일 파라미터 제거 (보안) */}
+      <UrlCleaner />
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">마이페이지</h1>
+          <p className="text-gray-600">{email}</p>
+        </div>
 
-      {/* Content */}
-      <div className="space-y-6">
-        {/* 기본 정보 */}
-        <UserProfile
-          email={email}
-          name={userInfo.name}
-          phone={userInfo.phone}
-        />
-        {/* 내 매장 */}
-        <TenantList
-          authParam={authParam}
-          email={email}
-          initialTenants={tenants}
-          hasTrialHistory={hasTrialHistory}
-        />
-        {/* 회원 탈퇴 */}
-        <AccountDeletion
-          authParam={authParam}
-          hasActiveSubscriptions={hasActiveSubscriptions}
-        />
+        {/* Content */}
+        <div className="space-y-6">
+          {/* 기본 정보 */}
+          <UserProfile
+            email={email}
+            name={userInfo.name}
+            phone={userInfo.phone}
+          />
+          {/* 내 매장 */}
+          <TenantList
+            authParam={authParam}
+            email={email}
+            initialTenants={tenants}
+            hasTrialHistory={hasTrialHistory}
+          />
+          {/* 회원 탈퇴 */}
+          <AccountDeletion
+            authParam={authParam}
+            hasActiveSubscriptions={hasActiveSubscriptions}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
