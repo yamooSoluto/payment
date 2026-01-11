@@ -119,12 +119,9 @@ export async function verifyBearerToken(authHeader: string | null): Promise<stri
 export function generateToken(email: string, purpose: 'checkout' | 'account', rememberMe?: boolean): string {
   // checkout: 10분 (결제 목적)
   // account: rememberMe ? 30일 : 24시간
-  let expiresIn: string;
-  if (purpose === 'checkout') {
-    expiresIn = '10m';
-  } else {
-    expiresIn = rememberMe ? '30d' : '24h';
-  }
+  const expiresIn = purpose === 'checkout'
+    ? '10m'
+    : (rememberMe ? '30d' : '24h');
 
   const token = jwt.sign(
     {
@@ -135,7 +132,7 @@ export function generateToken(email: string, purpose: 'checkout' | 'account', re
       iat: Math.floor(Date.now() / 1000),
     },
     JWT_SECRET!,
-    { expiresIn }
+    { expiresIn } as jwt.SignOptions
   );
 
   return token;
