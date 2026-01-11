@@ -5,6 +5,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 import { Check } from 'iconoir-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
+import { INDUSTRY_OPTIONS } from '@/lib/constants';
+
+// 업종별 이모지 매핑
+const INDUSTRY_EMOJIS: Record<string, string> = {
+  study_cafe: '📖',
+  self_store: '🏪',
+  cafe_restaurant: '☕',
+  fitness: '💪',
+  beauty: '💇',
+  education: '📚',
+  rental_space: '🏠',
+  retail_business: '🛒',
+  other: '📋',
+};
 
 // 검증 함수
 function validateEmail(email: string): boolean {
@@ -297,7 +311,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   // 로그인 상태 로딩 중이거나 사용자 정보 로딩 중
   if (authLoading || (user && isLoadingUserInfo)) {
     return (
-      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-[#ffbf03] mb-4" />
           <p className="text-gray-500">정보를 불러오는 중...</p>
@@ -309,7 +323,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   // 이미 신청한 경우 (로그인 사용자)
   if (alreadyApplied) {
     return (
-      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="text-center py-6 sm:py-8">
           <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">{hasPaidSubscription ? '💳' : '📋'}</div>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
@@ -362,7 +376,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   // 성공 화면
   if (isSuccess) {
     return (
-      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="text-center py-6 sm:py-8">
           <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">🎉</div>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">무료체험 신청이 완료되었습니다!</h3>
@@ -400,7 +414,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
 
   return (
     <>
-      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8" : ""}>
+      <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="text-center mb-4 sm:mb-6">
           <span className="text-3xl sm:text-4xl">🚀</span>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">AI 야무지니 무료 체험</h3>
@@ -442,7 +456,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
                 onChange={handleInputChange}
                 placeholder="010-1234-5678"
                 disabled={isPhoneVerified || (!!user && !!formData.phone)}
-                className={`flex-1 px-2 sm:px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
+                className={`flex-1 min-w-0 px-2 sm:px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                   errors.phone ? 'border-red-500' : 'border-gray-300'
                 } ${isPhoneVerified || (user && formData.phone) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               />
@@ -474,7 +488,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
                   type="text"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                  className="flex-1 px-2 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none"
+                  className="flex-1 min-w-0 px-2 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none"
                   placeholder="인증번호 6자리"
                   maxLength={6}
                 />
@@ -525,7 +539,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               name="brandName"
               value={formData.brandName}
               onChange={handleInputChange}
-              placeholder="회사명 또는 브랜드명"
+              placeholder="예: 야무 강남점"
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none ${
                 errors.brandName ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -549,9 +563,11 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               }`}
             >
               <option value="">업종을 선택해주세요</option>
-              <option value="study_cafe">📖 스터디카페 / 독서실</option>
-              <option value="self_store">🏪 무인매장 / 셀프운영 매장</option>
-              <option value="other">📋 기타</option>
+              {INDUSTRY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {INDUSTRY_EMOJIS[option.value] || '📋'} {option.label}
+                </option>
+              ))}
             </select>
             {errors.industry && (
               <p className="text-red-500 text-xs mt-1">업종을 선택해주세요</p>

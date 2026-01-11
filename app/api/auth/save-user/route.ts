@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { generateToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    const { email, name, phone, provider, password } = await request.json();
+    const { email, name, phone, provider, password, rememberMe } = await request.json();
 
     if (!email || !name || !phone) {
       return NextResponse.json(
@@ -117,9 +118,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // 로그인 토큰 생성 (account 페이지 접근용)
+    const token = generateToken(email, 'account', rememberMe);
+
     return NextResponse.json({
       success: true,
-      message: '회원가입이 완료되었습니다.'
+      message: '회원가입이 완료되었습니다.',
+      token,
     });
 
   } catch (error) {

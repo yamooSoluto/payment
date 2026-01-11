@@ -247,13 +247,21 @@ export default function ProfileCompletionModal() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || '프로필 저장에 실패했습니다.');
       }
 
       setShowModal(false);
-      window.location.reload();
+
+      // 토큰이 있으면 토큰으로 리다이렉트, 없으면 새로고침
+      if (data.token) {
+        const currentPath = window.location.pathname;
+        window.location.href = `${currentPath}?token=${data.token}`;
+      } else {
+        window.location.reload();
+      }
     } catch (err: unknown) {
       const error = err as { message?: string };
       setError(error.message || '프로필 저장 중 오류가 발생했습니다.');

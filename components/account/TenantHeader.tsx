@@ -62,21 +62,21 @@ export default function TenantHeader({
   return (
     <>
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-start gap-3 mb-2">
           {(() => {
             const IndustryIcon = (industry && INDUSTRY_ICON_COMPONENTS[industry]) || Sofa;
             return (
-              <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center flex-shrink-0">
                 <IndustryIcon width={20} height={20} strokeWidth={1.5} className="text-white" />
               </div>
             );
           })()}
-          <h1 className="text-3xl font-bold text-gray-900">{currentBrandName}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 min-w-0">{currentBrandName}</h1>
 
           {/* 수정 버튼 */}
           <button
             onClick={() => setShowEditModal(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             title="매장 정보 수정"
           >
             <EditPencil width={18} height={18} strokeWidth={1.5} className="text-gray-500" />
@@ -85,7 +85,7 @@ export default function TenantHeader({
           {/* 삭제 버튼 */}
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             title="매장 삭제"
           >
             <Trash width={18} height={18} strokeWidth={1.5} className="text-gray-500" />

@@ -462,19 +462,19 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none"
+                    className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yamoo-primary focus:border-transparent outline-none"
                     placeholder="새 이름"
                   />
                   <button
                     onClick={handleChangeName}
                     disabled={nameLoading}
-                    className="px-3 py-2 bg-yamoo-primary hover:bg-yamoo-dark text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    className="flex-shrink-0 px-3 py-2 bg-yamoo-primary hover:bg-yamoo-dark text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
                   >
                     {nameLoading ? '저장중...' : '저장'}
                   </button>
                   <button
                     onClick={handleCancelName}
-                    className="px-3 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex-shrink-0 px-3 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
                   >
                     취소
                   </button>
@@ -528,7 +528,7 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
                 {/* 새 연락처 입력 */}
                 {!verificationSent && (
                   <div className="flex gap-2">
-                    <div className="relative flex-1">
+                    <div className="relative flex-1 min-w-0">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="tel"
@@ -541,13 +541,13 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
                     <button
                       onClick={handleSendVerification}
                       disabled={verificationLoading}
-                      className="px-3 py-2 bg-yamoo-primary hover:bg-yamoo-dark text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                      className="flex-shrink-0 px-3 py-2 bg-yamoo-primary hover:bg-yamoo-dark text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
                     >
                       {verificationLoading ? '발송중...' : '인증요청'}
                     </button>
                     <button
                       onClick={handleCancel}
-                      className="px-3 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                      className="flex-shrink-0 px-3 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
                     >
                       취소
                     </button>

@@ -34,6 +34,9 @@ function LoginForm() {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState<'terms' | 'privacy' | null>(null);
 
+  // 로그인 상태 유지
+  const [rememberMe, setRememberMe] = useState(false);
+
   // UI 상태
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -397,6 +400,8 @@ function LoginForm() {
 
     setLoading(true);
 
+    let authToken: string | null = null;
+
     try {
       if (mode === 'signup') {
         await signUp(email, password);
@@ -408,11 +413,13 @@ function LoginForm() {
             email,
             name,
             phone: phone.replace(/-/g, ''),
+            rememberMe,
           }),
         });
 
+        const saveData = await saveRes.json();
+
         if (!saveRes.ok) {
-          const saveData = await saveRes.json();
           if (saveData.error?.includes('이미 가입된')) {
             setError(saveData.error);
             setShowResetOption(true);
@@ -420,12 +427,32 @@ function LoginForm() {
           }
           throw new Error(saveData.error || '사용자 정보 저장에 실패했습니다.');
         }
+
+        // 회원가입 시 발급된 토큰 저장
+        authToken = saveData.token;
       } else {
         await signIn(email, password);
+
+        // 로그인 시 토큰 발급
+        const tokenRes = await fetch('/api/auth/login-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, rememberMe }),
+        });
+
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          authToken = tokenData.token;
+        }
       }
 
       const url = new URL(redirectUrl, window.location.origin);
-      url.searchParams.set('email', email);
+      // 토큰으로 이동
+      if (authToken) {
+        url.searchParams.set('token', authToken);
+      } else {
+        url.searchParams.set('email', email);
+      }
       const finalUrl = url.pathname + url.search;
       router.push(finalUrl);
     } catch (err: unknown) {
@@ -541,17 +568,23 @@ function LoginForm() {
           phone: phone.replace(/-/g, ''),
           password,  // 비밀번호 추가
           provider: 'google',
+          rememberMe,
         }),
       });
 
+      const saveData = await saveRes.json();
+
       if (!saveRes.ok) {
-        const saveData = await saveRes.json();
         throw new Error(saveData.error || '프로필 저장에 실패했습니다.');
       }
 
-      // 프로필 저장 완료 - 이동
+      // 프로필 저장 완료 - 토큰으로 이동 (로그인 상태 유지)
       const url = new URL(redirectUrl, window.location.origin);
-      url.searchParams.set('email', googleUser.email);
+      if (saveData.token) {
+        url.searchParams.set('token', saveData.token);
+      } else {
+        url.searchParams.set('email', googleUser.email);
+      }
       const finalUrl = url.pathname + url.search;
       router.push(finalUrl);
     } catch (err: unknown) {
@@ -977,6 +1010,17 @@ function LoginForm() {
                     </label>
                   </div>
 
+                  {/* 로그인 상태 유지 */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">로그인 상태 유지</span>
+                  </label>
+
                   {/* 완료 버튼 */}
                   <button
                     type="button"
@@ -1223,7 +1267,7 @@ function LoginForm() {
               {(mode === 'login' || mode === 'signup') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    비밀번호
+                    비밀번호(PW)
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -1266,55 +1310,77 @@ function LoginForm() {
                 </div>
               )}
 
-              {/* 회원가입: 이용약관 동의 */}
+              {/* 회원가입: 이용약관 동의 + 로그인 상태 유지 */}
               {mode === 'signup' && (
-                <div className="flex items-start gap-2 pt-2">
-                  <input
-                    type="checkbox"
-                    id="agreeToTerms"
-                    checked={agreeToTerms}
-                    onChange={(e) => setAgreeToTerms(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
-                  />
-                  <label htmlFor="agreeToTerms" className="text-sm text-gray-600 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); setShowTermsModal('terms'); }}
-                      className="text-yamoo-dark hover:underline"
-                    >
-                      이용약관
-                    </button>
-                    {' '}및{' '}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); setShowTermsModal('privacy'); }}
-                      className="text-yamoo-dark hover:underline"
-                    >
-                      개인정보처리방침
-                    </button>
-                    에 동의합니다. <span className="text-red-500">(필수)</span>
+                <>
+                  <div className="flex items-start gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="agreeToTerms"
+                      checked={agreeToTerms}
+                      onChange={(e) => setAgreeToTerms(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
+                    />
+                    <label htmlFor="agreeToTerms" className="text-sm text-gray-600 cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setShowTermsModal('terms'); }}
+                        className="text-yamoo-dark hover:underline"
+                      >
+                        이용약관
+                      </button>
+                      {' '}및{' '}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setShowTermsModal('privacy'); }}
+                        className="text-yamoo-dark hover:underline"
+                      >
+                        개인정보처리방침
+                      </button>
+                      에 동의합니다. <span className="text-red-500">(필수)</span>
+                    </label>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">로그인 상태 유지</span>
                   </label>
-                </div>
+                </>
               )}
 
-              {/* 로그인: 아이디 찾기 / 비밀번호 찾기 링크 */}
+              {/* 로그인: 로그인 상태 유지 + 아이디/비밀번호 찾기 */}
               {mode === 'login' && (
-                <div className="text-center text-sm">
-                  <button
-                    type="button"
-                    onClick={() => handleModeChange('find-id')}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    아이디 찾기
-                  </button>
-                  <span className="mx-2 text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => handleModeChange('reset-password')}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    비밀번호 찾기
-                  </button>
+                <div className="flex items-center justify-between text-sm">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 text-yamoo-primary border-gray-300 rounded focus:ring-yamoo-primary cursor-pointer"
+                    />
+                    <span className="text-gray-600">로그인 상태 유지</span>
+                  </label>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('find-id')}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      아이디 찾기
+                    </button>
+                    <span className="mx-2 text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('reset-password')}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      비밀번호 찾기
+                    </button>
+                  </div>
                 </div>
               )}
 

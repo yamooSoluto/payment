@@ -14,6 +14,7 @@ const DEV_EMAIL = process.env.DEV_EMAIL || 'test@example.com';
 interface TokenPayload {
   email: string;
   purpose: 'checkout' | 'account';
+  rememberMe?: boolean;
   nonce: string;
   iat: number;
 }
@@ -47,11 +48,22 @@ export async function verifyToken(token: string): Promise<string | null> {
 
     if (!tokenDoc.exists) {
       // 토큰이 Firestore에 없으면 새로 생성 (첫 접근)
+      // checkout: 10분, account: rememberMe ? 30일 : 24시간
+      let expiresMs: number;
+      if (payload.purpose === 'checkout') {
+        expiresMs = 10 * 60 * 1000; // 10분
+      } else {
+        expiresMs = payload.rememberMe
+          ? 30 * 24 * 60 * 60 * 1000  // 30일
+          : 24 * 60 * 60 * 1000;       // 24시간
+      }
+
       await db.collection('ssoTokens').doc(token).set({
         email: payload.email,
         used: true,
         purpose: payload.purpose,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        rememberMe: payload.rememberMe || false,
+        expiresAt: new Date(Date.now() + expiresMs),
         createdAt: new Date(),
       });
       return payload.email;
@@ -104,16 +116,26 @@ export async function verifyBearerToken(authHeader: string | null): Promise<stri
 }
 
 // 토큰 생성 함수 (포탈에서 사용)
-export function generateToken(email: string, purpose: 'checkout' | 'account'): string {
+export function generateToken(email: string, purpose: 'checkout' | 'account', rememberMe?: boolean): string {
+  // checkout: 10분 (결제 목적)
+  // account: rememberMe ? 30일 : 24시간
+  let expiresIn: string;
+  if (purpose === 'checkout') {
+    expiresIn = '10m';
+  } else {
+    expiresIn = rememberMe ? '30d' : '24h';
+  }
+
   const token = jwt.sign(
     {
       email,
       purpose,
+      rememberMe: rememberMe || false,
       nonce: crypto.randomUUID(),
       iat: Math.floor(Date.now() / 1000),
     },
     JWT_SECRET!,
-    { expiresIn: '10m' }
+    { expiresIn }
   );
 
   return token;
