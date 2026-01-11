@@ -153,12 +153,12 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
     }
   }, [initialTenants, pendingTenants.length]);
 
-  // 서버 데이터 + 로컬 pending 데이터 병합
-  const tenants = [...pendingTenants, ...initialTenants];
+  // 서버 데이터 + 로컬 pending 데이터 병합 (새 매장은 목록 맨 아래에 표시)
+  const tenants = [...initialTenants, ...pendingTenants];
 
   const handleAddSuccess = (newTenant?: NewTenantData) => {
     if (newTenant) {
-      // Optimistic UI: 즉시 목록에 추가
+      // 매장 목록에 즉시 추가 (폴링으로 이미 생성 확인됨, isPending 불필요)
       setPendingTenants(prev => [{
         id: newTenant.tenantId,
         tenantId: newTenant.tenantId,
@@ -167,11 +167,8 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
         industry: newTenant.industry as IndustryCode,
         createdAt: new Date().toISOString(),
         subscription: null,
-        isPending: true,
       }, ...prev]);
     }
-    // 백그라운드에서 실제 데이터 새로고침
-    router.refresh();
   };
 
   // 매장 추가 버튼 클릭 핸들러

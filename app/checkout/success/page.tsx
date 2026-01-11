@@ -104,18 +104,18 @@ function SuccessContent() {
     : '';
   const accountUrl = `/account${authQuery}`;
 
-  // URL에서 민감한 정보(token, email) 제거 (보안)
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('token') || url.searchParams.has('email')) {
-      url.searchParams.delete('token');
-      url.searchParams.delete('email');
-      const cleanUrl = url.searchParams.toString()
-        ? `${url.pathname}?${url.searchParams.toString()}`
-        : url.pathname;
-      window.history.replaceState({}, '', cleanUrl);
-    }
-  }, []);
+  // URL 정리 임시 비활성화 - 다른 기능과 충돌 테스트
+  // useEffect(() => {
+  //   const url = new URL(window.location.href);
+  //   if (url.searchParams.has('token') || url.searchParams.has('email')) {
+  //     url.searchParams.delete('token');
+  //     url.searchParams.delete('email');
+  //     const cleanUrl = url.searchParams.toString()
+  //       ? `${url.pathname}?${url.searchParams.toString()}`
+  //       : url.pathname;
+  //     window.history.replaceState({}, '', cleanUrl);
+  //   }
+  // }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

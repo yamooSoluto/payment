@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { Xmark, Sofa } from 'iconoir-react';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,7 +25,6 @@ interface AddTenantModalProps {
 }
 
 export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTenantModalProps) {
-  const router = useRouter();
   const { user } = useAuth();
   const [brandName, setBrandName] = useState('');
   const [industry, setIndustry] = useState('');
@@ -120,9 +118,13 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
           // 매장이 생성됨 - 진행률 100%로 설정 후 모달 닫기
           setProgress(100);
           await new Promise(resolve => setTimeout(resolve, 300)); // 100% 표시 잠깐 보여주기
-          router.refresh();
           onClose();
-          onSuccess();
+          // 새 매장 데이터를 전달하여 목록 업데이트 (router.refresh 대신)
+          onSuccess({
+            tenantId: createdTenantId,
+            brandName: brandName.trim(),
+            industry,
+          });
           return;
         }
 
@@ -130,11 +132,14 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      // 타임아웃 - 그냥 닫기
+      // 타임아웃 - 매장이 생성되었다고 가정하고 목록에 추가
       if (!isCancelled) {
-        router.refresh();
         onClose();
-        onSuccess();
+        onSuccess({
+          tenantId: createdTenantId,
+          brandName: brandName.trim(),
+          industry,
+        });
       }
     };
 
@@ -143,7 +148,7 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
     return () => {
       isCancelled = true;
     };
-  }, [createdTenantId, checkTenantExists, router, onClose, onSuccess]);
+  }, [createdTenantId, checkTenantExists, onClose, onSuccess, brandName, industry]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

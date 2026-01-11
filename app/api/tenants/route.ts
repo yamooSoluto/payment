@@ -175,6 +175,7 @@ export async function POST(request: NextRequest) {
           timestamp,
           createdAt: timestamp,
           isTrialSignup: false, // 매장 추가용 (체험 신청 아님)
+          action: 'ADD', // Airtable automation 트리거용
         }),
       });
 
