@@ -62,7 +62,7 @@ export function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
     trial: '무료체험',
     active: '구독 중',
-    canceled: '해지됨',
+    canceled: '해지예정',
     past_due: '결제 실패',
     expired: '만료됨',
   };

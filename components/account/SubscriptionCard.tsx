@@ -686,17 +686,21 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           </>
         )}
 
-        {/* Active Subscription Info */}
-        {isActive && (
+        {/* Active/Canceled Subscription Info */}
+        {(isActive || isCanceled) && (
           <div className="space-y-4 mb-6">
             <div className="flex items-center gap-3 text-gray-600">
               <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
               <div>
                 <p className="text-sm text-gray-500">이용기간</p>
                 <p className="font-medium">
-                  {subscription.currentPeriodStart && subscription.nextBillingDate
+                  {subscription.currentPeriodStart && (subscription.nextBillingDate || subscription.currentPeriodEnd)
                     ? (() => {
-                        const endDate = new Date(subscription.nextBillingDate);
+                        // canceled/active 모두 종료일은 다음 결제일 - 1일
+                        const baseDate = isCanceled && subscription.currentPeriodEnd
+                          ? new Date(subscription.currentPeriodEnd)
+                          : new Date(subscription.nextBillingDate!);
+                        const endDate = new Date(baseDate);
                         endDate.setDate(endDate.getDate() - 1);
                         return `${formatDate(subscription.currentPeriodStart)} ~ ${formatDate(endDate)}`;
                       })()
@@ -704,8 +708,8 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 </p>
               </div>
             </div>
-            {/* 예약된 플랜이 없을 때만 다음 결제일 표시 */}
-            {!subscription.pendingPlan && (
+            {/* 예약된 플랜이 없고 active 상태일 때만 다음 결제일 표시 */}
+            {isActive && !subscription.pendingPlan && (
               <div className="flex items-center gap-3 text-gray-600">
                 <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
                 <div>
@@ -797,7 +801,11 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               구독이 해지 예정입니다
             </p>
             <p className="text-sm text-yellow-700">
-              {formatDate(subscription.currentPeriodEnd)}까지 이용 가능하며,
+              {(() => {
+                const endDate = new Date(subscription.currentPeriodEnd);
+                endDate.setDate(endDate.getDate() - 1);
+                return formatDate(endDate);
+              })()}까지 이용 가능하며,
               &apos;다시 이용하기&apos;를 누르면 해지가 취소되고 다음 결제일에 {subscription.amount ? `${formatPrice(subscription.amount)}원이` : '요금이'} 결제됩니다.
             </p>
           </div>
@@ -909,7 +917,11 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         onClose={handleCancelResultClose}
         mode={cancelResult.mode}
         refundAmount={cancelResult.refundAmount}
-        endDate={subscription.currentPeriodEnd ? String(subscription.currentPeriodEnd) : undefined}
+        endDate={subscription.currentPeriodEnd ? (() => {
+          const endDate = new Date(subscription.currentPeriodEnd);
+          endDate.setDate(endDate.getDate() - 1);
+          return endDate.toISOString();
+        })() : undefined}
       />
 
       {/* Cancel Reservation Modal */}

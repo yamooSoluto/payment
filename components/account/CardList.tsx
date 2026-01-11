@@ -275,7 +275,8 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">결제 수단</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">결제 수단</h2>
+        <p className="text-sm text-gray-500 mb-4">유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</p>
         <div className="flex items-center justify-center py-6">
           <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
         </div>
@@ -285,12 +286,13 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-lg font-semibold text-gray-900">결제 수단</h2>
         {cards.length > 0 && (
           <span className="text-xs text-gray-400">{cards.length}/5</span>
         )}
       </div>
+      <p className="text-sm text-gray-500 mb-4">유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</p>
 
       {error && (
         <div className="mb-3 p-2 text-red-500 text-xs flex items-center gap-1.5">

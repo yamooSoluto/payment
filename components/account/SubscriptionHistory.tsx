@@ -34,7 +34,7 @@ interface SubscriptionPeriod {
   plan: string;
   startDate: Date | string;
   endDate: Date | string | null;
-  status: 'active' | 'completed' | 'canceled';
+  status: 'active' | 'completed' | 'canceled' | 'pending_cancel';
 }
 
 interface SubscriptionHistoryProps {
@@ -63,8 +63,14 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
       // 즉시 해지: currentPeriodEnd가 해지 시점으로 설정됨
       currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
     } else if (subscription.status === 'canceled') {
-      // 예약 해지: 기간 종료일까지 이용 가능
-      currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
+      // 예약 해지: 기간 종료일까지 이용 가능 (currentPeriodEnd - 1일)
+      if (subscription.currentPeriodEnd) {
+        const endDate = new Date(subscription.currentPeriodEnd);
+        endDate.setDate(endDate.getDate() - 1);
+        currentEndDate = endDate.toISOString();
+      } else {
+        currentEndDate = subscription.canceledAt || null;
+      }
     } else if (subscription.nextBillingDate) {
       const endDate = new Date(subscription.nextBillingDate);
       endDate.setDate(endDate.getDate() - 1);
@@ -72,11 +78,11 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     }
 
     // 상태 매핑
-    let periodStatus: 'active' | 'completed' | 'canceled' = 'active';
+    let periodStatus: 'active' | 'completed' | 'canceled' | 'pending_cancel' = 'active';
     if (subscription.status === 'expired') {
       periodStatus = 'canceled';  // 즉시 해지 완료
     } else if (subscription.status === 'canceled') {
-      periodStatus = 'canceled';  // 예약 해지
+      periodStatus = 'pending_cancel';  // 예약 해지 (해지예정)
     }
 
     subscriptionPeriods.push({
@@ -139,12 +145,13 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     }
   }
 
-  // 1. 상태 우선 정렬 (사용중 > 사용완료 > 해지됨)
+  // 1. 상태 우선 정렬 (사용중 > 해지예정 > 사용완료 > 해지됨)
   // 2. 같은 상태 내에서는 시작일 내림차순 (최신순)
   const statusPriority: Record<SubscriptionPeriod['status'], number> = {
     active: 1,
-    completed: 2,
-    canceled: 3,
+    pending_cancel: 2,
+    completed: 3,
+    canceled: 4,
   };
 
   subscriptionPeriods.sort((a, b) => {
@@ -162,6 +169,8 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
         return '사용중';
       case 'completed':
         return '사용완료';
+      case 'pending_cancel':
+        return '해지예정';
       case 'canceled':
         return '해지됨';
       default:
@@ -175,6 +184,8 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
         return 'text-green-600';
       case 'completed':
         return 'text-gray-500';
+      case 'pending_cancel':
+        return 'text-orange-500';
       case 'canceled':
         return 'text-red-500';
       default:

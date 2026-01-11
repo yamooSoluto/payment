@@ -265,10 +265,11 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
             <h4 className="font-medium text-gray-900 mb-2">해지 시 안내사항</h4>
             {cancelMode === 'immediate' ? (
               <ul className="text-sm text-gray-600 space-y-1">
-                <li>• 오늘부로 서비스 이용이 즉시 중단됩니다.</li>
+                <li>• 서비스 이용이 즉시 중단됩니다.</li>
+                <li>• <span className="text-red-600 font-medium">즉시 해지 후에는 취소가 불가합니다.</span></li>
                 <li>• 환불은 영업일 기준 3~5일 내 처리됩니다.</li>
-                <li>• 등록된 데이터는 90일간 보관되고, 이후 삭제됩니다.</li>
-                <li>• 90일 이내 재구독 시 데이터를 복구할 수 있습니다.</li>
+                <li>• 해지 후에도 매장 데이터는 유지됩니다.</li>
+                <li>• 재구독 시 기존 데이터를 그대로 이용할 수 있습니다.</li>
               </ul>
             ) : (
               <ul className="text-sm text-gray-600 space-y-1">
@@ -276,9 +277,9 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                 {actualEndDate && (
                   <li>• {formatDate(actualEndDate)}까지 서비스 이용이 가능합니다.</li>
                 )}
-                <li>• 언제든지 다시 구독할 수 있습니다.</li>
-                <li>• 등록된 데이터는 90일간 보관되고, 이후 삭제됩니다.</li>
-                <li>• 90일 이내 재구독 시 데이터를 복구할 수 있습니다.</li>
+                <li>• 기간 종료 전까지 언제든 해지를 취소할 수 있습니다.</li>
+                <li>• 해지 후에도 매장 데이터는 유지됩니다.</li>
+                <li>• 재구독 시 기존 데이터를 그대로 이용할 수 있습니다.</li>
               </ul>
             )}
           </div>
