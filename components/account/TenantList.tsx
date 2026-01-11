@@ -128,7 +128,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   active: { label: '구독 중', color: 'text-green-600 bg-green-50', icon: CheckCircle },
   canceled: { label: '해지 예정', color: 'text-orange-600 bg-orange-50', icon: Clock },
   past_due: { label: '결제 실패', color: 'text-red-600 bg-red-50', icon: WarningCircle },
-  trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
+  trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock }, // "무료체험" 중복 방지
   expired: { label: '미구독', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
 };
 
@@ -272,7 +272,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center flex-shrink-0">
                     <IndustryIcon width={24} height={24} strokeWidth={1.5} className="text-white" />
                   </div>
                   <div>

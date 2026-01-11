@@ -71,6 +71,10 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   const [alreadyApplied, setAlreadyApplied] = useState(false);
   const [hasPaidSubscription, setHasPaidSubscription] = useState(false);
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(false);
+  const [trialInfo, setTrialInfo] = useState<{
+    brandName?: string;
+    startDate?: string;
+  } | null>(null);
 
   // 약관 모달 상태
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy' | null>(null);
@@ -111,6 +115,10 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             // 이미 무료체험 신청한 경우 (우선 체크)
             if (userData.trialApplied) {
               setAlreadyApplied(true);
+              // 무료체험 상세 정보 저장
+              if (userData.trialInfo) {
+                setTrialInfo(userData.trialInfo);
+              }
             }
             // 유료 구독 이력만 있는 경우
             else if (userData.hasPaidSubscription) {
@@ -322,23 +330,57 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
 
   // 이미 신청한 경우 (로그인 사용자)
   if (alreadyApplied) {
+    // 날짜 포맷 함수
+    const formatDate = (dateStr?: string) => {
+      if (!dateStr) return null;
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+    };
+
     return (
       <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="text-center py-6 sm:py-8">
           <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">{hasPaidSubscription ? '💳' : '📋'}</div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
             {hasPaidSubscription ? '이미 유료 구독중입니다' : '이미 무료체험을 신청하셨습니다'}
           </h3>
+          {!hasPaidSubscription && (
+            <p className="text-gray-500 text-sm mb-4">(1인당 1회 체험 가능)</p>
+          )}
 
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <p className="text-gray-600 text-sm sm:text-base mb-2">
-              <span className="font-semibold text-gray-900">{formData.email}</span> 계정으로
-            </p>
-            <p className="text-gray-600 text-sm sm:text-base">
-              {hasPaidSubscription
-                ? '유료 구독 이력이 있어 무료체험을 신청하실 수 없습니다.'
-                : '이미 무료체험이 신청되었습니다.'}
-            </p>
+            {hasPaidSubscription ? (
+              <>
+                <p className="text-gray-600 text-sm sm:text-base mb-2">
+                  <span className="font-semibold text-gray-900">{formData.email}</span> 계정으로
+                </p>
+                <p className="text-gray-600 text-sm sm:text-base">
+                  유료 구독 이력이 있어 무료체험을 신청하실 수 없습니다.
+                </p>
+              </>
+            ) : trialInfo ? (
+              <div className="space-y-3">
+                <p className="text-base">
+                  <span className="text-gray-500">[매장]</span>{' '}
+                  <span className="font-semibold text-gray-900">{trialInfo.brandName || '-'}</span>
+                </p>
+                {trialInfo.startDate && (
+                  <p className="text-base">
+                    <span className="text-gray-500">[신청일]</span>{' '}
+                    <span className="font-medium text-gray-700">{formatDate(trialInfo.startDate)}</span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="text-gray-600 text-sm sm:text-base mb-2">
+                  <span className="font-semibold text-gray-900">{formData.email}</span> 계정으로
+                </p>
+                <p className="text-gray-600 text-sm sm:text-base">
+                  이미 무료체험이 신청되었습니다.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="text-gray-500 text-xs sm:text-sm mb-6 space-y-2 flex flex-col items-center">
@@ -348,7 +390,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             </p>
             <p className="flex items-center gap-2">
               <Check width={16} height={16} strokeWidth={2} className="text-green-500 flex-shrink-0" />
-              <span>마이페이지에서 구독 상태를 확인하실 수 있어요.</span>
+              <span>마이페이지에서 계정 정보, 구독 상태를 확인하실 수 있어요.</span>
             </p>
           </div>
 

@@ -107,6 +107,9 @@ export async function GET(
     let trialApplied = userData?.trialApplied || false;
 
     // 2. phone 기준 추가 체크 (다른 email로 같은 phone 사용 케이스)
+    // 같은 전화번호로 신청한 매장 정보도 가져옴
+    let phoneTrialInfo: { brandName?: string; startDate?: string } | null = null;
+
     if (!trialApplied && userData?.phone) {
       const phoneTrialCheck = await db.collection('users')
         .where('phone', '==', userData.phone)
@@ -116,10 +119,53 @@ export async function GET(
 
       if (!phoneTrialCheck.empty) {
         trialApplied = true;
+
+        // 해당 전화번호로 신청한 사용자의 이메일로 매장 정보 조회
+        const phoneUserData = phoneTrialCheck.docs[0].data();
+        const phoneUserEmail = phoneUserData.email;
+
+        if (phoneUserEmail) {
+          const phoneTenantsSnapshot = await db.collection('tenants')
+            .where('email', '==', phoneUserEmail)
+            .limit(1)
+            .get();
+
+          if (!phoneTenantsSnapshot.empty) {
+            const phoneTenantData = phoneTenantsSnapshot.docs[0].data();
+            const phoneTenantId = phoneTenantData.tenantId || phoneTenantsSnapshot.docs[0].id;
+
+            // subscriptions에서 trial 정보 조회
+            const phoneSubDoc = await db.collection('subscriptions').doc(phoneTenantId).get();
+            if (phoneSubDoc.exists) {
+              const phoneSubData = phoneSubDoc.data();
+              if (phoneSubData?.plan === 'trial') {
+                phoneTrialInfo = {
+                  brandName: phoneTenantData.brandName,
+                  startDate: phoneSubData?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                             phoneSubData?.startDate?.toDate?.()?.toISOString() ||
+                             phoneTenantData.createdAt?.toDate?.()?.toISOString(),
+                };
+              }
+            }
+
+            // embedded subscription에서도 확인
+            if (!phoneTrialInfo && phoneTenantData.subscription?.plan === 'trial') {
+              phoneTrialInfo = {
+                brandName: phoneTenantData.brandName,
+                startDate: phoneTenantData.subscription?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                           phoneTenantData.subscription?.startDate?.toDate?.()?.toISOString() ||
+                           phoneTenantData.createdAt?.toDate?.()?.toISOString(),
+              };
+            }
+          }
+        }
       }
     }
 
     // 3. tenants 컬렉션에서 구독 이력이 있는지 확인 (trial 또는 유료)
+    // 무료체험 상세 정보 (매장명, 기간)
+    let trialInfo: { brandName?: string; startDate?: string; endDate?: string } | null = null;
+
     if (!trialApplied) {
       const tenantsSnapshot = await db.collection('tenants')
         .where('email', '==', decodedEmail)
@@ -132,6 +178,16 @@ export async function GET(
         // tenant에 subscription 정보가 있는 경우
         if (tenantData.subscription?.plan || tenantData.subscription?.status) {
           trialApplied = true;
+          // trial인 경우 상세 정보 저장
+          if (tenantData.subscription?.plan === 'trial') {
+            trialInfo = {
+              brandName: tenantData.brandName,
+              startDate: tenantData.subscription?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                         tenantData.subscription?.startDate?.toDate?.()?.toISOString() ||
+                         tenantData.createdAt?.toDate?.()?.toISOString(),
+              endDate: tenantData.subscription?.currentPeriodEnd?.toDate?.()?.toISOString(),
+            };
+          }
           break;
         }
 
@@ -141,8 +197,57 @@ export async function GET(
           const subData = subDoc.data();
           if (subData?.plan || subData?.status) {
             trialApplied = true;
+            // trial인 경우 상세 정보 저장
+            if (subData?.plan === 'trial') {
+              trialInfo = {
+                brandName: tenantData.brandName,
+                startDate: subData?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                           subData?.startDate?.toDate?.()?.toISOString() ||
+                           tenantData.createdAt?.toDate?.()?.toISOString(),
+                endDate: subData?.currentPeriodEnd?.toDate?.()?.toISOString(),
+              };
+            }
             break;
           }
+        }
+      }
+    }
+
+    // trialApplied가 true인데 trialInfo가 없으면 (userData.trialApplied로 설정된 경우) tenants에서 다시 조회
+    if (trialApplied && !trialInfo) {
+      const tenantsForInfo = await db.collection('tenants')
+        .where('email', '==', decodedEmail)
+        .get();
+
+      for (const doc of tenantsForInfo.docs) {
+        const tenantData = doc.data();
+        const tenantId = tenantData.tenantId || doc.id;
+
+        const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subDoc.exists) {
+          const subData = subDoc.data();
+          if (subData?.plan === 'trial') {
+            trialInfo = {
+              brandName: tenantData.brandName,
+              startDate: subData?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                         subData?.startDate?.toDate?.()?.toISOString() ||
+                         tenantData.createdAt?.toDate?.()?.toISOString(),
+              endDate: subData?.currentPeriodEnd?.toDate?.()?.toISOString(),
+            };
+            break;
+          }
+        }
+
+        // tenant embedded subscription에서도 확인
+        if (tenantData.subscription?.plan === 'trial') {
+          trialInfo = {
+            brandName: tenantData.brandName,
+            startDate: tenantData.subscription?.currentPeriodStart?.toDate?.()?.toISOString() ||
+                       tenantData.subscription?.startDate?.toDate?.()?.toISOString() ||
+                       tenantData.createdAt?.toDate?.()?.toISOString(),
+            endDate: tenantData.subscription?.currentPeriodEnd?.toDate?.()?.toISOString(),
+          };
+          break;
         }
       }
     }
@@ -185,6 +290,7 @@ export async function GET(
       phone: userData?.phone || '',
       trialApplied,
       hasPaidSubscription,
+      trialInfo: trialInfo || phoneTrialInfo, // 무료체험 상세 정보 (매장명, 신청일) - email 기준 또는 phone 기준
     });
 
   } catch (error) {

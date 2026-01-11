@@ -188,7 +188,7 @@ export default function DeleteTenantModal({ tenant, onClose, onSuccess, authPara
                   <strong>구독 중, 체험 중, 또는 해지 예정인 매장</strong>은 삭제할 수 없습니다.
                 </p>
                 <p className="text-sm text-orange-700 mt-2">
-                  매장을 삭제하려면 먼저 구독을 해지하고 이용 기간이 종료된 후 다시 시도해주세요.
+                  매장 삭제는 이용 종료 또는 구독 해지 후 가능합니다.
                 </p>
               </div>
 
