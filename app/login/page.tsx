@@ -446,15 +446,17 @@ function LoginForm() {
         }
       }
 
-      const url = new URL(redirectUrl, window.location.origin);
-      // 토큰으로 이동
+      // 세션 API를 통해 쿠키 설정 후 리다이렉트
       if (authToken) {
-        url.searchParams.set('token', authToken);
+        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(authToken)}&redirect=${encodeURIComponent(redirectUrl)}`;
+        router.push(sessionUrl);
       } else {
+        // 토큰 없이 이메일만 있는 경우 (fallback)
+        const url = new URL(redirectUrl, window.location.origin);
         url.searchParams.set('email', email);
+        const finalUrl = url.pathname + url.search;
+        router.push(finalUrl);
       }
-      const finalUrl = url.pathname + url.search;
-      router.push(finalUrl);
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string };
       if (error.code === 'auth/email-already-in-use') {
@@ -517,11 +519,24 @@ function LoginForm() {
         return;
       }
 
-      // 프로필 완성됨 - 바로 이동
-      const url = new URL(redirectUrl, window.location.origin);
-      url.searchParams.set('email', userEmail);
-      const finalUrl = url.pathname + url.search;
-      router.push(finalUrl);
+      // 프로필 완성됨 - 토큰 발급 후 세션 생성
+      const tokenRes = await fetch('/api/auth/login-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail, rememberMe }),
+      });
+
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(tokenData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
+        router.push(sessionUrl);
+      } else {
+        // 토큰 발급 실패 시 fallback
+        const url = new URL(redirectUrl, window.location.origin);
+        url.searchParams.set('email', userEmail);
+        const finalUrl = url.pathname + url.search;
+        router.push(finalUrl);
+      }
     } catch {
       setError('Google 로그인에 실패했습니다.');
     } finally {
@@ -578,15 +593,17 @@ function LoginForm() {
         throw new Error(saveData.error || '프로필 저장에 실패했습니다.');
       }
 
-      // 프로필 저장 완료 - 토큰으로 이동 (로그인 상태 유지)
-      const url = new URL(redirectUrl, window.location.origin);
+      // 프로필 저장 완료 - 세션 API를 통해 쿠키 설정 후 리다이렉트
       if (saveData.token) {
-        url.searchParams.set('token', saveData.token);
+        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(saveData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
+        router.push(sessionUrl);
       } else {
+        // 토큰 없는 경우 fallback
+        const url = new URL(redirectUrl, window.location.origin);
         url.searchParams.set('email', googleUser.email);
+        const finalUrl = url.pathname + url.search;
+        router.push(finalUrl);
       }
-      const finalUrl = url.pathname + url.search;
-      router.push(finalUrl);
     } catch (err: unknown) {
       const error = err as { message?: string };
       setError(error.message || '프로필 저장 중 오류가 발생했습니다.');

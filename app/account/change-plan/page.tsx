@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import Link from 'next/link';
 import { NavArrowLeft, Check } from 'iconoir-react';
 import { PLAN_PRICES, getPlanName } from '@/lib/toss';
@@ -61,11 +62,29 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   const { token, email: emailParam, tenantId } = params;
 
   let email: string | null = null;
+  let sessionToken: string | undefined = undefined;
 
-  if (token) {
-    email = await verifyToken(token);
-  } else if (emailParam) {
-    email = emailParam;
+  // 1. 세션 쿠키 확인 (우선)
+  const sessionId = await getAuthSessionIdFromCookie();
+  if (sessionId) {
+    const session = await getAuthSession(sessionId);
+    if (session) {
+      email = session.email;
+      sessionToken = session.token;
+    }
+  }
+
+  // 2. 세션이 없고 토큰이 URL에 있으면 세션 생성 후 리다이렉트
+  if (!email && token) {
+    const tokenEmail = await verifyToken(token);
+    if (tokenEmail) {
+      redirect(`/api/auth/session?token=${encodeURIComponent(token)}&redirect=/account/change-plan?tenantId=${tenantId}`);
+    }
+  }
+
+  // 3. 이메일 파라미터로 접근 - 세션 쿠키가 없으면 로그인으로
+  if (!email && emailParam) {
+    redirect('/login');
   }
 
   if (!email) {
@@ -83,11 +102,13 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
 
   // 해지된 구독은 플랜 변경 대신 요금제 페이지로 이동
   if (rawSubscription.status === 'canceled') {
-    redirect(`/pricing?${token ? `token=${token}` : `email=${encodeURIComponent(email)}`}&tenantId=${tenantId}`);
+    const authForPricing = sessionToken ? `token=${sessionToken}` : '';
+    redirect(`/pricing?${authForPricing}&tenantId=${tenantId}`);
   }
 
   const subscription = serializeData(rawSubscription);
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+  // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
+  const authParam = sessionToken ? `token=${sessionToken}` : '';
   const currentPlan = subscription.plan;
   // 구독자가 결제한 금액 사용 (플랜 가격이 변경되어도 기존 금액 유지)
   const currentAmount = subscription.amount || PLAN_PRICES[currentPlan] || 0;

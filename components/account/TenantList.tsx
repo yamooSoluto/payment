@@ -297,7 +297,14 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                               {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
                               {(status === 'canceled' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
                                 <span className="ml-0.5">
-                                  (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })})
+                                  (~{(() => {
+                                    const endDate = new Date(tenant.subscription!.currentPeriodEnd);
+                                    // canceled 상태는 currentPeriodEnd - 1일 (마지막 이용일)
+                                    if (status === 'canceled') {
+                                      endDate.setDate(endDate.getDate() - 1);
+                                    }
+                                    return endDate.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+                                  })()})
                                 </span>
                               )}
                             </span>

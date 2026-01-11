@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import TenantList from '@/components/account/TenantList';
 import UserProfile from '@/components/account/UserProfile';
@@ -34,21 +35,39 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const { token, email: emailParam } = params;
 
   let email: string | null = null;
+  let sessionToken: string | undefined = undefined;
 
-  // 1. 토큰으로 인증 (포탈 SSO)
-  if (token) {
-    email = await verifyToken(token);
+  // 1. 세션 쿠키 확인 (우선)
+  const sessionId = await getAuthSessionIdFromCookie();
+  if (sessionId) {
+    const session = await getAuthSession(sessionId);
+    if (session) {
+      email = session.email;
+      sessionToken = session.token; // 세션에 저장된 토큰
+    }
   }
-  // 2. 이메일 파라미터로 접근 (Firebase Auth)
-  else if (emailParam) {
-    email = emailParam;
+
+  // 2. 세션이 없고 토큰이 URL에 있으면 세션 생성 후 리다이렉트
+  if (!email && token) {
+    const tokenEmail = await verifyToken(token);
+    if (tokenEmail) {
+      // 세션 API를 통해 쿠키 설정 후 돌아오기 (URL에서 토큰 제거)
+      redirect(`/api/auth/session?token=${encodeURIComponent(token)}&redirect=/account`);
+    }
+  }
+
+  // 3. 이메일 파라미터로 접근 - 세션 쿠키가 없으면 로그인으로
+  if (!email && emailParam) {
+    // 이메일만으로는 세션 생성 불가, 로그인 필요
+    redirect('/login');
   }
 
   if (!email) {
     redirect('/login');
   }
 
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+  // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
+  const authParam = sessionToken ? `token=${sessionToken}` : '';
 
   // 서버에서 직접 매장 목록 조회 (빠른 초기 로딩)
   const db = adminDb || initializeFirebaseAdmin();

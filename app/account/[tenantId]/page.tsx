@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
@@ -51,11 +52,30 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   const { token, email: emailParam } = await searchParams;
 
   let email: string | null = null;
+  let sessionToken: string | undefined = undefined;
 
-  if (token) {
-    email = await verifyToken(token);
-  } else if (emailParam) {
-    email = emailParam;
+  // 1. 세션 쿠키 확인 (우선)
+  const sessionId = await getAuthSessionIdFromCookie();
+  if (sessionId) {
+    const session = await getAuthSession(sessionId);
+    if (session) {
+      email = session.email;
+      sessionToken = session.token;
+    }
+  }
+
+  // 2. 세션이 없고 토큰이 URL에 있으면 세션 생성 후 리다이렉트
+  if (!email && token) {
+    const tokenEmail = await verifyToken(token);
+    if (tokenEmail) {
+      redirect(`/api/auth/session?token=${encodeURIComponent(token)}&redirect=/account/${tenantId}`);
+    }
+  }
+
+  // 3. 이메일 파라미터로 접근 - 세션 쿠키가 없으면 로그인으로
+  if (!email && emailParam) {
+    const returnUrl = `/account/${tenantId}`;
+    redirect(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   }
 
   if (!email) {
@@ -155,7 +175,8 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   // 직렬화
   const subscription = rawSubscription ? serializeData(rawSubscription) : null;
   const payments = serializeData(limitedPayments);
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+  // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
+  const authParam = sessionToken ? `token=${sessionToken}` : '';
 
   // 사용자 정보 및 무료체험 이력 확인 (구독이 없을 때만)
   let hasTrialHistory = false;

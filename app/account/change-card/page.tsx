@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import Link from 'next/link';
 import { NavArrowLeft, CreditCard } from 'iconoir-react';
 import ChangeCardButton from '@/components/account/ChangeCardButton';
@@ -13,11 +14,29 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
   const { token, email: emailParam, tenantId } = params;
 
   let email: string | null = null;
+  let sessionToken: string | undefined = undefined;
 
-  if (token) {
-    email = await verifyToken(token);
-  } else if (emailParam) {
-    email = emailParam;
+  // 1. 세션 쿠키 확인 (우선)
+  const sessionId = await getAuthSessionIdFromCookie();
+  if (sessionId) {
+    const session = await getAuthSession(sessionId);
+    if (session) {
+      email = session.email;
+      sessionToken = session.token;
+    }
+  }
+
+  // 2. 세션이 없고 토큰이 URL에 있으면 세션 생성 후 리다이렉트
+  if (!email && token) {
+    const tokenEmail = await verifyToken(token);
+    if (tokenEmail) {
+      redirect(`/api/auth/session?token=${encodeURIComponent(token)}&redirect=/account/change-card?tenantId=${tenantId}`);
+    }
+  }
+
+  // 3. 이메일 파라미터로 접근 - 세션 쿠키가 없으면 로그인으로
+  if (!email && emailParam) {
+    redirect('/login');
   }
 
   if (!email) {
@@ -33,7 +52,8 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
     redirect('/pricing');
   }
 
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+  // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
+  const authParam = sessionToken ? `token=${sessionToken}` : '';
 
   // 카드 정보 추출
   const cardInfo = subscription.cardInfo || {};
