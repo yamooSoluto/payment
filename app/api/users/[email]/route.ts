@@ -111,17 +111,26 @@ export async function GET(
     let phoneTrialInfo: { brandName?: string; startDate?: string } | null = null;
 
     if (!trialApplied && userData?.phone) {
+      // 현재 phone으로 trialApplied된 유저 체크
       const phoneTrialCheck = await db.collection('users')
         .where('phone', '==', userData.phone)
         .where('trialApplied', '==', true)
         .limit(1)
         .get();
 
-      if (!phoneTrialCheck.empty) {
+      // previousPhones에 현재 phone이 포함된 유저 체크 (연락처 변경 이력)
+      const previousPhoneCheck = await db.collection('users')
+        .where('previousPhones', 'array-contains', userData.phone)
+        .where('trialApplied', '==', true)
+        .limit(1)
+        .get();
+
+      if (!phoneTrialCheck.empty || !previousPhoneCheck.empty) {
         trialApplied = true;
 
         // 해당 전화번호로 신청한 사용자의 이메일로 매장 정보 조회
-        const phoneUserData = phoneTrialCheck.docs[0].data();
+        const matchedDoc = !phoneTrialCheck.empty ? phoneTrialCheck.docs[0] : previousPhoneCheck.docs[0];
+        const phoneUserData = matchedDoc.data();
         const phoneUserEmail = phoneUserData.email;
 
         if (phoneUserEmail) {
