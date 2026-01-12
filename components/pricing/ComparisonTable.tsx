@@ -39,7 +39,7 @@ const features = [
 ];
 
 export default function ComparisonTable() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   const renderCell = (value: boolean | string) => {
     if (typeof value === 'boolean') {
