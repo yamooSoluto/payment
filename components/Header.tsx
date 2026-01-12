@@ -5,11 +5,12 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 
 export default function Header() {
   const { user, loading, signOut } = useAuth();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasTenants, setHasTenants] = useState(false);
   const pathname = usePathname();
@@ -45,6 +46,8 @@ export default function Header() {
   const handleSignOut = async () => {
     try {
       await signOut();
+      // 로그아웃 후 로그인 페이지로 리다이렉트 (모바일에서 router.replace가 안되는 경우 대비)
+      router.replace('/login');
     } catch (error) {
       console.error('로그아웃 실패:', error);
     }

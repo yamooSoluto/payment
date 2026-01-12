@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyBearerToken } from '@/lib/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 /**
  * 연락처 변경 API
@@ -63,8 +64,11 @@ export async function POST(request: Request) {
     // users 컬렉션 업데이트
     const userDoc = await db.collection('users').doc(email).get();
     if (userDoc.exists) {
+      const currentPhone = userDoc.data()?.phone;
       await db.collection('users').doc(email).update({
         phone: normalizedPhone,
+        // 이전 연락처를 previousPhones 배열에 추가 (중복 자동 방지)
+        ...(currentPhone && { previousPhones: FieldValue.arrayUnion(currentPhone) }),
         updatedAt: new Date(),
       });
     }

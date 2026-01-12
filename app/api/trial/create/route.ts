@@ -96,12 +96,13 @@ export async function POST(request: Request) {
     }
 
     // 무료체험 이력 확인 (phone + email 기준)
-    // 1. users 컬렉션에서 trialApplied가 true인 경우 (phone 또는 email)
+    // 1. users 컬렉션에서 trialApplied가 true인 경우 (phone 또는 email 또는 previousPhones)
     // 2. tenants 컬렉션에서 subscription이 있거나 trial 이력이 있는 경우
     // 3. used_trial_phones 컬렉션에서 해시된 번호 확인 (탈퇴 회원)
     const phoneHash = hashPhone(phone);
-    const [existingUserPhone, existingUserEmail, existingTenantPhone, existingTenantEmail, existingTrialHash] = await Promise.all([
+    const [existingUserPhone, existingUserPreviousPhone, existingUserEmail, existingTenantPhone, existingTenantEmail, existingTrialHash] = await Promise.all([
       db.collection('users').where('phone', '==', phone).limit(1).get(),
+      db.collection('users').where('previousPhones', 'array-contains', phone).where('trialApplied', '==', true).limit(1).get(),
       db.collection('users').doc(email).get(),
       db.collection('tenants').where('phone', '==', phone).limit(1).get(),
       db.collection('tenants').where('email', '==', email).limit(1).get(),
@@ -135,6 +136,12 @@ export async function POST(request: Request) {
         hasActualTrialHistory = true;
         trialHistorySource = 'user';
       }
+    }
+
+    // previousPhones에서 체험 이력 확인 (연락처 변경 후 재신청 방지)
+    if (!hasActualTrialHistory && !existingUserPreviousPhone.empty) {
+      hasActualTrialHistory = true;
+      trialHistorySource = 'user';
     }
 
     // tenants에서 email 기준 subscription 이력 확인

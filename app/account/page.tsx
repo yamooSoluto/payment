@@ -118,16 +118,24 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       }
 
       // phone 기준으로 무료체험 이력 추가 확인 (users 컬렉션에서)
+      // 1. 현재 phone으로 조회
+      // 2. previousPhones에 포함된 경우도 조회 (연락처 변경 이력)
       if (!hasTrialHistory && userInfo.phone) {
-        const usersByPhone = await db.collection('users')
-          .where('phone', '==', userInfo.phone)
-          .limit(1)
-          .get();
-        if (!usersByPhone.empty) {
-          const phoneUserData = usersByPhone.docs[0].data();
-          if (phoneUserData.trialApplied === true) {
-            hasTrialHistory = true;
-          }
+        const [usersByCurrentPhone, usersByPreviousPhone] = await Promise.all([
+          db.collection('users')
+            .where('phone', '==', userInfo.phone)
+            .where('trialApplied', '==', true)
+            .limit(1)
+            .get(),
+          db.collection('users')
+            .where('previousPhones', 'array-contains', userInfo.phone)
+            .where('trialApplied', '==', true)
+            .limit(1)
+            .get(),
+        ]);
+
+        if (!usersByCurrentPhone.empty || !usersByPreviousPhone.empty) {
+          hasTrialHistory = true;
         }
       }
 
@@ -328,8 +336,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">마이페이지</h1>
-          <p className="text-gray-600">{email}</p>
+          <h1 className="text-3xl font-bold text-gray-900">마이페이지</h1>
         </div>
 
         {/* Content */}
