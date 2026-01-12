@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { issueBillingKey, payWithBillingKey } from '@/lib/toss';
+import { issueBillingKey, payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
@@ -329,7 +329,7 @@ export async function GET(request: NextRequest) {
     }
 
     const orderId = `SUB_${Date.now()}`;
-    const orderName = `YAMOO ${planInfo.name} 플랜 - 첫 결제`;
+    const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
 
     console.log('Processing first payment:', { orderId, paymentAmount, tenantId: validTenantId });
 
@@ -382,7 +382,8 @@ export async function GET(request: NextRequest) {
         paymentKey: paymentResponse.paymentKey,
         amount: paymentAmount,
         plan,
-        type: 'subscription',  // 신규 구독
+        category: 'subscription',
+        type: 'first_payment',
         status: 'done',
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,

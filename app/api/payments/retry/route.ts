@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 결제 시도
-    const orderId = `RETRY_${Date.now()}`;
-    const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 재결제`;
+    const orderId = `REC_${Date.now()}`;
+    const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜`;
 
     console.log('Processing retry payment:', {
       orderId,
@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
           paymentKey: paymentResponse.paymentKey,
           amount: subscription.amount,
           plan: subscription.plan,
+          category: 'recurring',
           type: 'retry',
           status: 'done',
           method: paymentResponse.method,

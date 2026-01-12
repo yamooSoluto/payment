@@ -224,8 +224,8 @@ export async function POST(request: NextRequest) {
         try {
           const { payWithBillingKey, getPlanName, getEffectiveAmount } = await import('@/lib/toss');
 
-          const orderId = `RETRY_${Date.now()}`;
-          const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 카드 변경 후 재결제`;
+          const orderId = `REC_${Date.now()}`;
+          const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜`;
 
           const effectiveAmount = getEffectiveAmount({
             plan: subscription.plan,
@@ -267,7 +267,8 @@ export async function POST(request: NextRequest) {
               paymentKey: paymentResponse.paymentKey,
               amount: effectiveAmount,
               plan: subscription.plan,
-              type: 'card_update_retry',
+              category: 'recurring',
+              type: 'retry',
               status: 'done',
               method: paymentResponse.method,
               cardInfo: paymentResponse.card || null,

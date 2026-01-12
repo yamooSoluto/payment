@@ -181,7 +181,8 @@ export async function POST(request: NextRequest) {
       await db.runTransaction(async (transaction) => {
         // 환불 내역 저장 (성공한 경우에만)
         if (refundResult && refundAmount && refundAmount > 0) {
-          const refundDocId = `CANCEL_REFUND_${Date.now()}_${tenantId}`;
+          const refundOrderId = `REF_${Date.now()}`;
+          const refundDocId = `${refundOrderId}_${tenantId}`;
           const refundRef = db.collection('refunds').doc(refundDocId);
           transaction.set(refundRef, {
             tenantId,
@@ -193,15 +194,16 @@ export async function POST(request: NextRequest) {
           });
 
           // 결제 내역에도 환불 기록 추가
-          const paymentDocId = `REFUND_${Date.now()}_${tenantId}`;
+          const paymentDocId = `${refundOrderId}_${tenantId}_payment`;
           const paymentRef = db.collection('payments').doc(paymentDocId);
           transaction.set(paymentRef, {
             tenantId,
             email,
-            orderId: `CANCEL_REFUND_${Date.now()}_${tenantId}`,
+            orderId: refundOrderId,
             amount: -refundAmount,
             plan: subscription.plan,
-            type: 'cancel_refund',  // 구독 해지 환불
+            category: 'refund',
+            type: 'full',  // 구독 해지 환불 (전액 환불 의도)
             status: 'done',
             cancelReason: reason || 'User requested',
             refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
-import { payWithBillingKey } from '@/lib/toss';
+import { payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById, verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
@@ -118,8 +118,8 @@ export async function POST(request: NextRequest) {
     const paymentAmount = amount || planInfo.price;
 
     // 결제 수행
-    const orderId = `CONVERT_${Date.now()}`;
-    const orderName = `YAMOO ${planInfo.name} 플랜 - 즉시 전환`;
+    const orderId = `SUB_${Date.now()}`;
+    const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
 
     console.log('Processing immediate conversion payment:', { orderId, paymentAmount, tenantId });
 
@@ -169,7 +169,8 @@ export async function POST(request: NextRequest) {
         amount: paymentAmount,
         plan,
         previousPlan: 'trial',  // Trial에서 전환
-        type: 'conversion',  // Trial에서 전환
+        category: 'subscription',
+        type: 'trial_convert',
         status: 'done',
         method: paymentResponse.method,
         cardInfo: paymentResponse.card || null,

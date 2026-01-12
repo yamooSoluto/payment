@@ -174,7 +174,10 @@ export async function POST(request: NextRequest) {
     let refundResult = null;
     let originalPaymentId = null;
     let actualRefundedAmount = 0; // 실제 환불된 금액
-    const refundOrderId = `REFUND_${timestamp}_${tenantId}`;
+    const refundOrderId = `REF_${timestamp}`;
+
+    // 업그레이드/다운그레이드 판별
+    const isUpgrade = newPlanPrice > previousAmount;
 
     if (creditAmount > 0) {
       // 가장 최근 원결제 내역 조회 (환불이나 플랜변경 제외)
@@ -273,10 +276,10 @@ export async function POST(request: NextRequest) {
 
     // 2. 새 플랜 결제 (일할계산)
     let paymentResponse = null;
-    const paymentOrderId = `${newPlan.toUpperCase()}_${timestamp}_${tenantId}`;
+    const paymentOrderId = `CHG_${timestamp}`;
 
     if (proratedNewAmount && proratedNewAmount > 0) {
-      const orderName = `YAMOO ${getPlanName(newPlan)} 플랜`;
+      const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
 
       try {
         paymentResponse = await payWithBillingKey(
@@ -326,7 +329,8 @@ export async function POST(request: NextRequest) {
           paymentKey: refundResult.paymentKey || null,
           amount: -actualRefundedAmount, // 음수로 저장 (환불)
           plan: previousPlan,
-          type: 'plan_change_refund',
+          category: 'refund',
+          type: 'partial',
           previousPlan,
           newPlan,
           status: 'refunded',
@@ -359,7 +363,8 @@ export async function POST(request: NextRequest) {
           paymentKey: paymentResponse.paymentKey,
           amount: proratedNewAmount,
           plan: newPlan,
-          type: 'plan_change',
+          category: 'change',
+          type: isUpgrade ? 'upgrade' : 'downgrade',
           previousPlan,
           status: 'done',
           method: paymentResponse.method,

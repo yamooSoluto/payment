@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
             }
 
             // 첫 결제 수행
-            const orderId = `TRIAL_CONVERT_${Date.now()}`;
-            const orderName = `YAMOO ${plan} 플랜 - 무료체험 전환`;
+            const orderId = `SUB_${Date.now()}`;
+            const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
 
             const paymentResponse = await payWithBillingKey(
               billingKey,
@@ -100,7 +100,8 @@ export async function GET(request: NextRequest) {
                 paymentKey: paymentResponse.paymentKey,
                 amount,
                 plan,
-                type: 'trial_conversion',
+                category: 'subscription',
+                type: 'trial_convert',
                 status: 'done',
                 method: paymentResponse.method,
                 cardInfo: paymentResponse.card || null,
@@ -404,8 +405,8 @@ export async function GET(request: NextRequest) {
         }
 
         // 빌링키로 자동 결제
-        const orderId = `AUTO_${Date.now()}`;
-        const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜 - 정기결제`;
+        const orderId = `REC_${Date.now()}`;
+        const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜`;
 
         // 가격 정책에 따른 실제 결제 금액 계산
         const effectiveAmount = getEffectiveAmount({
@@ -449,8 +450,11 @@ export async function GET(request: NextRequest) {
             paymentKey: response.paymentKey,
             amount: effectiveAmount,
             plan: subscription.plan,
+            category: 'recurring',
+            type: 'auto',
             status: 'done',
             method: response.method,
+            cardInfo: response.card || null,
             receiptUrl: response.receipt?.url || null,
             idempotencyKey,  // 멱등성 키 저장
             paidAt: new Date(),
