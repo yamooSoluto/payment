@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
-import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 
-// GET: 회원 목록 조회 (이메일 기준으로 그룹화)
+// GET: 회원 목록 조회 (users 컬렉션 기반)
 export async function GET(request: NextRequest) {
   try {
     const admin = await getAdminFromRequest(request);
@@ -24,9 +24,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const search = searchParams.get('search') || '';
-    const status = searchParams.get('status') || ''; // active, canceled, trial
 
-    // 이메일별로 그룹화할 인터페이스
     interface TenantInfo {
       tenantId: string;
       brandName: string;
@@ -35,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     interface MemberData {
-      id: string;  // email을 ID로 사용 (URL 인코딩됨)
+      id: string;
       email: string;
       name: string;
       phone: string;
@@ -44,33 +42,26 @@ export async function GET(request: NextRequest) {
       createdAt: string | null;
     }
 
-    const memberMap = new Map<string, MemberData>();
+    // 1. users 컬렉션에서 회원 목록 조회
+    const usersSnapshot = await db.collection('users').get();
 
-    // 1. tenants 컬렉션에서 조회
+    // 2. tenants 컬렉션에서 매장 정보 조회 (이메일로 그룹화)
     const tenantsSnapshot = await db.collection('tenants').get();
+    const tenantsByEmail = new Map<string, TenantInfo[]>();
 
-    // 2. subscriptions 컬렉션 전체 조회 (tenants에 없는 구독도 포함)
+    // 3. subscriptions 컬렉션에서 구독 정보 조회
     const subscriptionsSnapshot = await db.collection('subscriptions').get();
-
-    // 구독 정보 맵 생성
-    const subscriptionMap = new Map<string, {
-      plan: string;
-      status: string;
-      email: string;
-      createdAt: Date | null;
-    }>();
+    const subscriptionMap = new Map<string, { plan: string; status: string }>();
 
     subscriptionsSnapshot.docs.forEach((doc) => {
       const data = doc.data();
       subscriptionMap.set(doc.id, {
         plan: data?.plan || '',
         status: data?.status || '',
-        email: data?.email || '',
-        createdAt: data?.createdAt?.toDate?.() || null,
       });
     });
 
-    // 3. tenants 컬렉션 처리
+    // 4. tenants를 이메일로 그룹화
     tenantsSnapshot.docs.forEach(doc => {
       const data = doc.data();
       const email = data.email || '';
@@ -86,74 +77,29 @@ export async function GET(request: NextRequest) {
         status: subscription?.status || data.subscriptionStatus || '',
       };
 
-      if (memberMap.has(email)) {
-        const member = memberMap.get(email)!;
-        // 중복 tenantId 체크
-        if (!member.tenants.some(t => t.tenantId === tenantId)) {
-          member.tenants.push(tenantInfo);
-          member.tenantCount = member.tenants.length;
-        }
+      if (tenantsByEmail.has(email)) {
+        tenantsByEmail.get(email)!.push(tenantInfo);
       } else {
-        memberMap.set(email, {
-          id: encodeURIComponent(email),
-          email,
-          name: data.name || data.ownerName || '',
-          phone: data.phone || '',
-          tenants: [tenantInfo],
-          tenantCount: 1,
-          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        });
+        tenantsByEmail.set(email, [tenantInfo]);
       }
     });
 
-    // 4. subscriptions에는 있지만 tenants에는 없는 회원 추가
-    subscriptionsSnapshot.docs.forEach(doc => {
+    // 5. users 컬렉션 기반으로 회원 목록 생성
+    let members: MemberData[] = usersSnapshot.docs.map(doc => {
       const data = doc.data();
-      const email = data?.email || '';
-      if (!email) return;
+      const email = doc.id; // users 컬렉션은 email을 doc ID로 사용
+      const tenants = tenantsByEmail.get(email) || [];
 
-      const tenantId = doc.id;
-
-      // 이미 memberMap에 있는지 확인
-      if (memberMap.has(email)) {
-        const member = memberMap.get(email)!;
-        // 해당 tenantId가 이미 있는지 확인
-        if (!member.tenants.some(t => t.tenantId === tenantId)) {
-          member.tenants.push({
-            tenantId,
-            brandName: '(구독만 존재)',
-            plan: data?.plan || '',
-            status: data?.status || '',
-          });
-          member.tenantCount = member.tenants.length;
-        }
-      } else {
-        // tenants에 없는 새 회원
-        memberMap.set(email, {
-          id: encodeURIComponent(email),
-          email,
-          name: '',
-          phone: '',
-          tenants: [{
-            tenantId,
-            brandName: '(구독만 존재)',
-            plan: data?.plan || '',
-            status: data?.status || '',
-          }],
-          tenantCount: 1,
-          createdAt: data?.createdAt?.toDate?.()?.toISOString() || null,
-        });
-      }
+      return {
+        id: encodeURIComponent(email),
+        email,
+        name: data.name || '',
+        phone: data.phone || '',
+        tenants,
+        tenantCount: tenants.length,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+      };
     });
-
-    let members = Array.from(memberMap.values());
-
-    // 상태 필터
-    if (status) {
-      members = members.filter(m =>
-        m.tenants.some(t => t.status === status)
-      );
-    }
 
     // 검색 필터
     if (search) {
@@ -216,12 +162,14 @@ export async function POST(request: NextRequest) {
     }
 
     const db = initializeFirebaseAdmin();
-    if (!db) {
+    const auth = getAdminAuth();
+
+    if (!db || !auth) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
     const body = await request.json();
-    const { email, brandName, name, phone, planId, subscriptionStatus } = body;
+    const { email, password, name, phone } = body;
 
     if (!email) {
       return NextResponse.json(
@@ -230,54 +178,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 이메일 중복 확인
-    const existingSnapshot = await db.collection('tenants')
-      .where('email', '==', email)
-      .get();
-
-    if (!existingSnapshot.empty) {
+    if (!password) {
       return NextResponse.json(
-        { error: '이미 등록된 이메일입니다.' },
+        { error: '비밀번호는 필수입니다.' },
         { status: 400 }
       );
     }
 
-    const now = new Date();
-    const tenantId = `tenant_${Date.now()}`;
+    // Firebase Auth 이메일 중복 확인
+    try {
+      await auth.getUserByEmail(email);
+      // 사용자가 존재하면 중복
+      return NextResponse.json(
+        { error: '이미 등록된 이메일입니다.' },
+        { status: 400 }
+      );
+    } catch (error: unknown) {
+      // auth/user-not-found 에러면 정상 (신규 사용자)
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 'auth/user-not-found')) {
+        throw error;
+      }
+    }
 
-    // 회원 생성
-    const docRef = await db.collection('tenants').add({
-      tenantId,
+    // 연락처 중복 확인 (입력된 경우만)
+    if (phone) {
+      const existingPhone = await db.collection('users')
+        .where('phone', '==', phone)
+        .limit(1)
+        .get();
+
+      if (!existingPhone.empty) {
+        return NextResponse.json(
+          { error: '이미 등록된 연락처입니다.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Firebase Auth 사용자 생성
+    await auth.createUser({
       email,
-      brandName: brandName || '',
+      password,
+      displayName: name || undefined,
+    });
+
+    const now = new Date();
+
+    // users 컬렉션에 저장
+    await db.collection('users').doc(email).set({
+      email,
       name: name || '',
       phone: phone || '',
-      planId: planId || '',
-      subscriptionStatus: subscriptionStatus || 'trial',
       createdAt: now,
       updatedAt: now,
       createdBy: admin.adminId,
       isManualRegistration: true,
     });
 
-    // 구독 정보도 함께 생성 (필요한 경우)
-    if (planId && subscriptionStatus === 'active') {
-      const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14일 후
-      await db.collection('subscriptions').doc(tenantId).set({
-        email,
-        plan: planId,
-        status: subscriptionStatus,
-        currentPeriodStart: now,
-        currentPeriodEnd: trialEndDate,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
     return NextResponse.json({
       success: true,
-      id: docRef.id,
-      tenantId,
+      email,
     });
   } catch (error) {
     console.error('Create member error:', error);

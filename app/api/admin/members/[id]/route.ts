@@ -28,27 +28,29 @@ export async function GET(
     // URL 디코딩된 이메일로 조회
     const email = decodeURIComponent(id);
 
-    // 이메일로 tenants 조회
-    const tenantsSnapshot = await db.collection('tenants')
-      .where('email', '==', email)
-      .get();
+    // users 컬렉션에서 회원 기본 정보 조회
+    const userDoc = await db.collection('users').doc(email).get();
 
-    if (tenantsSnapshot.empty) {
+    if (!userDoc.exists) {
       return NextResponse.json({ error: '회원을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    // 첫 번째 tenant에서 회원 기본 정보 가져오기
-    const firstTenantData = tenantsSnapshot.docs[0].data();
+    const userData = userDoc.data()!;
 
-    // 회원 기본 정보
+    // 회원 기본 정보 (users 컬렉션 기반)
     const member = {
       id: encodeURIComponent(email),
       email,
-      name: firstTenantData.name || firstTenantData.ownerName || '',
-      phone: firstTenantData.phone || '',
-      createdAt: firstTenantData.createdAt?.toDate?.()?.toISOString() || null,
-      memo: firstTenantData.memo || '',
+      name: userData.name || '',
+      phone: userData.phone || '',
+      createdAt: userData.createdAt?.toDate?.()?.toISOString() || null,
+      memo: userData.memo || '',
     };
+
+    // 이메일로 tenants 조회 (매장 정보용)
+    const tenantsSnapshot = await db.collection('tenants')
+      .where('email', '==', email)
+      .get();
 
     // 모든 매장(tenant) 정보 수집
     const tenantDataList = tenantsSnapshot.docs.map(doc => {
@@ -292,36 +294,36 @@ export async function PUT(
     }
 
     // 일반 정보 수정 (이메일 변경 없음)
+    const userRef = db.collection('users').doc(oldEmail);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      return NextResponse.json({ error: '회원을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const batch = db.batch();
+
+    // users 컬렉션 업데이트 (기본 정보)
+    batch.update(userRef, {
+      ...(name !== undefined && { name }),
+      ...(phone !== undefined && { phone }),
+      ...(memo !== undefined && { memo }),
+      updatedAt: new Date(),
+      updatedBy: admin.adminId,
+    });
+
+    // tenants 컬렉션도 동기화 (매장에 저장된 회원 정보)
     const tenantsSnapshot = await db.collection('tenants')
       .where('email', '==', oldEmail)
       .get();
 
-    if (tenantsSnapshot.empty) {
-      return NextResponse.json({ error: '회원을 찾을 수 없습니다.' }, { status: 404 });
-    }
-
-    // 모든 tenant 문서 업데이트
-    const batch = db.batch();
     tenantsSnapshot.docs.forEach(doc => {
       batch.update(doc.ref, {
         ...(name !== undefined && { name }),
         ...(phone !== undefined && { phone }),
-        ...(memo !== undefined && { memo }),
         updatedAt: new Date(),
-        updatedBy: admin.adminId,
       });
     });
-
-    // users 컬렉션도 업데이트
-    const userRef = db.collection('users').doc(oldEmail);
-    const userDoc = await userRef.get();
-    if (userDoc.exists) {
-      batch.update(userRef, {
-        ...(name !== undefined && { name }),
-        ...(phone !== undefined && { phone }),
-        updatedAt: new Date(),
-      });
-    }
 
     await batch.commit();
 

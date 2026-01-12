@@ -109,14 +109,21 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           fixed top-0 left-0 z-50 h-screen bg-gray-900 transform transition-all duration-200 ease-in-out
           lg:translate-x-0 lg:sticky lg:z-auto lg:top-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          ${collapsed ? 'w-16' : 'w-64'}
+          ${collapsed ? 'w-16' : 'w-56'}
         `}
       >
         {/* 로고 */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-800">
-          <Link href="/admin" className="flex items-center gap-2 overflow-hidden">
+        <div className={`flex items-center h-16 border-b border-gray-800 ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+          <Link href="/admin" className={`flex items-center overflow-hidden ${collapsed ? 'justify-center' : 'gap-2'}`}>
             {collapsed ? (
-              <span className="text-xl font-bold text-white">Y</span>
+              <div className="bg-gray-700/50 rounded-lg p-1">
+                <Image
+                  src="/yamoo_favi2.png"
+                  alt="YAMOO"
+                  width={34}
+                  height={34}
+                />
+              </div>
             ) : (
               <>
                 <Image
@@ -129,12 +136,14 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
               </>
             )}
           </Link>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1 text-gray-400 hover:text-white"
-          >
-            <Xmark className="w-5 h-5" />
-          </button>
+          {!collapsed && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1 text-gray-400 hover:text-white"
+            >
+              <Xmark className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* 메뉴 */}

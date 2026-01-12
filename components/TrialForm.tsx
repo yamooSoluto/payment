@@ -424,22 +424,42 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">무료체험 신청이 완료되었습니다!</h3>
 
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-gray-600 text-sm sm:text-base mb-2">서비스 이용을 위한 정보가</p>
-            <p className="text-gray-600 text-sm sm:text-base mb-3">
-              <span className="font-semibold text-[#ffbf03]">{formData.phone}</span>으로 발송되었습니다.
-            </p>
-            <p className="text-gray-500 text-sm">
-              📱 아이디: <strong>{formData.email}</strong>
-            </p>
-            <p className="text-gray-500 text-sm">
-              🔑 임시 비밀번호 및 포탈 링크
-            </p>
+            {user ? (
+              // 로그인 상태: 기존 계정으로 포탈 이용 안내
+              <>
+                <p className="text-gray-600 text-sm sm:text-base mb-3">
+                  현재 로그인한 계정으로 포탈에 바로 접속하실 수 있습니다.
+                </p>
+                <p className="text-gray-500 text-sm">
+                  📱 아이디: <strong>{formData.email}</strong>
+                </p>
+                <p className="text-gray-500 text-sm">
+                  🔑 홈페이지 비밀번호로 로그인
+                </p>
+              </>
+            ) : (
+              // 비로그인 상태: 임시 비밀번호 발송 안내
+              <>
+                <p className="text-gray-600 text-sm sm:text-base mb-2">서비스 이용을 위한 정보가</p>
+                <p className="text-gray-600 text-sm sm:text-base mb-3">
+                  <span className="font-semibold text-[#ffbf03]">{formData.phone}</span>으로 발송되었습니다.
+                </p>
+                <p className="text-gray-500 text-sm">
+                  📱 아이디: <strong>{formData.email}</strong>
+                </p>
+                <p className="text-gray-500 text-sm">
+                  🔑 임시 비밀번호 및 포탈 링크
+                </p>
+              </>
+            )}
           </div>
 
-          <p className="text-gray-500 text-xs sm:text-sm mb-6">
-            카카오톡을 확인해 주세요.<br />
-            <span className="text-gray-400">(카카오톡 미사용 시 문자를 확인해 주세요)</span>
-          </p>
+          {!user && (
+            <p className="text-gray-500 text-xs sm:text-sm mb-6">
+              카카오톡을 확인해 주세요.<br />
+              <span className="text-gray-400">(카카오톡 미사용 시 문자를 확인해 주세요)</span>
+            </p>
+          )}
 
           <a
             href="https://app.yamoo.ai.kr"

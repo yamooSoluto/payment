@@ -129,6 +129,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   });
   const [editingSub, setEditingSub] = useState(false);
 
+  // 비밀번호 변경 모달 상태
+  const [passwordModal, setPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+
   useEffect(() => {
     fetchMemberDetail();
   }, [id]);
@@ -468,6 +476,49 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
+  // 비밀번호 변경
+  const handleChangePassword = async () => {
+    if (!passwordForm.newPassword) {
+      alert('새 비밀번호를 입력해주세요.');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      alert('비밀번호는 최소 6자 이상이어야 합니다.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    if (!confirm('비밀번호를 변경하시겠습니까?')) {
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const response = await fetch(`/api/admin/members/${id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: passwordForm.newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('비밀번호가 변경되었습니다.');
+        setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setPasswordModal(false);
+      } else {
+        alert(data.error || '비밀번호 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to change password:', error);
+      alert('비밀번호 변경 중 오류가 발생했습니다.');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   // 구독 플랜 변경 시 금액 자동 설정
   const handleSubPlanChange = (plan: string) => {
     const planPrices: Record<string, number> = {
@@ -603,19 +654,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <h2 className="text-lg font-semibold">기본 정보</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">이름</label>
-                {editMode ? (
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="font-medium">{member.name || '-'}</p>
-                )}
-              </div>
+              {/* 이메일 */}
               <div>
                 <label className="block text-sm text-gray-500 mb-1">이메일</label>
                 {editMode ? (
@@ -636,6 +675,37 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   <p className="font-medium">{member.email || '-'}</p>
                 )}
               </div>
+
+              {/* 비밀번호 */}
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">비밀번호</label>
+                <button
+                  onClick={() => {
+                    setPasswordForm({ newPassword: '', confirmPassword: '' });
+                    setPasswordModal(true);
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  비밀번호 변경
+                </button>
+              </div>
+
+              {/* 이름 */}
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">이름</label>
+                {editMode ? (
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <p className="font-medium">{member.name || '-'}</p>
+                )}
+              </div>
+
+              {/* 연락처 */}
               <div>
                 <label className="block text-sm text-gray-500 mb-1">연락처</label>
                 {editMode ? (
@@ -649,13 +719,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   <p className="font-medium">{member.phone || '-'}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">가입일</label>
-                <p className="font-medium">
-                  {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
-                </p>
-              </div>
             </div>
+
             {/* 메모 */}
             <div className="mt-4">
               <label className="block text-sm text-gray-500 mb-1">메모</label>
@@ -1412,6 +1477,69 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                     <FloppyDisk className="w-4 h-4" />
                     저장
                   </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 비밀번호 변경 모달 */}
+      {passwordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">비밀번호 변경</h3>
+              <p className="text-sm text-gray-500 mt-1">{member?.email}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  새 비밀번호
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="새 비밀번호 입력"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  새 비밀번호 확인
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="비밀번호 확인"
+                />
+                {passwordForm.newPassword && passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && (
+                  <p className="text-xs text-red-500 mt-1">비밀번호가 일치하지 않습니다.</p>
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setPasswordModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleChangePassword}
+                disabled={changingPassword || !passwordForm.newPassword || !passwordForm.confirmPassword || passwordForm.newPassword !== passwordForm.confirmPassword}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {changingPassword ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    변경 중...
+                  </>
+                ) : (
+                  '변경하기'
                 )}
               </button>
             </div>

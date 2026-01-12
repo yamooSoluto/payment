@@ -346,15 +346,17 @@ export async function getTenantsByEmail(email: string): Promise<Array<{
       return [];
     }
 
-    // 모든 tenantId 수집
-    const tenantDataList = tenantsSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        tenantId: data.tenantId || doc.id,
-        brandName: data.brandName || '이름 없음',
-      };
-    });
+    // 모든 tenantId 수집 (삭제된 매장 제외)
+    const tenantDataList = tenantsSnapshot.docs
+      .filter((doc) => !doc.data().deleted)
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          tenantId: data.tenantId || doc.id,
+          brandName: data.brandName || '이름 없음',
+        };
+      });
 
     // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
     const subscriptionRefs = tenantDataList.map((t) =>

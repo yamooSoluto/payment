@@ -5,6 +5,7 @@ import { formatPrice } from '@/lib/utils';
 import { useTossSDK, getTossPayment } from '@/hooks/useTossSDK';
 import { Check, InfoCircle, NavArrowDown, NavArrowUp } from 'iconoir-react';
 import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleTexts } from '@/lib/payment-constants';
+import RefundPolicyModal from '@/components/modals/RefundPolicyModal';
 import { useAuth } from '@/contexts/AuthContext';
 
 // 플랜별 상세 기능 (요금제 페이지와 동일)
@@ -163,6 +164,7 @@ export default function TossPaymentWidget({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(sdkError);
   const [agreed, setAgreed] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPlanTooltip, setShowPlanTooltip] = useState(false);
   const [showCalculationDetails, setShowCalculationDetails] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -764,7 +766,19 @@ export default function TossPaymentWidget({
             </li>
           ))}
         </ul>
+        <button
+          type="button"
+          onClick={() => setShowTermsModal(true)}
+          className="mt-3 text-sm text-blue-600 hover:text-blue-700 underline"
+        >
+          상세 내용 확인하기
+        </button>
       </div>
+
+      {/* 결제/환불 규정 모달 */}
+      {showTermsModal && (
+        <RefundPolicyModal onClose={() => setShowTermsModal(false)} />
+      )}
 
       {/* 에러 메시지 */}
       {error && (

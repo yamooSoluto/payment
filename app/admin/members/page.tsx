@@ -33,7 +33,6 @@ export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
     limit: 20,
@@ -44,11 +43,9 @@ export default function MembersPage() {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
-    brandName: '',
+    password: '',
     name: '',
     phone: '',
-    planId: '',
-    subscriptionStatus: 'trial',
   });
 
   const fetchMembers = useCallback(async () => {
@@ -58,7 +55,6 @@ export default function MembersPage() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         ...(search && { search }),
-        ...(status && { status }),
       });
 
       const response = await fetch(`/api/admin/members?${params}`);
@@ -72,7 +68,7 @@ export default function MembersPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, status]);
+  }, [pagination.page, pagination.limit, search]);
 
   useEffect(() => {
     fetchMembers();
@@ -87,11 +83,9 @@ export default function MembersPage() {
   const handleOpenModal = () => {
     setFormData({
       email: '',
-      brandName: '',
+      password: '',
       name: '',
       phone: '',
-      planId: '',
-      subscriptionStatus: 'trial',
     });
     setShowModal(true);
   };
@@ -103,6 +97,10 @@ export default function MembersPage() {
   const handleSave = async () => {
     if (!formData.email) {
       alert('이메일은 필수입니다.');
+      return;
+    }
+    if (!formData.password) {
+      alert('비밀번호는 필수입니다.');
       return;
     }
 
@@ -129,36 +127,12 @@ export default function MembersPage() {
     }
   };
 
-  const getStatusBadge = (subscriptionStatus: string) => {
-    switch (subscriptionStatus) {
-      case 'active':
-        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">활성</span>;
-      case 'trial':
-        return <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">체험중</span>;
-      case 'canceled':
-        return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">해지</span>;
-      case 'past_due':
-        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">연체</span>;
-      default:
-        return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">{subscriptionStatus || '-'}</span>;
-    }
-  };
-
-  const getPlanName = (planId: string) => {
-    switch (planId) {
-      case 'basic': return 'Basic';
-      case 'business': return 'Business';
-      case 'enterprise': return 'Enterprise';
-      default: return planId || '-';
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Group className="w-8 h-8 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">회원 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900">회원</h1>
           <span className="text-sm text-gray-500">총 {pagination.total}명</span>
         </div>
         <button
@@ -183,19 +157,6 @@ export default function MembersPage() {
               className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">전체 상태</option>
-            <option value="active">활성</option>
-            <option value="trial">체험중</option>
-            <option value="canceled">해지</option>
-          </select>
           <button
             type="submit"
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -220,11 +181,10 @@ export default function MembersPage() {
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
+                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">상태</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
                 </tr>
               </thead>
@@ -235,11 +195,11 @@ export default function MembersPage() {
                     onClick={() => router.push(`/admin/members/${member.id}`)}
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {member.name || '-'}
-                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {member.email || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {member.name || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {member.phone || '-'}
@@ -252,20 +212,6 @@ export default function MembersPage() {
                             <span className="ml-1 text-xs text-gray-400">
                               외 {member.tenantCount - 1}개
                             </span>
-                          )}
-                        </div>
-                      ) : '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      {member.tenants.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {member.tenants.slice(0, 2).map((tenant, idx) => (
-                            <span key={idx}>
-                              {getStatusBadge(tenant.status)}
-                            </span>
-                          ))}
-                          {member.tenants.length > 2 && (
-                            <span className="text-xs text-gray-400">+{member.tenants.length - 2}</span>
                           )}
                         </div>
                       ) : '-'}
@@ -315,7 +261,7 @@ export default function MembersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">회원 수동 등록</h2>
+              <h2 className="text-xl font-bold">회원 등록</h2>
               <button
                 onClick={handleCloseModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -327,7 +273,7 @@ export default function MembersPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이메일 <span className="text-red-500">*</span>
+                  이메일 (ID) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -335,6 +281,19 @@ export default function MembersPage() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="email@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  비밀번호 (PW) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="비밀번호 입력"
                 />
               </div>
 
@@ -353,19 +312,6 @@ export default function MembersPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  매장명
-                </label>
-                <input
-                  type="text"
-                  value={formData.brandName}
-                  onChange={(e) => setFormData({ ...formData, brandName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="매장명 입력"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   연락처
                 </label>
                 <input
@@ -375,37 +321,6 @@ export default function MembersPage() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="010-0000-0000"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  플랜
-                </label>
-                <select
-                  value={formData.planId}
-                  onChange={(e) => setFormData({ ...formData, planId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">선택 안함</option>
-                  <option value="basic">Basic</option>
-                  <option value="business">Business</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  상태
-                </label>
-                <select
-                  value={formData.subscriptionStatus}
-                  onChange={(e) => setFormData({ ...formData, subscriptionStatus: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="trial">체험중</option>
-                  <option value="active">활성</option>
-                  <option value="canceled">해지</option>
-                </select>
               </div>
             </div>
 
