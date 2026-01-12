@@ -26,6 +26,7 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
   const [nameError, setNameError] = useState('');
   const [nameSuccess, setNameSuccess] = useState('');
   const [currentName, setCurrentName] = useState(name);
+  const [currentPhone, setCurrentPhone] = useState(phone);
   // 비밀번호 변경 상태
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -233,6 +234,7 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
       }
 
       setSuccess('연락처가 변경되었습니다.');
+      setCurrentPhone(newPhone.replace(/-/g, ''));
       onPhoneChange?.(newPhone.replace(/-/g, ''));
 
       // 상태 초기화
@@ -488,7 +490,7 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
             {!isChangingPhone ? (
               <div className="flex items-center gap-3">
                 <span className="font-medium text-gray-900">
-                  {showPhone ? phone : maskPhone(phone)}
+                  {showPhone ? currentPhone : maskPhone(currentPhone)}
                 </span>
                 <button
                   onClick={() => setShowPhone(!showPhone)}

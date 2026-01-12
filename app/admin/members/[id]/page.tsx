@@ -64,6 +64,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     name: '',
     phone: '',
     memo: '',
+    newEmail: '',
   });
   const [pricePolicyModal, setPricePolicyModal] = useState<{
     isOpen: boolean;
@@ -144,6 +145,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           name: data.member.name || '',
           phone: data.member.phone || '',
           memo: data.member.memo || '',
+          newEmail: data.member.email || '',
         });
       }
     } catch (error) {
@@ -154,6 +156,17 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleSave = async () => {
+    // 이메일 변경 시 확인
+    if (formData.newEmail && member && formData.newEmail.toLowerCase() !== member.email.toLowerCase()) {
+      const confirmed = confirm(
+        `이메일을 변경하시겠습니까?\n\n` +
+        `기존: ${member.email}\n` +
+        `변경: ${formData.newEmail}\n\n` +
+        `⚠️ 변경 후 사용자는 새 이메일로 재로그인해야 합니다.`
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       const response = await fetch(`/api/admin/members/${id}`, {
@@ -162,12 +175,23 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         body: JSON.stringify(formData),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         setEditMode(false);
-        fetchMemberDetail();
+        // 이메일이 변경된 경우 새 URL로 이동
+        if (data.newEmail) {
+          alert(data.message || '이메일이 변경되었습니다.');
+          router.replace(`/admin/members/${encodeURIComponent(data.newEmail)}`);
+        } else {
+          fetchMemberDetail();
+        }
+      } else {
+        alert(data.error || '저장에 실패했습니다.');
       }
     } catch (error) {
       console.error('Failed to save member:', error);
+      alert('저장 중 오류가 발생했습니다.');
     } finally {
       setSaving(false);
     }
@@ -594,7 +618,23 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               </div>
               <div>
                 <label className="block text-sm text-gray-500 mb-1">이메일</label>
-                <p className="font-medium">{member.email || '-'}</p>
+                {editMode ? (
+                  <div>
+                    <input
+                      type="email"
+                      value={formData.newEmail}
+                      onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    {formData.newEmail.toLowerCase() !== member.email.toLowerCase() && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⚠️ 이메일 변경 시 사용자가 재로그인해야 합니다
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="font-medium">{member.email || '-'}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-500 mb-1">연락처</label>

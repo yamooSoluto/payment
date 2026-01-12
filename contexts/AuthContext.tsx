@@ -90,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    setUser(null); // 즉시 로그아웃 상태로 변경 (UI 즉시 반영)
     clearCachedAuthState();
     await firebaseSignOut(auth);
   }, []);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
-import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // GET: 회원 상세 조회 (이메일 기준)
 export async function GET(
@@ -180,14 +181,119 @@ export async function PUT(
     }
 
     // URL 디코딩된 이메일
-    const email = decodeURIComponent(id);
+    const oldEmail = decodeURIComponent(id);
 
     const body = await request.json();
-    const { name, phone, memo } = body;
+    const { name, phone, memo, newEmail } = body;
 
-    // 이메일로 모든 tenant 조회
+    // 이메일 변경 요청인 경우
+    if (newEmail && newEmail !== oldEmail) {
+      const normalizedNewEmail = newEmail.toLowerCase().trim();
+
+      // 새 이메일이 이미 사용 중인지 확인
+      const [existingUser, existingTenant] = await Promise.all([
+        db.collection('users').doc(normalizedNewEmail).get(),
+        db.collection('tenants').where('email', '==', normalizedNewEmail).limit(1).get(),
+      ]);
+
+      if (existingUser.exists || !existingTenant.empty) {
+        return NextResponse.json(
+          { error: '이미 사용 중인 이메일입니다.' },
+          { status: 400 }
+        );
+      }
+
+      // Firebase Auth 이메일 변경
+      const adminAuth = getAdminAuth();
+      if (!adminAuth) {
+        return NextResponse.json({ error: 'Auth service unavailable' }, { status: 500 });
+      }
+
+      try {
+        // 기존 이메일로 Firebase Auth 사용자 조회
+        const userRecord = await adminAuth.getUserByEmail(oldEmail);
+        // 이메일 업데이트
+        await adminAuth.updateUser(userRecord.uid, { email: normalizedNewEmail });
+      } catch (authError) {
+        console.error('Firebase Auth email update error:', authError);
+        return NextResponse.json(
+          { error: 'Firebase Auth 이메일 변경에 실패했습니다.' },
+          { status: 500 }
+        );
+      }
+
+      // Firestore 업데이트 (트랜잭션)
+      const now = new Date();
+      await db.runTransaction(async (transaction) => {
+        // 1. 기존 users 문서 읽기
+        const oldUserDoc = await transaction.get(db.collection('users').doc(oldEmail));
+        const oldUserData = oldUserDoc.exists ? oldUserDoc.data() : {};
+
+        // 2. 새 users 문서 생성 (기존 데이터 복사 + previousEmails 추가)
+        transaction.set(db.collection('users').doc(normalizedNewEmail), {
+          ...oldUserData,
+          email: normalizedNewEmail, // 새 이메일로 명시적 업데이트
+          ...(name !== undefined && { name }),
+          ...(phone !== undefined && { phone }),
+          previousEmails: FieldValue.arrayUnion(oldEmail),
+          emailChangedAt: now,
+          updatedAt: now,
+          updatedBy: admin.adminId,
+        });
+
+        // 3. 기존 users 문서 삭제
+        if (oldUserDoc.exists) {
+          transaction.delete(db.collection('users').doc(oldEmail));
+        }
+
+        // 4. 모든 tenant의 email 업데이트
+        const tenantsSnapshot = await db.collection('tenants')
+          .where('email', '==', oldEmail)
+          .get();
+
+        tenantsSnapshot.docs.forEach(doc => {
+          transaction.update(doc.ref, {
+            email: normalizedNewEmail,
+            ...(name !== undefined && { name }),
+            ...(phone !== undefined && { phone }),
+            ...(memo !== undefined && { memo }),
+            updatedAt: now,
+            updatedBy: admin.adminId,
+          });
+        });
+
+        // 5. auth_sessions 삭제 (기존 세션 무효화)
+        const sessionsSnapshot = await db.collection('auth_sessions')
+          .where('email', '==', oldEmail)
+          .get();
+
+        sessionsSnapshot.docs.forEach(doc => {
+          transaction.delete(doc.ref);
+        });
+
+        // 6. 관리자 로그 기록
+        const logRef = db.collection('admin_logs').doc();
+        transaction.set(logRef, {
+          action: 'email_change',
+          oldEmail,
+          newEmail: normalizedNewEmail,
+          adminId: admin.adminId,
+          adminLoginId: admin.loginId,
+          adminName: admin.name,
+          changedAt: now,
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        newEmail: normalizedNewEmail,
+        message: '이메일이 변경되었습니다. 사용자는 새 이메일로 재로그인해야 합니다.',
+      });
+    }
+
+    // 일반 정보 수정 (이메일 변경 없음)
     const tenantsSnapshot = await db.collection('tenants')
-      .where('email', '==', email)
+      .where('email', '==', oldEmail)
       .get();
 
     if (tenantsSnapshot.empty) {
@@ -205,6 +311,17 @@ export async function PUT(
         updatedBy: admin.adminId,
       });
     });
+
+    // users 컬렉션도 업데이트
+    const userRef = db.collection('users').doc(oldEmail);
+    const userDoc = await userRef.get();
+    if (userDoc.exists) {
+      batch.update(userRef, {
+        ...(name !== undefined && { name }),
+        ...(phone !== undefined && { phone }),
+        updatedAt: new Date(),
+      });
+    }
 
     await batch.commit();
 
