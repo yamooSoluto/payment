@@ -122,7 +122,7 @@ export default function Footer() {
               </button>
             </div>
             <p className="text-gray-500 text-xs">
-              Copyright 2025. YAMOO All rights reserved.
+              Copyright {new Date().getFullYear()}. YAMOO All rights reserved.
             </p>
           </div>
         </div>

@@ -1,8 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getAdminAuth, initializeFirebaseAdmin, adminDb } from '@/lib/firebase-admin';
 import jwt from 'jsonwebtoken';
+import { createAuthSession } from '@/lib/auth-session';
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const AUTH_SESSION_COOKIE = 'auth_session';
 
 /**
  * SSO API - 포털에서 넘어온 Firebase ID Token을 검증하고 세션 생성
@@ -99,6 +101,16 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
       secure: isProduction,
       maxAge: 60 * 60 * 24 * 5, // 5 days
+    });
+
+    // auth_session 생성 (서버 컴포넌트용)
+    const authSessionId = await createAuthSession({ email });
+    response.cookies.set(AUTH_SESSION_COOKIE, authSessionId, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isProduction,
+      maxAge: 60 * 60 * 24, // 24 hours
     });
 
     return response;
