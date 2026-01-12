@@ -21,15 +21,16 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   const hasEmail = searchParams.get('email');
 
   // ssoToken으로 Firebase 로그인 (POST SSO 후 리다이렉트된 경우)
+  // 기존 로그인 세션이 있어도 SSO 토큰으로 새로 로그인 (다른 계정일 수 있음)
   useEffect(() => {
-    if (!hasSsoToken || ssoAttempted.current || user) return;
+    if (!hasSsoToken || ssoAttempted.current) return;
 
     ssoAttempted.current = true;
     setSsoProcessing(true);
 
     const processSSO = async () => {
       try {
-        // Custom Token으로 Firebase 로그인
+        // Custom Token으로 Firebase 로그인 (기존 세션 대체)
         await signInWithCustomToken(auth, hasSsoToken);
         console.log('[SSO] Login successful via ssoToken');
 
@@ -52,8 +53,9 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   }, [hasSsoToken, user, router]);
 
   // idToken으로 SSO 로그인 처리 (GET 방식 fallback)
+  // 기존 로그인 세션이 있어도 SSO 토큰으로 새로 로그인 (다른 계정일 수 있음)
   useEffect(() => {
-    if (!hasIdToken || hasSsoToken || ssoAttempted.current || user) return;
+    if (!hasIdToken || hasSsoToken || ssoAttempted.current) return;
 
     ssoAttempted.current = true;
     setSsoProcessing(true);
@@ -132,7 +134,7 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   }, [user, loading, hasToken, hasSsoToken, hasIdToken, hasEmail, authChecked, ssoProcessing, router]);
 
   // SSO 처리 중 또는 ssoToken/idToken이 있을 때 로딩 표시
-  if (ssoProcessing || ((hasSsoToken || hasIdToken) && !user && !authChecked)) {
+  if (ssoProcessing || ((hasSsoToken || hasIdToken) && !authChecked)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
