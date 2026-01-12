@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { CreditCard } from 'iconoir-react';
-import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
+import { useTossSDK, getTossPayment } from '@/hooks/useTossSDK';
 
 interface ChangeCardButtonProps {
   email: string;
@@ -27,15 +27,16 @@ export default function ChangeCardButton({ email, authParam, currentAlias, tenan
     setError(null);
 
     try {
-      const tossPayments = getTossPayments();
+      // V2 SDK: customerKey로 payment 인스턴스 생성
+      const payment = getTossPayment(email);
 
       // 별칭을 URL에 포함
       const aliasParam = cardAlias ? `&cardAlias=${encodeURIComponent(cardAlias)}` : '';
       const tenantParam = tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '';
 
       // 빌링키 발급 요청 (새 카드 등록)
-      await tossPayments.requestBillingAuth('카드', {
-        customerKey: email,
+      await payment.requestBillingAuth({
+        method: 'CARD',
         successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}${tenantParam}`,
         failUrl: `${window.location.origin}/account/change-card?${authParam}${tenantParam}&error=card_change_failed`,
         customerEmail: email,

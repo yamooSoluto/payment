@@ -85,7 +85,7 @@ export function getPaymentScheduleTexts(options: {
 
   // 예약 모드: Trial 사용자
   if (isReserve && nextBillingDate) {
-    return [`무료체험 종료일인 ${nextBillingDate}부터 매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`];
+    return [`무료체험 종료 후 ${nextBillingDate}부터 매월 ${formatPrice(amount)}원이 자동으로 결제됩니다.`];
   }
 
   // 일반 결제 (처음 구독)

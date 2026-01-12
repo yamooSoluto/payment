@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   }
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setHours(23, 59, 59, 999); // 오늘 하루 끝까지 포함
 
   try {
     // ========== 1. Trial 만료 및 자동 전환 처리 ==========
@@ -326,11 +326,28 @@ export async function GET(request: NextRequest) {
 
     // ========== 5. 정기결제 처리 ==========
     // 오늘 결제일인 구독 찾기 (active 상태)
+    console.log('🔍 Billing query - today:', today.toISOString());
+
+    // 디버그: 먼저 active 구독 전체 조회
+    const allActiveSnapshot = await db
+      .collection('subscriptions')
+      .where('status', '==', 'active')
+      .get();
+
+    console.log('📊 Total active subscriptions:', allActiveSnapshot.docs.length);
+    allActiveSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const nextBilling = data.nextBillingDate?.toDate?.() || data.nextBillingDate;
+      console.log(`  - ${doc.id}: nextBillingDate=${nextBilling}, billingKey=${data.billingKey ? 'exists' : 'missing'}`);
+    });
+
     const activeSubscriptionsSnapshot = await db
       .collection('subscriptions')
       .where('status', '==', 'active')
       .where('nextBillingDate', '<=', today)
       .get();
+
+    console.log('📊 Subscriptions due for billing:', activeSubscriptionsSnapshot.docs.length);
 
     // 재시도 대기 중인 구독 찾기 (past_due 상태, 유예 기간 내)
     const pastDueSubscriptionsSnapshot = await db

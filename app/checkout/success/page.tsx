@@ -102,7 +102,10 @@ function SuccessContent() {
     : email
     ? `?email=${encodeURIComponent(email)}`
     : '';
-  const accountUrl = `/account${authQuery}`;
+  // tenantId가 있으면 해당 매장 상세 페이지로, 없으면 마이페이지로
+  const accountUrl = tenantId
+    ? `/account/${tenantId}${authQuery}`
+    : `/account${authQuery}`;
 
   // URL 정리 임시 비활성화 - 다른 기능과 충돌 테스트
   // useEffect(() => {

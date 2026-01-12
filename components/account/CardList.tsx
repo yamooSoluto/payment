@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CreditCard, Check, Trash, Plus, WarningCircle, EditPencil, Xmark } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
-import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
+import { useTossSDK, getTossPayment } from '@/hooks/useTossSDK';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CardInfo {
@@ -93,13 +93,14 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
     setError(null);
 
     try {
-      const tossPayments = getTossPayments();
+      // V2 SDK: customerKey로 payment 인스턴스 생성
+      const payment = getTossPayment(email);
       const aliasParam = newCardAlias ? `&cardAlias=${encodeURIComponent(newCardAlias)}` : '';
       const tenantParam = `&tenantId=${encodeURIComponent(tenantId)}`;
       const primaryParam = cards.length === 0 ? '' : '&setAsPrimary=false';
 
-      await tossPayments.requestBillingAuth('카드', {
-        customerKey: email,
+      await payment.requestBillingAuth({
+        method: 'CARD',
         successUrl: `${window.location.origin}/api/payments/update-card?${authParam}${aliasParam}${tenantParam}${primaryParam}`,
         failUrl: `${window.location.origin}/account/${tenantId}?${authParam}&error=card_add_failed`,
         customerEmail: email,
@@ -275,8 +276,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">결제 수단</h2>
-        <p className="text-sm text-gray-500 mb-4">유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</p>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">결제 수단</h2>
         <div className="flex items-center justify-center py-6">
           <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
         </div>
@@ -286,13 +286,12 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">결제 수단</h2>
         {cards.length > 0 && (
           <span className="text-xs text-gray-400">{cards.length}/5</span>
         )}
       </div>
-      <p className="text-sm text-gray-500 mb-4">유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</p>
 
       {error && (
         <div className="mb-3 p-2 text-red-500 text-xs flex items-center gap-1.5">
@@ -450,6 +449,28 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
           )}
         </>
       )}
+
+      {/* 안내 사항 */}
+      <div className="mt-6 pt-4 border-t border-gray-100">
+        <div className="space-y-2 text-xs text-gray-500">
+          <p className="flex items-start gap-2">
+            <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <span>유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <span>결제수단은 국내에서 발급한 카드만 지원합니다. 해외카드는 지원하지 않습니다.</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <span>&apos;기본 카드&apos;로 선택된 카드로 자동 결제가 진행됩니다.</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
+            <span>카드를 재발급 받거나 유효기간이 만료된 경우 새 카드 추가 후 &apos;기본 카드&apos;로 등록해 주세요.</span>
+          </p>
+        </div>
+      </div>
 
       {/* 카드 삭제 확인 모달 */}
       {deleteConfirm.isOpen && (

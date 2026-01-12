@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { formatPrice } from '@/lib/utils';
-import { useTossSDK, getTossPayments } from '@/hooks/useTossSDK';
+import { useTossSDK, getTossPayment } from '@/hooks/useTossSDK';
 import { Check, InfoCircle, NavArrowDown, NavArrowUp } from 'iconoir-react';
 import { AGREEMENT_LABEL, REFUND_POLICY_ITEMS, getPaymentScheduleTexts } from '@/lib/payment-constants';
 import { useAuth } from '@/contexts/AuthContext';
@@ -243,8 +243,8 @@ export default function TossPaymentWidget({
         } else {
           throw new Error(data.error || '플랜 변경에 실패했습니다.');
         }
-      } else if (hasBillingKey && isReserve) {
-        // 이미 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
+      } else if (hasBillingKey && isReserve && currentPeriodEnd) {
+        // Active 구독자 + 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
         const idempotencyKey = generateIdempotencyKey('SCHEDULED_CHANGE');
         const authHeader = idToken ? `Bearer ${idToken}` : '';
         const response = await fetch('/api/subscriptions/change-plan', {
@@ -272,6 +272,38 @@ export default function TossPaymentWidget({
           if (currentPeriodEnd) {
             const periodEnd = new Date(currentPeriodEnd);
             const startDate = new Date(periodEnd);
+            startDate.setDate(startDate.getDate() + 1);
+            startQuery = `&start=${startDate.toISOString()}`;
+          }
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&reserved=true${startQuery}${authQuery}`;
+        } else {
+          throw new Error(data.error || '플랜 예약에 실패했습니다.');
+        }
+      } else if (hasBillingKey && isReserve && trialEndDate) {
+        // Trial + 카드 등록됨 + 예약 모드: 기존 빌링키로 예약 API 호출
+        const authHeader = idToken ? `Bearer ${idToken}` : '';
+        const response = await fetch('/api/subscriptions/update-pending-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
+          body: JSON.stringify({
+            email,
+            tenantId: effectiveTenantId,
+            newPlan: plan,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const authQuery = authParam ? `&${authParam}` : '';
+          // Trial 종료일 + 1일이 새 플랜 시작일
+          let startQuery = '';
+          if (trialEndDate) {
+            const trialEnd = new Date(trialEndDate);
+            const startDate = new Date(trialEnd);
             startDate.setDate(startDate.getDate() + 1);
             startQuery = `&start=${startDate.toISOString()}`;
           }
@@ -313,7 +345,8 @@ export default function TossPaymentWidget({
           return;
         }
 
-        const tossPayments = getTossPayments();
+        // V2 SDK: customerKey로 payment 인스턴스 생성
+        const payment = getTossPayment(email);
 
         // 빌링키 발급 요청 (카드 등록 페이지로 리다이렉트)
         const idempotencyKey = generateIdempotencyKey('BILLING_CONFIRM');
@@ -321,8 +354,8 @@ export default function TossPaymentWidget({
         const reserveQuery = isReserve ? `&mode=reserve` : '';
         // 신규 매장인 경우 brandName과 industry 전달
         const newTenantQuery = isNewTenant && brandName ? `&brandName=${encodeURIComponent(brandName)}&industry=${encodeURIComponent(industry || '')}` : '';
-        await tossPayments.requestBillingAuth('카드', {
-          customerKey: email,
+        await payment.requestBillingAuth({
+          method: 'CARD',
           successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`,
           failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,

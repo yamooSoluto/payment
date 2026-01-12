@@ -15,6 +15,7 @@ interface PlanSelectModalProps {
   authParam: string;
   tenantId?: string;
   hasBillingKey?: boolean;
+  hasPendingPlan?: boolean; // 변경할 예약이 있는지 여부
   onUpdatePendingPlan?: (planId: string) => Promise<void>;
   isActiveSubscription?: boolean; // Active 구독자 여부
   currentPlan?: string; // 현재 플랜 (같은 플랜 선택 방지)
@@ -46,7 +47,7 @@ const PLANS = [
   },
 ];
 
-function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, onUpdatePendingPlan, isActiveSubscription, currentPlan, isExpired }: PlanSelectModalProps) {
+function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, hasPendingPlan, onUpdatePendingPlan, isActiveSubscription, currentPlan, isExpired }: PlanSelectModalProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null); // Active 구독자용: 선택된 플랜
 
@@ -74,8 +75,8 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
     }
 
     // Trial 사용자: 기존 로직
-    // 예약 모드이고 billingKey가 있으면 API로 직접 업데이트
-    if (mode === 'schedule' && hasBillingKey && onUpdatePendingPlan) {
+    // 예약 모드이고 billingKey가 있고 변경할 예약이 있으면 API로 직접 업데이트
+    if (mode === 'schedule' && hasBillingKey && hasPendingPlan && onUpdatePendingPlan) {
       setIsUpdating(true);
       try {
         await onUpdatePendingPlan(planId);
@@ -778,6 +779,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 </button>
               </div>
             </div>
+            <p className="text-xs text-blue-400 mt-3">
+              다른 플랜으로 변경하려면 기존 예약을 먼저 취소해주세요.
+            </p>
           </div>
         )}
 
@@ -828,13 +832,14 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
-          {isTrial && (
+          {/* Trial: pendingPlan이 없을 때만 버튼 표시 (있으면 파란 박스에서 예약 취소 가능) */}
+          {isTrial && !subscription.pendingPlan && (
             <>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
                 className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
               >
-                {subscription.pendingPlan ? '예약 변경' : '플랜 예약'}
+                플랜 예약
               </button>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
@@ -942,6 +947,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         authParam={authParam}
         tenantId={tenantId}
         hasBillingKey={!!subscription.billingKey}
+        hasPendingPlan={!!subscription.pendingPlan}
         onUpdatePendingPlan={handleUpdatePendingPlan}
         isActiveSubscription={isActive}
         currentPlan={subscription.plan}

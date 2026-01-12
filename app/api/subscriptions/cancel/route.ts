@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/auth';
 import { cancelPayment, PLAN_PRICES } from '@/lib/toss';
 import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
 async function authenticateRequest(request: NextRequest, bodyToken?: string): Promise<string | null> {
@@ -221,6 +222,11 @@ export async function POST(request: NextRequest) {
           cancelMode: 'immediate',
           refundAmount: refundAmount || 0,
           refundProcessed: !!refundResult,
+          // 예약된 플랜 삭제
+          pendingPlan: FieldValue.delete(),
+          pendingAmount: FieldValue.delete(),
+          pendingMode: FieldValue.delete(),
+          pendingChangeAt: FieldValue.delete(),
           updatedAt: now,
         });
       });
@@ -266,6 +272,11 @@ export async function POST(request: NextRequest) {
         canceledAt: now,
         cancelReason: reason || 'User requested',
         cancelMode: 'scheduled',
+        // 예약된 플랜 삭제
+        pendingPlan: FieldValue.delete(),
+        pendingAmount: FieldValue.delete(),
+        pendingMode: FieldValue.delete(),
+        pendingChangeAt: FieldValue.delete(),
         updatedAt: now,
       });
 

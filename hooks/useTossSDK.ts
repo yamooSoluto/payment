@@ -29,7 +29,7 @@ const loadTossSDK = (): Promise<void> => {
     }
 
     const script = document.createElement('script');
-    script.src = 'https://js.tosspayments.com/v1/payment';
+    script.src = 'https://js.tosspayments.com/v2/standard';
     script.async = true;
     script.onload = () => {
       sdkLoaded = true;
@@ -76,4 +76,10 @@ export function getTossPayments() {
     throw new Error('토스페이먼츠 SDK가 로드되지 않았습니다.');
   }
   return window.TossPayments(clientKey);
+}
+
+// V2 SDK: customerKey로 payment 인스턴스 생성
+export function getTossPayment(customerKey: string) {
+  const tossPayments = getTossPayments();
+  return tossPayments.payment({ customerKey });
 }
