@@ -267,7 +267,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
           return (
             <Link
               key={tenant.tenantId}
-              href={`/account/${tenant.tenantId}?${authParam}`}
+              href={`/account/${tenant.tenantId}${authParam ? `?${authParam}` : ''}`}
               className="block p-6 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center justify-between">

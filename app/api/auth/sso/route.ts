@@ -31,12 +31,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!idToken) {
-      return NextResponse.redirect(new URL('/login?error=missing_token', request.url));
+      return NextResponse.redirect(new URL('/login?error=missing_token', request.url), 303);
     }
 
     if (!JWT_SECRET) {
       console.error('[SSO] JWT_SECRET not configured');
-      return NextResponse.redirect(new URL('/login?error=server_error', request.url));
+      return NextResponse.redirect(new URL('/login?error=server_error', request.url), 303);
     }
 
     // Firebase Admin 초기화
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     if (!auth) {
       console.error('[SSO] Firebase Admin Auth not initialized');
-      return NextResponse.redirect(new URL('/login?error=server_error', request.url));
+      return NextResponse.redirect(new URL('/login?error=server_error', request.url), 303);
     }
 
     // ID Token 검증
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const { uid, email } = decodedToken;
 
     if (!email) {
-      return NextResponse.redirect(new URL('/login?error=no_email', request.url));
+      return NextResponse.redirect(new URL('/login?error=no_email', request.url), 303);
     }
 
     console.log(`[SSO] Token verified: ${email} (${uid})`);
@@ -88,8 +88,8 @@ export async function POST(request: NextRequest) {
     const redirectUrl = new URL(redirect, request.url);
     redirectUrl.searchParams.set('ssoToken', customToken);
 
-    // 리다이렉트 응답 생성
-    const response = NextResponse.redirect(redirectUrl);
+    // 리다이렉트 응답 생성 (303: POST → GET 변경)
+    const response = NextResponse.redirect(redirectUrl, 303);
 
     // 세션 쿠키 설정
     const isProduction = process.env.NODE_ENV === 'production';
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(new URL('/login?error=invalid_token', request.url));
     }
 
-    return NextResponse.redirect(new URL('/login?error=server_error', request.url));
+    return NextResponse.redirect(new URL('/login?error=server_error', request.url), 303);
   }
 }
 

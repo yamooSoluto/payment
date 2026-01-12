@@ -66,8 +66,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     redirect('/login');
   }
 
-  // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
-  const authParam = sessionToken ? `token=${sessionToken}` : '';
+  // authParam: 빈 문자열 (쿠키 인증 사용, URL에 토큰 노출 방지)
+  const authParam = '';
 
   // 서버에서 직접 매장 목록 조회 (빠른 초기 로딩)
   const db = adminDb || initializeFirebaseAdmin();

@@ -565,7 +565,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
       } else if (data.expired) {
         // 만료된 경우 요금제 페이지로 이동
         alert('이용 기간이 만료되었습니다. 새로 구독해주세요.');
-        window.location.href = `/pricing?${authParam}`;
+        window.location.href = `/pricing${authParam ? `?${authParam}` : ''}`;
       } else {
         alert('구독 재활성화에 실패했습니다. 다시 시도해주세요.');
       }

@@ -112,7 +112,7 @@ export default function TenantHeader({
           tenant={{ tenantId, brandName: currentBrandName, subscription: subscription || null }}
           onClose={() => setShowDeleteModal(false)}
           onSuccess={() => {
-            router.push(`/account?${authParam}`);
+            router.push(`/account${authParam ? `?${authParam}` : ''}`);
             router.refresh();
           }}
           authParam={authParam}

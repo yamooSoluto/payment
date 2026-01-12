@@ -315,7 +315,7 @@ export default function ChangePlanButton({
             onClick={() => {
               setResultModal(prev => ({ ...prev, isOpen: false }));
               if (resultModal.type === 'success') {
-                window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
+                window.location.href = tenantId ? `/account/${tenantId}${authParam ? `?${authParam}` : ''}` : `/account${authParam ? `?${authParam}` : ''}`;
               }
             }}
           />
@@ -357,7 +357,7 @@ export default function ChangePlanButton({
                 onClick={() => {
                   setResultModal(prev => ({ ...prev, isOpen: false }));
                   if (resultModal.type === 'success') {
-                    window.location.href = tenantId ? `/account/${tenantId}?${authParam}` : `/account?${authParam}`;
+                    window.location.href = tenantId ? `/account/${tenantId}${authParam ? `?${authParam}` : ''}` : `/account${authParam ? `?${authParam}` : ''}`;
                   }
                 }}
                 className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
