@@ -109,11 +109,11 @@ export async function POST(request: NextRequest) {
     const firebaseError = error as { code?: string; message?: string };
 
     if (firebaseError.code === 'auth/id-token-expired') {
-      return NextResponse.redirect(new URL('/login?error=token_expired', request.url));
+      return NextResponse.redirect(new URL('/login?error=token_expired', request.url), 303);
     }
 
     if (firebaseError.code === 'auth/argument-error' || firebaseError.code === 'auth/invalid-id-token') {
-      return NextResponse.redirect(new URL('/login?error=invalid_token', request.url));
+      return NextResponse.redirect(new URL('/login?error=invalid_token', request.url), 303);
     }
 
     return NextResponse.redirect(new URL('/login?error=server_error', request.url), 303);
