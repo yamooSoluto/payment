@@ -519,8 +519,13 @@ export async function getPlans(): Promise<Array<{
 
       // 가격 포맷팅
       let priceStr = 'Free';
-      if (doc.id === 'enterprise') {
-        priceStr = '협의';
+      if (data.isNegotiable) {
+        // 협의 가격: 범위가 있으면 범위로 표시, 없으면 "협의"
+        if (data.minPrice && data.maxPrice) {
+          priceStr = `${(data.minPrice / 10000).toLocaleString()}~${(data.maxPrice / 10000).toLocaleString()}만원`;
+        } else {
+          priceStr = '협의';
+        }
       } else if (priceNumber > 0) {
         priceStr = `₩${priceNumber.toLocaleString()}`;
       }
