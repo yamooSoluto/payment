@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, price, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
+    const { id, name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -173,6 +173,8 @@ export async function POST(request: NextRequest) {
     await db.collection('plans').doc(id).set({
       name,
       price: price || 0,
+      minPrice: minPrice || 0,
+      maxPrice: maxPrice || 0,
       tagline: tagline || '',
       description: description || '',
       features: features || [],

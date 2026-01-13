@@ -66,7 +66,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, price, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
+    const { name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
 
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -75,6 +75,8 @@ export async function PUT(
 
     if (name !== undefined) updateData.name = name;
     if (price !== undefined) updateData.price = price;
+    if (minPrice !== undefined) updateData.minPrice = minPrice;
+    if (maxPrice !== undefined) updateData.maxPrice = maxPrice;
     if (tagline !== undefined) updateData.tagline = tagline;
     if (description !== undefined) updateData.description = description;
     if (features !== undefined) updateData.features = features;

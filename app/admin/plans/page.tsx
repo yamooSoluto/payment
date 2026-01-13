@@ -24,6 +24,8 @@ interface Plan {
   id: string;
   name: string;
   price: number;
+  minPrice?: number;
+  maxPrice?: number;
   tagline: string;
   description: string;
   features: string[];
@@ -157,10 +159,17 @@ function SortablePlanCard({
 
       <p className="text-2xl font-bold text-gray-900 mb-2">
         {plan.isNegotiable ? (
-          <>
-            협의
-            <span className="text-sm font-normal text-gray-500"> / 월</span>
-          </>
+          plan.minPrice && plan.maxPrice ? (
+            <>
+              {(plan.minPrice / 10000).toLocaleString()}~{(plan.maxPrice / 10000).toLocaleString()}만원
+              <span className="text-sm font-normal text-gray-500">/월</span>
+            </>
+          ) : (
+            <>
+              협의
+              <span className="text-sm font-normal text-gray-500"> / 월</span>
+            </>
+          )
         ) : (
           <>
             {plan.price.toLocaleString()}원
@@ -216,6 +225,8 @@ export default function PlansPage() {
     id: '',
     name: '',
     price: 0,
+    minPrice: 0,
+    maxPrice: 0,
     tagline: '',
     description: '',
     features: '',
@@ -332,6 +343,8 @@ export default function PlansPage() {
         id: plan.id,
         name: plan.name,
         price: plan.price,
+        minPrice: plan.minPrice || 0,
+        maxPrice: plan.maxPrice || 0,
         tagline: plan.tagline || '',
         description: plan.description,
         features: plan.features?.join('\n') || '',
@@ -347,6 +360,8 @@ export default function PlansPage() {
         id: '',
         name: '',
         price: 0,
+        minPrice: 0,
+        maxPrice: 0,
         tagline: '',
         description: '',
         features: '',
@@ -687,6 +702,41 @@ export default function PlansPage() {
                 />
               </div>
 
+              {/* 협의 가격일 때 범위 입력 */}
+              {formData.isNegotiable && (
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-purple-700 mb-2">
+                    가격 범위 (만원 단위)
+                  </label>
+                  <p className="text-xs text-purple-600 mb-3">
+                    가격 범위를 입력하세요. 예: 최소 29만원 ~ 최대 100만원
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={formData.minPrice / 10000 || ''}
+                      onChange={(e) => setFormData({ ...formData, minPrice: (parseInt(e.target.value) || 0) * 10000 })}
+                      className="flex-1 px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="최소"
+                    />
+                    <span className="text-gray-500">~</span>
+                    <input
+                      type="number"
+                      value={formData.maxPrice / 10000 || ''}
+                      onChange={(e) => setFormData({ ...formData, maxPrice: (parseInt(e.target.value) || 0) * 10000 })}
+                      className="flex-1 px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="최대"
+                    />
+                    <span className="text-gray-500">만원</span>
+                  </div>
+                  {formData.minPrice > 0 && formData.maxPrice > 0 && (
+                    <p className="text-xs text-purple-600 mt-2">
+                      표시: {(formData.minPrice / 10000).toLocaleString()}~{(formData.maxPrice / 10000).toLocaleString()}만원/월
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   태그라인
@@ -880,7 +930,11 @@ export default function PlansPage() {
                           <h3 className="text-lg font-bold text-gray-900 mb-3">{plan.name}</h3>
                           <div className="flex items-baseline gap-1">
                             <span className="text-2xl font-bold text-gray-900">
-                              {plan.isNegotiable ? '협의' : plan.price === 0 ? 'Free' : `₩${plan.price.toLocaleString()}`}
+                              {plan.isNegotiable ? (
+                                plan.minPrice && plan.maxPrice ? (
+                                  `${(plan.minPrice / 10000).toLocaleString()}~${(plan.maxPrice / 10000).toLocaleString()}만원`
+                                ) : '협의'
+                              ) : plan.price === 0 ? 'Free' : `₩${plan.price.toLocaleString()}`}
                             </span>
                             <span className="text-gray-500 text-sm">/월</span>
                           </div>
