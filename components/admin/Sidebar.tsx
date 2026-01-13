@@ -8,10 +8,10 @@ import {
   Group,
   UserCrown,
   Package,
-  Cart,
+  CreditCards,
   RefreshDouble,
   StatsUpSquare,
-  Bell,
+  Mail,
   Settings,
   Xmark,
   NavArrowLeft,
@@ -55,7 +55,7 @@ const menuItems = [
   {
     name: '결제',
     href: '/admin/orders',
-    icon: Cart,
+    icon: CreditCards,
     permission: 'orders:read',
   },
   {
@@ -71,9 +71,9 @@ const menuItems = [
     permission: 'stats:read',
   },
   {
-    name: '알림톡',
+    name: '메시지',
     href: '/admin/notifications',
-    icon: Bell,
+    icon: Mail,
     permission: 'notifications:read',
   },
   {

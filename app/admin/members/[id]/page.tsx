@@ -647,7 +647,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 기본 정보 */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-4">
               <User className="w-5 h-5 text-blue-600" />
@@ -737,222 +737,201 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               )}
             </div>
           </div>
+        </div>
 
-          {/* 결제 내역 */}
+        {/* 사이드바 - 결제 내역 */}
+        <div>
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-semibold">결제 내역</h2>
             </div>
             {payments.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">결제 내역이 없습니다.</p>
+              <p className="text-gray-500 text-center py-6 text-sm">결제 내역이 없습니다.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-max">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-left px-4 py-2 text-sm font-medium text-gray-500">결제일</th>
-                      <th className="text-left px-4 py-2 text-sm font-medium text-gray-500">플랜</th>
-                      <th className="text-right px-4 py-2 text-sm font-medium text-gray-500">금액</th>
-                      <th className="text-center px-4 py-2 text-sm font-medium text-gray-500">상태</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {payments.map((payment) => (
-                      <tr key={payment.id}>
-                        <td className="px-4 py-3 text-sm">
-                          {payment.paidAt
-                            ? new Date(payment.paidAt).toLocaleDateString('ko-KR')
-                            : payment.createdAt
-                            ? new Date(payment.createdAt).toLocaleDateString('ko-KR')
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-sm">{payment.planId || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-right">
-                          {payment.amount?.toLocaleString()}원
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {getPaymentStatusBadge(payment.status)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-2">
+                {payments.slice(0, 5).map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium">{payment.amount?.toLocaleString()}원</p>
+                      <p className="text-xs text-gray-500">
+                        {payment.paidAt
+                          ? new Date(payment.paidAt).toLocaleDateString('ko-KR')
+                          : payment.createdAt
+                          ? new Date(payment.createdAt).toLocaleDateString('ko-KR')
+                          : '-'}
+                      </p>
+                    </div>
+                    {getPaymentStatusBadge(payment.status)}
+                  </div>
+                ))}
+                {payments.length > 5 && (
+                  <p className="text-xs text-gray-400 text-center pt-2">외 {payments.length - 5}건</p>
+                )}
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* 사이드바 */}
-        <div className="space-y-6">
-          {/* 매장 목록 */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Sofa className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">매장 목록</h2>
-                <span className="text-sm text-gray-400">({tenants.length})</span>
-              </div>
-              <button
-                onClick={() => setAddTenantModal(true)}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                매장 추가
-              </button>
-            </div>
-            {tenants.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-gray-500 mb-2">등록된 매장이 없습니다.</p>
-                <button
-                  onClick={() => setAddTenantModal(true)}
-                  className="text-sm text-blue-600 hover:underline"
+      {/* 매장 목록 - 전체 너비 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sofa className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold">매장 목록</h2>
+            <span className="text-sm text-gray-400">({tenants.length})</span>
+          </div>
+          <button
+            onClick={() => setAddTenantModal(true)}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            매장 추가
+          </button>
+        </div>
+        {tenants.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500 mb-2">등록된 매장이 없습니다.</p>
+            <button
+              onClick={() => setAddTenantModal(true)}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              새 매장 추가하기
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tenants.map((tenant) => {
+              const isExpanded = expandedTenantId === tenant.tenantId;
+              return (
+                <div
+                  key={tenant.tenantId}
+                  className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-300 transition-colors"
                 >
-                  새 매장 추가하기
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {tenants.map((tenant) => {
-                  const isExpanded = expandedTenantId === tenant.tenantId;
-                  return (
-                    <div key={tenant.tenantId} className="border border-gray-200 rounded-lg overflow-hidden">
-                      {/* 아코디언 헤더 */}
-                      <button
-                        onClick={() => setExpandedTenantId(isExpanded ? null : tenant.tenantId)}
-                        className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium text-gray-900">{tenant.brandName}</span>
-                          {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {tenant.subscription && (
-                            <span className="text-xs text-gray-500">{getPlanName(tenant.subscription.plan)}</span>
-                          )}
-                          <svg
-                            className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </button>
+                  {/* 카드 헤더 - 항상 보이는 정보 */}
+                  <button
+                    onClick={() => setExpandedTenantId(isExpanded ? null : tenant.tenantId)}
+                    className="w-full p-4 text-left bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">{tenant.brandName}</h3>
+                      {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
+                    </div>
+                    {tenant.subscription && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">{getPlanName(tenant.subscription.plan)}</span>
+                        {tenant.subscription.amount > 0 && (
+                          <span className="text-gray-500">{tenant.subscription.amount.toLocaleString()}원/월</span>
+                        )}
+                      </div>
+                    )}
+                    {tenant.subscription?.nextBillingDate && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        다음 결제: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}
+                      </p>
+                    )}
+                    {tenant.subscription?.status === 'trial' && tenant.subscription?.currentPeriodEnd && (
+                      <p className="text-xs text-blue-500 mt-1">
+                        체험 종료: {new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR')}
+                      </p>
+                    )}
+                  </button>
 
-                      {/* 아코디언 콘텐츠 */}
-                      {isExpanded && (
-                        <div className="px-4 py-3 bg-white border-t border-gray-100">
-                          {tenant.address && <p className="text-sm text-gray-500 mb-2">{tenant.address}</p>}
-                          {tenant.subscription && (
-                            <div className="text-sm text-gray-600 space-y-1">
-                              <div className="flex justify-between">
-                                <span>플랜</span>
-                                <span className="font-medium">{getPlanName(tenant.subscription.plan)}</span>
-                              </div>
-                              {tenant.subscription.amount > 0 && (
-                                <div className="flex justify-between">
-                                  <span>금액</span>
-                                  <span>{tenant.subscription.amount.toLocaleString()}원/월</span>
-                                </div>
-                              )}
-                              {tenant.subscription.nextBillingDate && (
-                                <div className="flex justify-between">
-                                  <span>다음 결제일</span>
-                                  <span>{new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}</span>
-                                </div>
-                              )}
-                              {/* 가격 정책 */}
-                              <div className="flex justify-between items-center">
-                                <span>가격 정책</span>
-                                <span className={`text-xs px-2 py-0.5 rounded ${
-                                  tenant.subscription.pricePolicy === 'grandfathered'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : tenant.subscription.pricePolicy === 'protected_until'
-                                    ? 'bg-amber-100 text-amber-700'
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {PRICE_POLICY_LABELS[tenant.subscription.pricePolicy || 'standard']}
-                                </span>
-                              </div>
-                              {tenant.subscription.pricePolicy === 'protected_until' && tenant.subscription.priceProtectedUntil && (
-                                <div className="flex justify-between text-xs text-amber-600">
-                                  <span>보호 기간</span>
-                                  <span>~{new Date(tenant.subscription.priceProtectedUntil).toLocaleDateString('ko-KR')}</span>
-                                </div>
-                              )}
-                              {tenant.subscription.originalAmount && tenant.subscription.originalAmount !== tenant.subscription.amount && (
-                                <div className="flex justify-between text-xs text-gray-500">
-                                  <span>원래 금액</span>
-                                  <span>{tenant.subscription.originalAmount.toLocaleString()}원</span>
-                                </div>
-                              )}
-                              {/* 관리자 액션 버튼들 */}
-                              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
-                                  className="flex-1 px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors flex items-center justify-center gap-1"
-                                >
-                                  <Calendar className="w-3 h-3" />
-                                  구독 정보
-                                </button>
-                                {tenant.subscription.status === 'active' && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); openPricePolicyModal(tenant); }}
-                                    className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                                  >
-                                    가격 정책
-                                  </button>
-                                )}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openManualChargeModal(tenant); }}
-                                  className="flex-1 px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors flex items-center justify-center gap-1"
-                                >
-                                  <HandCash className="w-3 h-3" />
-                                  수동 결제
-                                </button>
-                              </div>
+                  {/* 확장 콘텐츠 */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
+                      {tenant.address && <p className="text-sm text-gray-500 py-2">{tenant.address}</p>}
+                      {tenant.subscription && (
+                        <div className="text-sm text-gray-600 space-y-1 py-2">
+                          {/* 가격 정책 */}
+                          <div className="flex justify-between items-center">
+                            <span>가격 정책</span>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              tenant.subscription.pricePolicy === 'grandfathered'
+                                ? 'bg-purple-100 text-purple-700'
+                                : tenant.subscription.pricePolicy === 'protected_until'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {PRICE_POLICY_LABELS[tenant.subscription.pricePolicy || 'standard']}
+                            </span>
+                          </div>
+                          {tenant.subscription.pricePolicy === 'protected_until' && tenant.subscription.priceProtectedUntil && (
+                            <div className="flex justify-between text-xs text-amber-600">
+                              <span>보호 기간</span>
+                              <span>~{new Date(tenant.subscription.priceProtectedUntil).toLocaleDateString('ko-KR')}</span>
                             </div>
                           )}
-                          {/* 매장 관리 버튼들 */}
-                          <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                          {tenant.subscription.originalAmount && tenant.subscription.originalAmount !== tenant.subscription.amount && (
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>원래 금액</span>
+                              <span>{tenant.subscription.originalAmount.toLocaleString()}원</span>
+                            </div>
+                          )}
+                          {/* 관리자 액션 버튼들 */}
+                          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditTenantForm({ brandName: tenant.brandName });
-                                setEditTenantModal({ isOpen: true, tenant });
-                              }}
-                              className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors flex items-center justify-center gap-1"
+                              onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
+                              className="flex-1 px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors flex items-center justify-center gap-1"
                             >
-                              <EditPencil className="w-3 h-3" />
-                              매장 수정
+                              <Calendar className="w-3 h-3" />
+                              구독 정보
                             </button>
-                            {!tenant.subscription && (
+                            {tenant.subscription.status === 'active' && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
-                                className="flex-1 px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors flex items-center justify-center gap-1"
+                                onClick={(e) => { e.stopPropagation(); openPricePolicyModal(tenant); }}
+                                className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
                               >
-                                <Plus className="w-3 h-3" />
-                                구독 생성
+                                가격 정책
                               </button>
                             )}
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteTenant(tenant); }}
-                              className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center justify-center gap-1"
+                              onClick={(e) => { e.stopPropagation(); openManualChargeModal(tenant); }}
+                              className="flex-1 px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors flex items-center justify-center gap-1"
                             >
-                              <Trash className="w-3 h-3" />
+                              <HandCash className="w-3 h-3" />
+                              수동 결제
                             </button>
                           </div>
                         </div>
                       )}
+                      {/* 매장 관리 버튼들 */}
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditTenantForm({ brandName: tenant.brandName });
+                            setEditTenantModal({ isOpen: true, tenant });
+                          }}
+                          className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                          <EditPencil className="w-3 h-3" />
+                          매장 수정
+                        </button>
+                        {!tenant.subscription && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
+                            className="flex-1 px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" />
+                            구독 생성
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTenant(tenant); }}
+                          className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Trash className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
       </div>
 
       {/* 가격 정책 변경 모달 */}

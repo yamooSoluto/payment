@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Cart, NavArrowLeft, NavArrowRight, RefreshDouble, Download, Calendar, Xmark, Refresh } from 'iconoir-react';
+import { CreditCards, NavArrowLeft, NavArrowRight, RefreshDouble, Download, Calendar, Xmark, Refresh } from 'iconoir-react';
 
 type OrderType = 'subscription' | 'renewal' | 'upgrade' | 'downgrade' | 'downgrade_refund' | 'refund' | 'cancel_refund' | 'unknown';
 
@@ -251,7 +251,7 @@ export default function OrdersPage() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
-          <Cart className="w-8 h-8 text-blue-600" />
+          <CreditCards className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">결제 내역</h1>
         </div>
         <button
