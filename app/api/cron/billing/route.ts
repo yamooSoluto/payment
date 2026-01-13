@@ -19,8 +19,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
-  const today = new Date();
-  today.setHours(23, 59, 59, 999); // 오늘 하루 끝까지 포함
+  // 한국 시간(KST) 기준 오늘 날짜 계산
+  const now = new Date();
+  // KST로 변환 (UTC + 9시간)
+  const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  // KST 기준 오늘 날짜 문자열 (YYYY-MM-DD)
+  const kstDateStr = kstNow.toISOString().split('T')[0];
+  // KST 기준 오늘 하루 끝 → UTC로 변환 (Firestore 쿼리용)
+  const today = new Date(`${kstDateStr}T23:59:59.999+09:00`);
 
   try {
     // ========== 1. Trial 만료 및 자동 전환 처리 ==========
