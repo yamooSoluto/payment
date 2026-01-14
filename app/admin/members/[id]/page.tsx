@@ -2,7 +2,8 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download } from 'iconoir-react';
+import * as XLSX from 'xlsx';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
 
@@ -57,6 +58,16 @@ interface Payment {
   receiptUrl?: string;
   createdAt: string;
   paidAt: string | null;
+  // 카드 정보
+  cardInfo?: { company?: string; number?: string };
+  cardCompany?: string;
+  cardNumber?: string;
+  // 환불 관련
+  originalPaymentId?: string;
+  refundReason?: string;
+  cancelReason?: string;
+  // 기타
+  email?: string;
   [key: string]: unknown;
 }
 
@@ -92,9 +103,9 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
 };
 
 const INITIATED_BY_LABELS: Record<string, string> = {
-  system: '시스템',
+  system: '자동',
   admin: '관리자',
-  user: '사용자',
+  user: '회원',
 };
 
 export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -191,6 +202,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [tempDateRange, setTempDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [paymentDetailModal, setPaymentDetailModal] = useState<Payment | null>(null);
   const [paymentSearchId, setPaymentSearchId] = useState('');
+  const [showPaymentFilter, setShowPaymentFilter] = useState(false);
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<'all' | 'charge' | 'refund'>('all');
+  const [paymentTenantFilter, setPaymentTenantFilter] = useState<string>('all');
+  const [paymentPlanFilter, setPaymentPlanFilter] = useState<string>('all');
   const PAYMENTS_PER_PAGE = 10;
 
   // 이번달 시작/끝 날짜 계산
@@ -213,6 +228,23 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (!paymentIdMatch && !orderIdMatch && !tenantMatch) {
         return false;
       }
+    }
+
+    // 유형 필터 (결제/환불)
+    if (paymentTypeFilter !== 'all') {
+      const isRefund = payment.transactionType === 'refund' || (payment.amount ?? 0) < 0;
+      if (paymentTypeFilter === 'charge' && isRefund) return false;
+      if (paymentTypeFilter === 'refund' && !isRefund) return false;
+    }
+
+    // 매장 필터
+    if (paymentTenantFilter !== 'all' && payment.tenantId !== paymentTenantFilter) {
+      return false;
+    }
+
+    // 플랜 필터
+    if (paymentPlanFilter !== 'all' && payment.plan !== paymentPlanFilter) {
+      return false;
     }
 
     // 날짜 필터
@@ -260,6 +292,60 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       setPaymentPage(1);
       setShowDatePickerModal(false);
     }
+  };
+
+  // 결제 내역 xlsx 내보내기
+  const handleExportPayments = () => {
+    if (filteredPayments.length === 0) {
+      alert('내보낼 결제 내역이 없습니다.');
+      return;
+    }
+
+    const exportData = filteredPayments.map((payment) => {
+      const isRefund = payment.transactionType === 'refund' || (payment.amount ?? 0) < 0;
+      const tenant = tenants.find(t => t.tenantId === payment.tenantId);
+
+      return {
+        '유형': isRefund ? '환불' : '결제',
+        'ID': payment.orderId || payment.id,
+        '날짜': payment.paidAt
+          ? new Date(payment.paidAt).toLocaleString('ko-KR')
+          : payment.createdAt
+          ? new Date(payment.createdAt).toLocaleString('ko-KR')
+          : '-',
+        '매장': tenant?.brandName || '-',
+        '플랜': payment.plan || '-',
+        '금액': payment.amount ?? 0,
+        '분류': payment.category ? PAYMENT_CATEGORY_LABELS[payment.category] || payment.category : '-',
+        '거래 유형': payment.type ? PAYMENT_TYPE_LABELS[payment.type] || payment.type : '-',
+        '처리자': payment.initiatedBy ? INITIATED_BY_LABELS[payment.initiatedBy] || payment.initiatedBy : '-',
+        '상태': payment.status || '-',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '결제 내역');
+
+    // 열 너비 설정
+    worksheet['!cols'] = [
+      { wch: 8 },   // 유형
+      { wch: 30 },  // ID
+      { wch: 22 },  // 날짜
+      { wch: 15 },  // 매장
+      { wch: 12 },  // 플랜
+      { wch: 12 },  // 금액
+      { wch: 15 },  // 분류
+      { wch: 15 },  // 거래 유형
+      { wch: 10 },  // 처리자
+      { wch: 10 },  // 상태
+    ];
+
+    // 파일명에 날짜 포함
+    const today = new Date().toISOString().split('T')[0];
+    const fileName = `결제내역_${member?.name || member?.email || 'unknown'}_${today}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
   };
 
   useEffect(() => {
@@ -789,7 +875,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 )}
               </div>
             ) : (
-              <p className="font-medium">{member.email || '-'}</p>
+              <p className="font-medium break-all">{member.email || '-'}</p>
             )}
           </div>
 
@@ -804,7 +890,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             ) : (
-              <p className="font-medium">{member.name || '-'}</p>
+              <p className="font-medium break-all">{member.name || '-'}</p>
             )}
           </div>
 
@@ -1054,8 +1140,33 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <h2 className="text-lg font-semibold">결제 내역</h2>
               <span className="text-sm text-gray-400">({filteredPayments.length}건)</span>
             </div>
-            {/* 기간 필터 */}
+            {/* 기간 필터 + 검색 (PC) */}
             <div className="flex items-center gap-2">
+              {/* 검색 - PC에서만 이 위치에 표시 */}
+              <div className="relative hidden sm:block">
+                <input
+                  type="text"
+                  value={paymentSearchId}
+                  onChange={(e) => {
+                    setPaymentSearchId(e.target.value);
+                    setPaymentPage(1);
+                  }}
+                  placeholder="ID 또는 매장명 검색..."
+                  className="w-48 pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                {paymentSearchId && (
+                  <button
+                    onClick={() => {
+                      setPaymentSearchId('');
+                      setPaymentPage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                  >
+                    <Xmark className="w-3 h-3 text-gray-400" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleThisMonthFilter}
                 className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
@@ -1068,22 +1179,129 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               </button>
               <button
                 onClick={handleOpenDatePicker}
-                className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1 ${
-                  paymentFilterType === 'custom'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${
+                  paymentFilterType === 'custom' && paymentDateRange.start
+                    ? 'px-3 py-1.5 bg-blue-600 text-white'
+                    : 'p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
+                title="기간 선택"
               >
-                <Calendar className="w-3 h-3" />
-                {paymentFilterType === 'custom' && paymentDateRange.start
-                  ? `${paymentDateRange.start} ~ ${paymentDateRange.end}`
-                  : '기간 선택'}
+                <Calendar className="w-4 h-4" />
+                {paymentFilterType === 'custom' && paymentDateRange.start && (
+                  <span>{paymentDateRange.start} ~ {paymentDateRange.end}</span>
+                )}
+              </button>
+              {/* 상세 필터 버튼 */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowPaymentFilter(!showPaymentFilter)}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    paymentTypeFilter !== 'all' || paymentTenantFilter !== 'all' || paymentPlanFilter !== 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  title="필터"
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                {/* 필터 드롭다운 */}
+                {showPaymentFilter && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 z-50 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-gray-900">필터</span>
+                      {(paymentTypeFilter !== 'all' || paymentTenantFilter !== 'all' || paymentPlanFilter !== 'all') && (
+                        <button
+                          onClick={() => {
+                            setPaymentTypeFilter('all');
+                            setPaymentTenantFilter('all');
+                            setPaymentPlanFilter('all');
+                            setPaymentPage(1);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          초기화
+                        </button>
+                      )}
+                    </div>
+                    {/* 유형 필터 */}
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-500 mb-1.5">유형</label>
+                      <div className="flex gap-1.5">
+                        {[
+                          { value: 'all', label: '전체' },
+                          { value: 'charge', label: '결제' },
+                          { value: 'refund', label: '환불' },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setPaymentTypeFilter(option.value as 'all' | 'charge' | 'refund');
+                              setPaymentPage(1);
+                            }}
+                            className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-colors ${
+                              paymentTypeFilter === option.value
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* 매장 필터 */}
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-500 mb-1.5">매장</label>
+                      <select
+                        value={paymentTenantFilter}
+                        onChange={(e) => {
+                          setPaymentTenantFilter(e.target.value);
+                          setPaymentPage(1);
+                        }}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">전체</option>
+                        {tenants.map((tenant) => (
+                          <option key={tenant.tenantId} value={tenant.tenantId}>
+                            {tenant.brandName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* 플랜 필터 */}
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">플랜</label>
+                      <select
+                        value={paymentPlanFilter}
+                        onChange={(e) => {
+                          setPaymentPlanFilter(e.target.value);
+                          setPaymentPage(1);
+                        }}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">전체</option>
+                        <option value="trial">Trial</option>
+                        <option value="basic">Basic</option>
+                        <option value="business">Business</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* 내보내기 버튼 */}
+              <button
+                onClick={handleExportPayments}
+                className="p-1.5 rounded-lg transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200"
+                title="xlsx로 내보내기"
+              >
+                <Download className="w-4 h-4" />
               </button>
             </div>
           </div>
-          {/* 검색 필터 */}
-          <div className="flex items-center justify-end">
-            <div className="relative w-56">
+          {/* 검색 필터 - 모바일에서만 표시 */}
+          <div className="flex items-center justify-end sm:hidden">
+            <div className="relative w-full">
               <input
                 type="text"
                 value={paymentSearchId}
@@ -1117,11 +1335,13 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <table className="w-full min-w-max">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-40">ID</th>
-                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">날짜</th>
-                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">매장</th>
-                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">플랜</th>
-                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500 w-28">금액</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">유형</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-32">ID</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">날짜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-28">매장</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">플랜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">금액</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">처리자</th>
                     <th className="w-12 px-1 py-3"></th>
                   </tr>
                 </thead>
@@ -1141,20 +1361,26 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       : (isRefund ? `-${payment.amount.toLocaleString()}` : payment.amount?.toLocaleString());
                     return (
                       <tr key={payment.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-3 text-xs text-gray-400 font-mono text-center truncate max-w-40" title={payment.orderId || payment.id}>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {isRefund ? '환불' : '결제'}
+                        </td>
+                        <td className="px-2 py-3 text-xs text-gray-400 font-mono text-center truncate max-w-32" title={payment.orderId || payment.id}>
                           {payment.orderId || payment.id}
                         </td>
-                        <td className="px-3 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="px-3 py-3 text-sm text-gray-600 text-center">
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center truncate max-w-28" title={tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '-'}>
                           {tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '-'}
                         </td>
-                        <td className="px-3 py-3 text-sm text-gray-600 text-center">
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
                           {getPlanName(payment.planId || payment.plan)}
                         </td>
-                        <td className={`px-3 py-3 text-sm font-medium text-center whitespace-nowrap ${isRefund ? 'text-red-500' : 'text-gray-900'}`}>
+                        <td className={`px-2 py-3 text-sm font-medium text-center whitespace-nowrap ${isRefund ? 'text-red-500' : 'text-gray-900'}`}>
                           {displayAmount}원
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {payment.initiatedBy ? INITIATED_BY_LABELS[payment.initiatedBy] || payment.initiatedBy : '-'}
                         </td>
                         <td className="px-1 py-3 text-center">
                           <button
@@ -1813,7 +2039,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <span className="text-gray-900">{paymentDetailModal.email as string || member?.email || '-'}</span>
               </div>
               <div className="flex py-3">
-                <span className="text-gray-500 w-24 shrink-0">결제일시</span>
+                <span className="text-gray-500 w-24 shrink-0">일시</span>
                 <span className="text-gray-900">
                   {paymentDetailModal.paidAt
                     ? new Date(paymentDetailModal.paidAt).toLocaleString('ko-KR')
@@ -1824,11 +2050,17 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">주문 ID</span>
-                <span className="text-gray-900 font-mono text-sm">{paymentDetailModal.orderId || paymentDetailModal.id}</span>
+                <span className="text-gray-900 font-mono">{paymentDetailModal.orderId || paymentDetailModal.id}</span>
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">매장</span>
                 <span className="text-gray-900">{tenants.find(t => t.tenantId === paymentDetailModal.tenantId)?.brandName || '-'}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">거래</span>
+                <span className={`font-medium ${paymentDetailModal.transactionType === 'refund' ? 'text-red-500' : 'text-gray-900'}`}>
+                  {paymentDetailModal.transactionType ? TRANSACTION_TYPE_LABELS[paymentDetailModal.transactionType] || paymentDetailModal.transactionType : '-'}
+                </span>
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">분류</span>
@@ -1840,12 +2072,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <span className="text-gray-500 w-24 shrink-0">유형</span>
                 <span className="text-gray-900">
                   {paymentDetailModal.type ? PAYMENT_TYPE_LABELS[paymentDetailModal.type] || paymentDetailModal.type : '-'}
-                </span>
-              </div>
-              <div className="flex py-3">
-                <span className="text-gray-500 w-24 shrink-0">거래</span>
-                <span className={`font-medium ${paymentDetailModal.transactionType === 'refund' ? 'text-red-500' : 'text-gray-900'}`}>
-                  {paymentDetailModal.transactionType ? TRANSACTION_TYPE_LABELS[paymentDetailModal.transactionType] || paymentDetailModal.transactionType : '-'}
                 </span>
               </div>
               <div className="flex py-3">
@@ -1863,23 +2089,72 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">금액</span>
-                <span className={`font-medium ${paymentDetailModal.transactionType === 'refund' || paymentDetailModal.category === 'refund' || paymentDetailModal.status === 'refunded' ? 'text-red-500' : 'text-gray-900'}`}>
-                  {paymentDetailModal.transactionType === 'refund' || paymentDetailModal.category === 'refund' || paymentDetailModal.status === 'refunded' ? '-' : ''}{paymentDetailModal.amount?.toLocaleString()}원
+                <span className={`font-medium ${(paymentDetailModal.amount ?? 0) < 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                  {(paymentDetailModal.amount ?? 0) < 0 ? '-' : ''}{Math.abs(paymentDetailModal.amount ?? 0).toLocaleString()}원
                 </span>
               </div>
-              {/* 영수증 버튼 */}
-              {paymentDetailModal.receiptUrl && (
-                <div className="pt-4">
-                  <a
-                    href={paymentDetailModal.receiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    영수증 확인
-                  </a>
+              {/* 카드 정보 */}
+              {(() => {
+                const cardInfo = paymentDetailModal.cardInfo as { company?: string; number?: string } | undefined;
+                const cardCompany = String(cardInfo?.company || (paymentDetailModal.cardCompany as string) || '');
+                const cardNumber = String(cardInfo?.number || (paymentDetailModal.cardNumber as string) || '');
+                if (!cardNumber) return null;
+                return (
+                  <div className="flex py-3">
+                    <span className="text-gray-500 w-24 shrink-0">카드</span>
+                    <span className="text-gray-900">{cardCompany} {cardNumber}</span>
+                  </div>
+                );
+              })()}
+              {/* 원 결제 연결 (환불인 경우) */}
+              {paymentDetailModal.originalPaymentId && (
+                <div className="flex py-3">
+                  <span className="text-gray-500 w-24 shrink-0">원 결제</span>
+                  <span className="text-gray-900 font-mono">
+                    {/* SUB_xxx_xxx 형태에서 앞의 SUB_xxx만 표시 */}
+                    {String(paymentDetailModal.originalPaymentId).split('_').slice(0, 2).join('_')}
+                  </span>
                 </div>
               )}
+              {/* 환불 사유 */}
+              {(paymentDetailModal.refundReason || paymentDetailModal.cancelReason) && (
+                <div className="flex py-3">
+                  <span className="text-gray-500 w-24 shrink-0">사유</span>
+                  <span className="text-gray-900">{String(paymentDetailModal.refundReason || paymentDetailModal.cancelReason)}</span>
+                </div>
+              )}
+              {/* 영수증 버튼 - 원 결제 영수증도 포함 */}
+              {(() => {
+                // 환불 건인 경우 원 결제의 영수증 URL 찾기
+                const isRefund = paymentDetailModal.transactionType === 'refund' || (paymentDetailModal.amount ?? 0) < 0;
+                let receiptUrl = paymentDetailModal.receiptUrl;
+
+                if (isRefund && paymentDetailModal.originalPaymentId && !receiptUrl) {
+                  // payments 배열에서 원 결제 찾기 (orderId 또는 id로 매칭)
+                  const origPaymentId = String(paymentDetailModal.originalPaymentId);
+                  const origPaymentIdBase = origPaymentId.split('_').slice(0, 2).join('_');
+                  const originalPayment = payments.find(p =>
+                    p.id === origPaymentId ||
+                    p.orderId === origPaymentId ||
+                    // orderId에서 타임스탬프 제거한 값으로도 매칭 (SUB_xxx_xxx -> SUB_xxx)
+                    p.orderId?.startsWith(origPaymentIdBase)
+                  );
+                  receiptUrl = originalPayment?.receiptUrl;
+                }
+
+                return receiptUrl ? (
+                  <div className="pt-4">
+                    <a
+                      href={receiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    >
+                      {isRefund ? '영수증' : '영수증'}
+                    </a>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <div className="mt-6">
               <button
