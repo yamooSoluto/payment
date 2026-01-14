@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 
@@ -19,6 +19,23 @@ export interface Card {
   createdAt: Date;
 }
 
+// Firebase ID Token에서 이메일 추출
+async function getEmailFromAuthHeader(authHeader: string | null): Promise<string | null> {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    initializeFirebaseAdmin();
+    const auth = getAdminAuth();
+    if (!auth) return null;
+
+    const idToken = authHeader.replace('Bearer ', '');
+    const decodedToken = await auth.verifyIdToken(idToken);
+    return decodedToken.email || null;
+  } catch {
+    return null;
+  }
+}
+
 // 카드 목록 조회
 export async function GET(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -34,9 +51,17 @@ export async function GET(request: NextRequest) {
 
     let email: string | null = null;
 
+    // 1. SSO 토큰으로 인증
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
+    }
+    // 2. Firebase ID Token으로 인증 (Authorization 헤더)
+    if (!email) {
+      const authHeader = request.headers.get('authorization');
+      email = await getEmailFromAuthHeader(authHeader);
+    }
+    // 3. email 파라미터 (fallback)
+    if (!email && emailParam) {
       email = emailParam;
     }
 
@@ -125,9 +150,17 @@ export async function POST(request: NextRequest) {
 
     let email: string | null = null;
 
+    // 1. SSO 토큰으로 인증
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
+    }
+    // 2. Firebase ID Token으로 인증 (Authorization 헤더)
+    if (!email) {
+      const authHeader = request.headers.get('authorization');
+      email = await getEmailFromAuthHeader(authHeader);
+    }
+    // 3. email 파라미터 (fallback)
+    if (!email && emailParam) {
       email = emailParam;
     }
 

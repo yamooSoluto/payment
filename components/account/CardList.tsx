@@ -56,8 +56,16 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
         headers['Authorization'] = `Bearer ${idToken}`;
       }
 
+      // URLSearchParams로 올바른 URL 구성 (authParam이 빈 문자열일 때 ?& 방지)
+      const params = new URLSearchParams();
+      if (authParam) {
+        const authParams = new URLSearchParams(authParam);
+        authParams.forEach((value, key) => params.set(key, value));
+      }
+      params.set('tenantId', tenantId);
+
       const response = await fetch(
-        `/api/cards?${authParam}&tenantId=${encodeURIComponent(tenantId)}`,
+        `/api/cards?${params.toString()}`,
         { headers }
       );
       if (!response.ok) {
