@@ -13,7 +13,7 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
   const { email } = params;
 
   if (!email) {
-    redirect('/login?redirect=/pricing');
+    redirect('/login?redirect=/plan');
   }
 
   // 이미 구독 중인지 확인

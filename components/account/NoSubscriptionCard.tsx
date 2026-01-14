@@ -44,8 +44,15 @@ function PlanSelectModal({ isOpen, onClose, authParam, tenantId }: PlanSelectMod
   if (!isOpen) return null;
 
   const handleSelectPlan = (planId: string) => {
-    const url = `/checkout?plan=${planId}&${authParam}&tenantId=${tenantId}`;
-    window.location.href = url;
+    // URLSearchParams로 올바른 URL 구성 (authParam이 빈 문자열일 때 && 방지)
+    const params = new URLSearchParams();
+    params.set('plan', planId);
+    if (authParam) {
+      const authParams = new URLSearchParams(authParam);
+      authParams.forEach((value, key) => params.set(key, value));
+    }
+    params.set('tenantId', tenantId);
+    window.location.href = `/checkout?${params.toString()}`;
   };
 
   return (

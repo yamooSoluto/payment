@@ -97,13 +97,13 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
 
   const rawSubscription = await getSubscriptionByTenantId(tenantId, email);
   if (!rawSubscription) {
-    redirect('/pricing');
+    redirect('/plan');
   }
 
   // 해지된 구독은 플랜 변경 대신 요금제 페이지로 이동
   if (rawSubscription.status === 'canceled') {
     const authForPricing = sessionToken ? `token=${sessionToken}` : '';
-    redirect(`/pricing?${authForPricing}&tenantId=${tenantId}`);
+    redirect(`/plan?${authForPricing}&tenantId=${tenantId}`);
   }
 
   const subscription = serializeData(rawSubscription);

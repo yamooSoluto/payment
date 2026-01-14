@@ -53,12 +53,24 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
 
   if (!isOpen) return null;
 
+  // checkout URL 생성 헬퍼 (authParam이 빈 문자열일 때도 올바르게 처리)
+  const buildCheckoutUrl = (planId: string, options?: { tenantId?: string; mode?: string }) => {
+    const params = new URLSearchParams();
+    params.set('plan', planId);
+    if (authParam) {
+      // authParam이 "token=xxx" 또는 "email=xxx" 형태이므로 파싱해서 추가
+      const authParams = new URLSearchParams(authParam);
+      authParams.forEach((value, key) => params.set(key, value));
+    }
+    if (options?.tenantId) params.set('tenantId', options.tenantId);
+    if (options?.mode) params.set('mode', options.mode);
+    return `/checkout?${params.toString()}`;
+  };
+
   const handleSelectPlan = async (planId: string) => {
     // 만료된 구독자: 새로운 구독 시작 (모든 플랜 선택 가능)
     if (isExpired) {
-      const baseUrl = `/checkout?plan=${planId}&${authParam}`;
-      const url = tenantId ? `${baseUrl}&tenantId=${tenantId}` : baseUrl;
-      window.location.href = url;
+      window.location.href = buildCheckoutUrl(planId, { tenantId });
       return;
     }
 
@@ -90,22 +102,15 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
     }
 
     // 그 외에는 checkout으로 이동
-    const baseUrl = `/checkout?plan=${planId}&${authParam}`;
-    const url = tenantId
-      ? `${baseUrl}&tenantId=${tenantId}${mode === 'schedule' ? '&mode=reserve' : '&mode=immediate'}`
-      : `${baseUrl}${mode === 'schedule' ? '&mode=reserve' : ''}`;
-    window.location.href = url;
+    const checkoutMode = mode === 'schedule' ? 'reserve' : 'immediate';
+    window.location.href = buildCheckoutUrl(planId, { tenantId, mode: checkoutMode });
   };
 
   // Active 구독자: 모드 선택 후 처리 (checkout 페이지로 이동)
   const handleModeSelect = (selectedMode: 'schedule' | 'immediate') => {
     if (!selectedPlan) return;
-
-    const baseUrl = `/checkout?plan=${selectedPlan}&${authParam}`;
-    const url = tenantId
-      ? `${baseUrl}&tenantId=${tenantId}${selectedMode === 'schedule' ? '&mode=reserve' : '&mode=immediate'}`
-      : `${baseUrl}${selectedMode === 'schedule' ? '&mode=reserve' : ''}`;
-    window.location.href = url;
+    const checkoutMode = selectedMode === 'schedule' ? 'reserve' : 'immediate';
+    window.location.href = buildCheckoutUrl(selectedPlan, { tenantId, mode: checkoutMode });
   };
 
   // Active 구독자가 플랜을 선택한 상태: 모드 선택 화면 표시
@@ -565,7 +570,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
       } else if (data.expired) {
         // 만료된 경우 요금제 페이지로 이동
         alert('이용 기간이 만료되었습니다. 새로 구독해주세요.');
-        window.location.href = `/pricing${authParam ? `?${authParam}` : ''}`;
+        window.location.href = `/plan${authParam ? `?${authParam}` : ''}`;
       } else {
         alert('구독 재활성화에 실패했습니다. 다시 시도해주세요.');
       }
@@ -876,7 +881,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 {isRetrying ? '결제 중...' : '재결제하기'}
               </button>
               <a
-                href={`/checkout?plan=${subscription.plan}&${authParam}${tenantId ? `&tenantId=${tenantId}` : ''}`}
+                href={`/checkout?plan=${subscription.plan}${authParam ? `&${authParam}` : ''}${tenantId ? `&tenantId=${tenantId}` : ''}`}
                 className="btn-secondary"
               >
                 카드 변경하기

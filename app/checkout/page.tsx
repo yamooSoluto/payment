@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo, getPlanById } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
 import { NavArrowLeft, Shield, Lock, Sofa, WarningCircle } from 'iconoir-react';
 import Link from 'next/link';
@@ -50,6 +51,16 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   // 2. 이메일 파라미터로 접근 (Firebase Auth)
   else if (emailParam) {
     email = emailParam;
+  }
+  // 3. 세션 쿠키로 인증 (SSO 후 쿠키 기반)
+  else {
+    const sessionId = await getAuthSessionIdFromCookie();
+    if (sessionId) {
+      const session = await getAuthSession(sessionId);
+      if (session) {
+        email = session.email;
+      }
+    }
   }
 
   if (!email) {
@@ -258,7 +269,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         href={
           tenantId
             ? `/account/${tenantId}?${authParam}`
-            : `/pricing?${authParam}`
+            : `/plan?${authParam}`
         }
         className="inline-flex items-center gap-2 text-gray-600 hover:text-yamoo-primary mb-8 transition-colors"
       >

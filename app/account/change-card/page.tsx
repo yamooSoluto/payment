@@ -49,7 +49,7 @@ export default async function ChangeCardPage({ searchParams }: ChangeCardPagePro
 
   const subscription = await getSubscriptionByTenantId(tenantId, email);
   if (!subscription || subscription.status !== 'active') {
-    redirect('/pricing');
+    redirect('/plan');
   }
 
   // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)

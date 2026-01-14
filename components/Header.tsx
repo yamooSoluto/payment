@@ -114,7 +114,7 @@ export default function Header() {
               무료체험
             </Link>
             <Link
-              href={user ? `/pricing?email=${encodeURIComponent(user.email || '')}` : '/pricing'}
+              href={user ? `/plan?email=${encodeURIComponent(user.email || '')}` : '/plan'}
               className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium"
             >
               요금제
@@ -202,7 +202,7 @@ export default function Header() {
                 무료체험
               </Link>
               <Link
-                href={user ? `/pricing?email=${encodeURIComponent(user.email || '')}` : '/pricing'}
+                href={user ? `/plan?email=${encodeURIComponent(user.email || '')}` : '/plan'}
                 className="text-gray-600 hover:text-yamoo-dark transition-colors font-medium py-2"
                 onClick={() => setMobileMenuOpen(false)}
               >

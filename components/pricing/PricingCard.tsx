@@ -45,7 +45,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
       window.location.href = '/trial';
     } else if (!isAuthenticated) {
       // 비로그인 상태면 로그인 페이지로
-      window.location.href = `/login?redirect=/pricing`;
+      window.location.href = `/login?redirect=/plan`;
     } else if (!tenantId || tenantCount >= 1) {
       // 매장이 1개 이상이면 모달 표시 (매장 선택)
       onSelectWithoutTenant?.(plan.id);

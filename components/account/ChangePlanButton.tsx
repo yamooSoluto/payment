@@ -108,12 +108,19 @@ export default function ChangePlanButton({
 
       const data = await response.json();
 
-      const tenantParam = tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '';
-
       if (response.ok) {
         if (mode === 'immediate' && data.requiresPayment) {
-          // 업그레이드: 결제 페이지로 이동
-          window.location.href = `/checkout?plan=${newPlan}&${authParam}${tenantParam}&mode=immediate&refund=${refundAmount}`;
+          // 업그레이드: 결제 페이지로 이동 (URLSearchParams로 올바른 URL 구성)
+          const checkoutParams = new URLSearchParams();
+          checkoutParams.set('plan', newPlan);
+          if (authParam) {
+            const authParams = new URLSearchParams(authParam);
+            authParams.forEach((value, key) => checkoutParams.set(key, value));
+          }
+          if (tenantId) checkoutParams.set('tenantId', tenantId);
+          checkoutParams.set('mode', 'immediate');
+          checkoutParams.set('refund', refundAmount.toString());
+          window.location.href = `/checkout?${checkoutParams.toString()}`;
         } else {
           // 다운그레이드 또는 예약 변경: 완료 모달
           setShowModal(false);

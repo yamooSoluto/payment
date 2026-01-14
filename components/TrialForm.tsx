@@ -75,6 +75,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
     brandName?: string;
     startDate?: string;
   } | null>(null);
+  const [portalButtonCountdown, setPortalButtonCountdown] = useState(0);
 
   // 약관 모달 상태
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy' | null>(null);
@@ -86,6 +87,20 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
       return () => clearTimeout(timer);
     }
   }, [resendTimer]);
+
+  // 포탈 버튼 카운트다운 (로그인 상태에서 무료체험 신청 완료 시)
+  useEffect(() => {
+    if (isSuccess && user) {
+      setPortalButtonCountdown(15);
+    }
+  }, [isSuccess, user]);
+
+  useEffect(() => {
+    if (portalButtonCountdown > 0) {
+      const timer = setTimeout(() => setPortalButtonCountdown(portalButtonCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [portalButtonCountdown]);
 
   // 로그인한 사용자 정보 자동 입력
   useEffect(() => {
@@ -112,18 +127,18 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             if (userData.phone) {
               setIsPhoneVerified(true);
             }
-            // 이미 무료체험 신청한 경우 (우선 체크)
-            if (userData.trialApplied) {
+            // 유료 구독 이력이 있는 경우 (우선 체크)
+            if (userData.hasPaidSubscription) {
+              setHasPaidSubscription(true);
+              setAlreadyApplied(true);
+            }
+            // 무료체험만 신청한 경우
+            else if (userData.trialApplied) {
               setAlreadyApplied(true);
               // 무료체험 상세 정보 저장
               if (userData.trialInfo) {
                 setTrialInfo(userData.trialInfo);
               }
-            }
-            // 유료 구독 이력만 있는 경우
-            else if (userData.hasPaidSubscription) {
-              setHasPaidSubscription(true);
-              setAlreadyApplied(true);
             }
           }
         } catch (error) {
@@ -342,11 +357,13 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
         <div className="text-center py-6 sm:py-8">
           <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">{hasPaidSubscription ? '💳' : '📋'}</div>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
-            {hasPaidSubscription ? '이미 유료 구독중입니다' : '이미 무료체험을 신청하셨습니다'}
+            {hasPaidSubscription ? '유료 구독 이력이 있습니다' : '이미 무료체험을 신청하셨습니다'}
           </h3>
-          {!hasPaidSubscription && (
-            <p className="text-gray-500 text-sm mb-4">(1인당 1회 체험 가능)</p>
-          )}
+          <p className="text-gray-500 text-sm mb-4">
+            {hasPaidSubscription
+              ? '(1인당 최초 1회만 신청 가능합니다)'
+              : '(1인당 1회 체험 가능)'}
+          </p>
 
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             {hasPaidSubscription ? (
@@ -461,14 +478,23 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             </p>
           )}
 
-          <a
-            href="https://app.yamoo.ai.kr"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-8 rounded-lg transition-colors"
-          >
-            포탈 이동
-          </a>
+          {user && portalButtonCountdown > 0 ? (
+            <button
+              disabled
+              className="inline-block bg-gray-300 text-gray-500 font-bold py-3 px-8 rounded-lg cursor-not-allowed"
+            >
+              포탈 이동 ({portalButtonCountdown}초)
+            </button>
+          ) : (
+            <a
+              href="https://app.yamoo.ai.kr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-8 rounded-lg transition-colors"
+            >
+              포탈 이동
+            </a>
+          )}
         </div>
       </div>
     );

@@ -20,7 +20,7 @@ function PricingGuidanceModal({ isOpen, onClose }: PricingGuidanceModalProps) {
   if (!isOpen) return null;
 
   const handleGoPricing = () => {
-    router.push('/pricing');
+    router.push('/plan');
   };
 
   return (

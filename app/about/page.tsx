@@ -932,7 +932,7 @@ export default function AboutPage() {
           {/* 구독 바로가기 버튼 */}
           <div className="text-center mt-8 sm:mt-12">
             <Link
-              href="/pricing"
+              href="/plan"
               className="inline-flex items-center gap-2 bg-[#ffbf03] hover:bg-[#e6ac00] text-gray-900 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg transition-colors"
             >
               구독 바로가기
