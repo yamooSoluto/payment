@@ -64,6 +64,7 @@ export default function PricingClient({
   const [selectedPlan, setSelectedPlan] = useState<string>('');
   const [trialApplied, setTrialApplied] = useState<boolean>(false);
   const [hasPaidSubscription, setHasPaidSubscription] = useState<boolean>(false);
+  const [isUserDataLoaded, setIsUserDataLoaded] = useState<boolean>(false);
   const [pendingCheckoutData, setPendingCheckoutData] = useState<{ plan: string; url: string } | null>(null);
 
   // 중복 fetch 방지용 ref
@@ -115,7 +116,13 @@ export default function PricingClient({
 
   // 사용자 데이터 조회 (trialApplied 확인용)
   useEffect(() => {
-    if (hasFetchedUserRef.current || !userEmail || !user) {
+    // 비로그인 상태면 로드 완료 처리
+    if (!userEmail || !user) {
+      setIsUserDataLoaded(true);
+      return;
+    }
+
+    if (hasFetchedUserRef.current) {
       return;
     }
 
@@ -136,6 +143,8 @@ export default function PricingClient({
         }
       } catch (error) {
         console.error('Failed to fetch user data:', error);
+      } finally {
+        setIsUserDataLoaded(true);
       }
     };
 
@@ -214,6 +223,7 @@ export default function PricingClient({
         email={userEmail || ''}
         trialApplied={trialApplied}
         hasPaidSubscription={hasPaidSubscription}
+        isUserDataLoaded={isUserDataLoaded}
         onSelectTenant={handleSelectTenant}
         onCheckTrialBeforeSubscribe={handleCheckTrialBeforeSubscribe}
       />

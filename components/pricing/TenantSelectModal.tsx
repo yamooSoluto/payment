@@ -27,6 +27,7 @@ interface TenantSelectModalProps {
   email: string;
   trialApplied?: boolean;
   hasPaidSubscription?: boolean;
+  isUserDataLoaded?: boolean;
   onSelectTenant: (tenantId: string) => void;
   onCheckTrialBeforeSubscribe?: (planId: string, checkoutUrl: string) => void;
 }
@@ -64,6 +65,7 @@ export default function TenantSelectModal({
   email,
   trialApplied = false,
   hasPaidSubscription = false,
+  isUserDataLoaded = true,
   onSelectTenant,
   onCheckTrialBeforeSubscribe,
 }: TenantSelectModalProps) {
@@ -84,6 +86,7 @@ export default function TenantSelectModal({
   const [industry, setIndustry] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [agreedNoTrial, setAgreedNoTrial] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 모달이 닫힐 때 폼 상태 초기화
   useEffect(() => {
@@ -93,6 +96,7 @@ export default function TenantSelectModal({
       setIndustry('');
       setFormError(null);
       setAgreedNoTrial(false);
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
@@ -127,6 +131,8 @@ export default function TenantSelectModal({
       setFormError('업종을 선택해주세요.');
       return;
     }
+
+    setIsSubmitting(true);
 
     // 매장 정보와 함께 결제 페이지로 이동
     const url = `/checkout?plan=${selectedPlan}&${effectiveAuthParam}&newTenant=true&brandName=${encodeURIComponent(brandName.trim())}&industry=${encodeURIComponent(industry)}`;
@@ -331,17 +337,25 @@ export default function TenantSelectModal({
                   <button
                     type="button"
                     onClick={handleBackToSelection}
-                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     이전
                   </button>
                   <button
                     type="button"
                     onClick={handleTenantFormSubmit}
-                    disabled={!brandName.trim() || !industry || (!hasPaidSubscription && !agreedNoTrial)}
-                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!brandName.trim() || !industry || (!hasPaidSubscription && !agreedNoTrial) || isSubmitting}
+                    className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    결제 진행
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        이동 중...
+                      </>
+                    ) : (
+                      '결제 진행'
+                    )}
                   </button>
                 </div>
               </div>
@@ -418,6 +432,12 @@ export default function TenantSelectModal({
                     </div>
                   </button>
                 ))}
+              </div>
+            ) : !isUserDataLoaded ? (
+              // 로딩 중
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mb-4" />
+                <p className="text-gray-500 text-sm">불러오는 중...</p>
               </div>
             ) : (
               // 매장이 없는 경우: 무료체험 or 바로결제
