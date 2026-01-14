@@ -445,7 +445,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               // 로그인 상태: 기존 계정으로 포탈 이용 안내
               <>
                 <p className="text-gray-600 text-sm sm:text-base mb-3">
-                  현재 로그인한 계정으로 포탈에 바로 접속하실 수 있습니다.
+                  현재 로그인한 계정으로 포탈에 접속하실 수 있습니다.
                 </p>
                 <p className="text-gray-500 text-sm">
                   📱 아이디: <strong>{formData.email}</strong>

@@ -155,64 +155,20 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           };
         }
 
-        // 모든 tenant 데이터 수집 (삭제된 매장 제외, trial/subscription 정보 포함)
+        // 모든 tenant 데이터 수집 (삭제된 매장 제외)
         const tenantDataList = tenantsSnapshot.docs
           .filter((doc) => !doc.data().deleted)
           .map((doc) => {
-          const data = doc.data();
-
-          // 체험 종료일 확인
-          const trialEndsAtRaw = data.trialEndsAt || data.subscription?.trialEndsAt;
-          let trialEndsAtDate: Date | null = null;
-          if (trialEndsAtRaw) {
-            if (typeof trialEndsAtRaw === 'object' && 'toDate' in trialEndsAtRaw) {
-              trialEndsAtDate = trialEndsAtRaw.toDate();
-            } else if (typeof trialEndsAtRaw === 'object' && '_seconds' in trialEndsAtRaw) {
-              trialEndsAtDate = new Date(trialEndsAtRaw._seconds * 1000);
-            } else if (typeof trialEndsAtRaw === 'string') {
-              trialEndsAtDate = new Date(trialEndsAtRaw);
-            }
-          }
-
-          // 구독 상태 결정 로직
-          let effectiveStatus = data.subscription?.status || data.status;
-          const effectivePlan = data.subscription?.plan || data.plan;
-
-          // 명시적 구독 상태가 없는 경우 체험 기간으로 판단
-          if (!effectiveStatus || effectiveStatus === 'active') {
-            if (effectivePlan === 'trial' || !effectivePlan) {
-              // trial 플랜인 경우: 체험 종료일 확인
-              if (trialEndsAtDate) {
-                const now = new Date();
-                if (trialEndsAtDate > now) {
-                  effectiveStatus = 'trial';
-                } else {
-                  effectiveStatus = 'expired';
-                }
-              } else {
-                // 체험 종료일이 없으면 기본값 trial
-                effectiveStatus = 'trial';
-              }
-            }
-          }
-
-          return {
-            id: doc.id,
-            tenantId: data.tenantId || doc.id,
-            brandName: data.brandName || '이름 없음',
-            email: data.email,
-            industry: data.industry || null,
-            createdAt: serializeTimestamp(data.createdAt),
-            // tenants 컬렉션의 구독/체험 정보 (fallback용)
-            tenantSubscription: {
-              plan: effectivePlan || 'trial',
-              status: effectiveStatus,
-              trialEndsAt: serializeTimestamp(trialEndsAtRaw),
-              startedAt: serializeTimestamp(data.subscription?.startedAt),
-              renewsAt: serializeTimestamp(data.subscription?.renewsAt),
-            },
-          };
-        });
+            const data = doc.data();
+            return {
+              id: doc.id,
+              tenantId: data.tenantId || doc.id,
+              brandName: data.brandName || '이름 없음',
+              email: data.email,
+              industry: data.industry || null,
+              createdAt: serializeTimestamp(data.createdAt),
+            };
+          });
 
         // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
         const subscriptionRefs = tenantDataList.map((t) =>
@@ -244,66 +200,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           }
         });
 
-        // 최종 결과 조합 (subscriptions 컬렉션 우선, plan이 있는 경우만 사용)
+        // 최종 결과 조합 (subscriptions 컬렉션에서만 가져옴)
         tenants = tenantDataList.map((tenant) => {
-          const subFromCollection = subscriptionMap.get(tenant.tenantId);
+          const subscription = subscriptionMap.get(tenant.tenantId);
 
-          // subscriptions 컬렉션에 있고 plan이 있으면 사용
-          if (subFromCollection?.plan) {
-            return {
-              id: tenant.id,
-              tenantId: tenant.tenantId,
-              brandName: tenant.brandName,
-              email: tenant.email,
-              industry: tenant.industry,
-              createdAt: tenant.createdAt,
-              subscription: subFromCollection,
-            };
-          }
-
-          // tenants 컬렉션의 subscription 정보 확인 (plan이 있는 경우만)
-          const tenantSub = tenant.tenantSubscription;
-          if (tenantSub.plan && tenantSub.plan !== 'trial') {
-            // trial이 아닌 실제 플랜이 있는 경우에만 사용
-            return {
-              id: tenant.id,
-              tenantId: tenant.tenantId,
-              brandName: tenant.brandName,
-              email: tenant.email,
-              industry: tenant.industry,
-              createdAt: tenant.createdAt,
-              subscription: {
-                plan: tenantSub.plan,
-                status: tenantSub.status,
-                amount: 0,
-                nextBillingDate: tenantSub.renewsAt,
-                currentPeriodEnd: tenantSub.trialEndsAt || tenantSub.renewsAt,
-                canceledAt: null,
-              },
-            };
-          }
-
-          // trialEndsAt이 있는 진짜 체험 중인 경우
-          if (tenantSub.trialEndsAt && tenantSub.status === 'trial') {
-            return {
-              id: tenant.id,
-              tenantId: tenant.tenantId,
-              brandName: tenant.brandName,
-              email: tenant.email,
-              industry: tenant.industry,
-              createdAt: tenant.createdAt,
-              subscription: {
-                plan: 'trial',
-                status: 'trial',
-                amount: 0,
-                nextBillingDate: null,
-                currentPeriodEnd: tenantSub.trialEndsAt,
-                canceledAt: null,
-              },
-            };
-          }
-
-          // 그 외에는 미구독 (subscription: null)
+          // plan이 있는 경우에만 구독 정보 사용, 없으면 null (미구독)
           return {
             id: tenant.id,
             tenantId: tenant.tenantId,
@@ -311,7 +212,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             email: tenant.email,
             industry: tenant.industry,
             createdAt: tenant.createdAt,
-            subscription: null,
+            subscription: subscription?.plan ? subscription : null,
           };
         });
       }
