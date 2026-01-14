@@ -472,8 +472,8 @@ export async function POST(request: Request) {
           }
         }
       } else {
-        // 기존 사용자: 포탈 링크만
-        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n\n포탈: ${portalUrl}\n\n위 포탈에서 ID/PW 접속 후 이용해 주세요.`;
+        // 기존 사용자(로그인 상태에서 신청): 홈페이지 비밀번호 안내
+        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n\n포탈: ${portalUrl}\n\n홈페이지 비밀번호로 포탈에 로그인하실 수 있습니다.`;
 
         if (useAlimtalk) {
           const templateCode = process.env.BIZM_TRIAL_EXISTING_TEMPLATE_CODE || 'TRIAL_EXISTING';

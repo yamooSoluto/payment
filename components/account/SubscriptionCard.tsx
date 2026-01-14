@@ -54,13 +54,18 @@ function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillin
   if (!isOpen) return null;
 
   // checkout URL 생성 헬퍼 (authParam이 빈 문자열일 때도 올바르게 처리)
+  // 보안: token은 URL에 노출하지 않음 (세션 쿠키로 인증)
   const buildCheckoutUrl = (planId: string, options?: { tenantId?: string; mode?: string }) => {
     const params = new URLSearchParams();
     params.set('plan', planId);
     if (authParam) {
-      // authParam이 "token=xxx" 또는 "email=xxx" 형태이므로 파싱해서 추가
       const authParams = new URLSearchParams(authParam);
-      authParams.forEach((value, key) => params.set(key, value));
+      authParams.forEach((value, key) => {
+        // token은 URL에 노출하지 않음 (세션 쿠키 사용)
+        if (key !== 'token') {
+          params.set(key, value);
+        }
+      });
     }
     if (options?.tenantId) params.set('tenantId', options.tenantId);
     if (options?.mode) params.set('mode', options.mode);

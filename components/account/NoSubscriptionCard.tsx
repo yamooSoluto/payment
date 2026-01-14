@@ -45,11 +45,16 @@ function PlanSelectModal({ isOpen, onClose, authParam, tenantId }: PlanSelectMod
 
   const handleSelectPlan = (planId: string) => {
     // URLSearchParams로 올바른 URL 구성 (authParam이 빈 문자열일 때 && 방지)
+    // 보안: token은 URL에 노출하지 않음 (세션 쿠키로 인증)
     const params = new URLSearchParams();
     params.set('plan', planId);
     if (authParam) {
       const authParams = new URLSearchParams(authParam);
-      authParams.forEach((value, key) => params.set(key, value));
+      authParams.forEach((value, key) => {
+        if (key !== 'token') {
+          params.set(key, value);
+        }
+      });
     }
     params.set('tenantId', tenantId);
     window.location.href = `/checkout?${params.toString()}`;

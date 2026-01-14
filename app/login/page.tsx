@@ -447,15 +447,12 @@ function LoginForm() {
       }
 
       // 세션 API를 통해 쿠키 설정 후 리다이렉트
+      // window.location.href 사용 (API route의 Set-Cookie가 제대로 적용되도록)
       if (authToken) {
         const sessionUrl = `/api/auth/session?token=${encodeURIComponent(authToken)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        router.push(sessionUrl);
+        window.location.href = sessionUrl;
       } else {
-        // 토큰 없이 이메일만 있는 경우 (fallback)
-        const url = new URL(redirectUrl, window.location.origin);
-        url.searchParams.set('email', email);
-        const finalUrl = url.pathname + url.search;
-        router.push(finalUrl);
+        throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
       }
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string };
@@ -529,16 +526,12 @@ function LoginForm() {
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json();
         const sessionUrl = `/api/auth/session?token=${encodeURIComponent(tokenData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        router.push(sessionUrl);
+        window.location.href = sessionUrl;
       } else {
-        // 토큰 발급 실패 시 fallback
-        const url = new URL(redirectUrl, window.location.origin);
-        url.searchParams.set('email', userEmail);
-        const finalUrl = url.pathname + url.search;
-        router.push(finalUrl);
+        throw new Error('인증 토큰 발급에 실패했습니다.');
       }
     } catch {
-      setError('Google 로그인에 실패했습니다.');
+      setError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
@@ -594,15 +587,12 @@ function LoginForm() {
       }
 
       // 프로필 저장 완료 - 세션 API를 통해 쿠키 설정 후 리다이렉트
+      // window.location.href 사용 (API route의 Set-Cookie가 제대로 적용되도록)
       if (saveData.token) {
         const sessionUrl = `/api/auth/session?token=${encodeURIComponent(saveData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        router.push(sessionUrl);
+        window.location.href = sessionUrl;
       } else {
-        // 토큰 없는 경우 fallback
-        const url = new URL(redirectUrl, window.location.origin);
-        url.searchParams.set('email', googleUser.email);
-        const finalUrl = url.pathname + url.search;
-        router.push(finalUrl);
+        throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
       }
     } catch (err: unknown) {
       const error = err as { message?: string };

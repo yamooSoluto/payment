@@ -111,11 +111,16 @@ export default function ChangePlanButton({
       if (response.ok) {
         if (mode === 'immediate' && data.requiresPayment) {
           // 업그레이드: 결제 페이지로 이동 (URLSearchParams로 올바른 URL 구성)
+          // 보안: token은 URL에 노출하지 않음 (세션 쿠키로 인증)
           const checkoutParams = new URLSearchParams();
           checkoutParams.set('plan', newPlan);
           if (authParam) {
             const authParams = new URLSearchParams(authParam);
-            authParams.forEach((value, key) => checkoutParams.set(key, value));
+            authParams.forEach((value, key) => {
+              if (key !== 'token') {
+                checkoutParams.set(key, value);
+              }
+            });
           }
           if (tenantId) checkoutParams.set('tenantId', tenantId);
           checkoutParams.set('mode', 'immediate');

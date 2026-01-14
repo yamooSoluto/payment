@@ -12,13 +12,89 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const [authChecked, setAuthChecked] = useState(false);
   const [ssoProcessing, setSsoProcessing] = useState(false);
+  const [sessionVerified, setSessionVerified] = useState(false); // 세션 쿠키 인증 성공 여부
+  const [sessionChecking, setSessionChecking] = useState(false); // 세션 검증 중
   const ssoAttempted = useRef(false);
+  const tokenCleanupAttempted = useRef(false);
+  const sessionCheckAttempted = useRef(false);
 
   // 토큰 기반 인증(포탈 SSO)
   const hasToken = searchParams.get('token');
   const hasSsoToken = searchParams.get('ssoToken');  // POST SSO 후 리다이렉트로 전달되는 Custom Token
   const hasIdToken = searchParams.get('idToken');  // GET 방식 (fallback)
   const hasEmail = searchParams.get('email');
+
+  // URL에서 token 파라미터 제거 (보안: 세션 쿠키가 설정된 후에는 URL에 노출 불필요)
+  useEffect(() => {
+    if (!hasToken || tokenCleanupAttempted.current) return;
+    tokenCleanupAttempted.current = true;
+
+    // 세션 API 호출하여 쿠키 설정 후 URL에서 token 제거
+    const cleanupToken = async () => {
+      try {
+        // 세션 쿠키 설정
+        const response = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: hasToken }),
+        });
+
+        if (response.ok) {
+          // 세션 설정 성공 - 이제 세션 쿠키로 인증 가능
+          setSessionVerified(true);
+
+          // URL에서 token 파라미터 제거
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('token');
+          window.history.replaceState({}, '', newUrl.toString());
+          console.log('[Token cleanup] Session verified, token removed from URL');
+        } else {
+          // 세션 설정 실패 - token 유지
+          console.error('[Token cleanup] Session creation failed, keeping token');
+        }
+      } catch (error) {
+        console.error('[Token cleanup] Error:', error);
+        // 에러 발생 시 token 유지 (안전하게)
+      }
+    };
+
+    cleanupToken();
+  }, [hasToken]);
+
+  // 세션 쿠키 검증 (새로고침 시 - 토큰 없고 Firebase Auth 없는 경우)
+  useEffect(() => {
+    // 이미 인증 방법이 있으면 스킵
+    if (hasToken || hasSsoToken || hasIdToken || user || loading) return;
+    // 이미 세션 검증 완료되었으면 스킵
+    if (sessionVerified || sessionCheckAttempted.current) return;
+
+    sessionCheckAttempted.current = true;
+    setSessionChecking(true);
+
+    const verifySession = async () => {
+      try {
+        // 세션 쿠키로 인증 가능한지 확인 (쿠키는 자동으로 전송됨)
+        const response = await fetch('/api/auth/verify-session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.valid) {
+            setSessionVerified(true);
+            console.log('[Session] Cookie session verified');
+          }
+        }
+      } catch (error) {
+        console.error('[Session] Verification error:', error);
+      } finally {
+        setSessionChecking(false);
+      }
+    };
+
+    verifySession();
+  }, [hasToken, hasSsoToken, hasIdToken, user, loading, sessionVerified]);
 
   // ssoToken으로 Firebase 로그인 (POST SSO 후 리다이렉트된 경우)
   // 기존 로그인 세션이 있어도 SSO 토큰으로 새로 로그인 (다른 계정일 수 있음)
@@ -99,8 +175,11 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     // SSO 처리 중이면 대기
     if (ssoProcessing || hasSsoToken || hasIdToken) return;
 
-    // 토큰이 있으면 포탈 SSO 인증이므로 Firebase Auth 체크 스킵
-    if (hasToken) return;
+    // 세션 검증 중이면 대기
+    if (sessionChecking) return;
+
+    // 토큰이 있거나 세션 쿠키 인증 성공이면 포탈 SSO 인증이므로 Firebase Auth 체크 스킵
+    if (hasToken || sessionVerified) return;
 
     // 로딩 중이면 대기
     if (loading) return;
@@ -131,10 +210,10 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
       const currentUrl = window.location.pathname + window.location.search;
       router.replace(`/login?redirect=${encodeURIComponent(currentUrl)}`);
     }
-  }, [user, loading, hasToken, hasSsoToken, hasIdToken, hasEmail, authChecked, ssoProcessing, router]);
+  }, [user, loading, hasToken, hasSsoToken, hasIdToken, hasEmail, authChecked, ssoProcessing, sessionVerified, sessionChecking, router]);
 
-  // SSO 처리 중 또는 ssoToken/idToken이 있을 때 로딩 표시
-  if (ssoProcessing || ((hasSsoToken || hasIdToken) && !authChecked)) {
+  // SSO 처리 중, 세션 검증 중, 또는 ssoToken/idToken이 있을 때 로딩 표시
+  if (ssoProcessing || sessionChecking || ((hasSsoToken || hasIdToken) && !authChecked)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -145,8 +224,8 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 토큰 인증이면 바로 렌더링
-  if (hasToken) {
+  // 토큰 인증 또는 세션 쿠키 인증이면 바로 렌더링
+  if (hasToken || sessionVerified) {
     return <>{children}</>;
   }
 
