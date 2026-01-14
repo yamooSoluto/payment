@@ -63,6 +63,7 @@ export default function PricingClient({
   const [isTrialSuggestionOpen, setIsTrialSuggestionOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('');
   const [trialApplied, setTrialApplied] = useState<boolean>(false);
+  const [hasPaidSubscription, setHasPaidSubscription] = useState<boolean>(false);
   const [pendingCheckoutData, setPendingCheckoutData] = useState<{ plan: string; url: string } | null>(null);
 
   // 중복 fetch 방지용 ref
@@ -131,6 +132,7 @@ export default function PricingClient({
         if (response.ok) {
           const data = await response.json();
           setTrialApplied(data.trialApplied || false);
+          setHasPaidSubscription(data.hasPaidSubscription || false);
         }
       } catch (error) {
         console.error('Failed to fetch user data:', error);
@@ -211,6 +213,7 @@ export default function PricingClient({
         authParam={finalAuthParam}
         email={userEmail || ''}
         trialApplied={trialApplied}
+        hasPaidSubscription={hasPaidSubscription}
         onSelectTenant={handleSelectTenant}
         onCheckTrialBeforeSubscribe={handleCheckTrialBeforeSubscribe}
       />

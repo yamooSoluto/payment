@@ -26,6 +26,7 @@ interface TenantSelectModalProps {
   authParam: string;
   email: string;
   trialApplied?: boolean;
+  hasPaidSubscription?: boolean;
   onSelectTenant: (tenantId: string) => void;
   onCheckTrialBeforeSubscribe?: (planId: string, checkoutUrl: string) => void;
 }
@@ -62,6 +63,7 @@ export default function TenantSelectModal({
   authParam,
   email,
   trialApplied = false,
+  hasPaidSubscription = false,
   onSelectTenant,
   onCheckTrialBeforeSubscribe,
 }: TenantSelectModalProps) {
@@ -288,33 +290,37 @@ export default function TenantSelectModal({
                   </p>
                 </div>
 
-                {/* 무료체험 불가 안내 */}
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <WarningCircle width={20} height={20} strokeWidth={1.5} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-amber-800">
-                      <p className="font-semibold mb-1">무료체험 불가 안내</p>
-                      <p className="text-amber-700">
-                        유료 결제 이후에는 동일 명의로 무료체험을 신청하실 수 없습니다.
-                        (탈퇴 후 재가입해도 동일)
-                        무료체험을 원하시면 이전으로 돌아가 &apos;무료체험 신청하기&apos;를 선택해주세요.
-                      </p>
+                {/* 무료체험 불가 안내 (유료 구독 이력이 없는 경우에만 표시) */}
+                {!hasPaidSubscription && (
+                  <>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <WarningCircle width={20} height={20} strokeWidth={1.5} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-amber-800">
+                          <p className="font-semibold mb-1">무료체험 불가 안내</p>
+                          <p className="text-amber-700">
+                            유료 결제 이후에는 동일 명의로 무료체험을 신청하실 수 없습니다.
+                            (탈퇴 후 재가입해도 동일)
+                            무료체험을 원하시면 이전으로 돌아가 &apos;무료체험 신청하기&apos;를 선택해주세요.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* 동의 체크박스 */}
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agreedNoTrial}
-                    onChange={(e) => setAgreedNoTrial(e.target.checked)}
-                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
-                  />
-                  <span className="text-sm text-gray-700">
-                    유료 결제 후 동일 명의로 무료체험을 신청할 수 없음을 확인했습니다.
-                  </span>
-                </label>
+                    {/* 동의 체크박스 */}
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={agreedNoTrial}
+                        onChange={(e) => setAgreedNoTrial(e.target.checked)}
+                        className="w-5 h-5 mt-0.5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
+                      />
+                      <span className="text-sm text-gray-700">
+                        유료 결제 후 동일 명의로 무료체험을 신청할 수 없음을 확인했습니다.
+                      </span>
+                    </label>
+                  </>
+                )}
 
                 {formError && (
                   <p className="text-sm text-red-600">{formError}</p>
@@ -332,7 +338,7 @@ export default function TenantSelectModal({
                   <button
                     type="button"
                     onClick={handleTenantFormSubmit}
-                    disabled={!brandName.trim() || !industry || !agreedNoTrial}
+                    disabled={!brandName.trim() || !industry || (!hasPaidSubscription && !agreedNoTrial)}
                     className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     결제 진행
@@ -418,45 +424,58 @@ export default function TenantSelectModal({
               <div className="space-y-4">
                 <p className="text-gray-600 text-center">
                   등록된 매장이 없습니다.<br />
-                  아래 옵션 중 선택해주세요.
+                  {hasPaidSubscription
+                    ? '새 매장을 등록하고 구독을 시작하세요.'
+                    : '아래 옵션 중 선택해주세요.'}
                 </p>
 
-                {/* 무료체험 옵션 */}
-                <button
-                  onClick={handleTrialClick}
-                  className="w-full p-5 rounded-xl border-2 border-yamoo-primary bg-yamoo-primary/5 text-left transition-all hover:bg-yamoo-primary/10"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-yamoo-primary rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Sparks width={24} height={24} strokeWidth={1.5} className="text-white" />
+                {/* 무료체험 옵션 (유료 구독 이력이 없는 경우에만 표시) */}
+                {!hasPaidSubscription && (
+                  <button
+                    onClick={handleTrialClick}
+                    className="w-full p-5 rounded-xl border-2 border-yamoo-primary bg-yamoo-primary/5 text-left transition-all hover:bg-yamoo-primary/10"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-yamoo-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Sparks width={24} height={24} strokeWidth={1.5} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 text-lg">
+                          무료체험 신청하기
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          1개월 무료로 야무를 체험해보세요!
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-gray-900 text-lg">
-                        무료체험 신청하기
-                      </p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        1개월 무료로 야무를 체험해보세요!
-                      </p>
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                )}
 
                 {/* 바로결제 옵션 */}
                 <button
                   onClick={handleDirectPayment}
-                  className="w-full p-5 rounded-xl border-2 border-gray-200 text-left transition-all hover:border-gray-300 hover:bg-gray-50"
+                  className={cn(
+                    "w-full p-5 rounded-xl border-2 text-left transition-all",
+                    hasPaidSubscription
+                      ? "border-yamoo-primary bg-yamoo-primary/5 hover:bg-yamoo-primary/10"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  )}
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <CreditCard width={24} height={24} strokeWidth={1.5} className="text-gray-600" />
+                    <div className={cn(
+                      "w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0",
+                      hasPaidSubscription ? "bg-yamoo-primary" : "bg-gray-100"
+                    )}>
+                      <CreditCard width={24} height={24} strokeWidth={1.5} className={hasPaidSubscription ? "text-white" : "text-gray-600"} />
                     </div>
                     <div>
                       <p className="font-bold text-gray-900 text-lg">
-                        바로 결제하기
+                        {hasPaidSubscription ? '새 매장 등록하기' : '바로 결제하기'}
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
-                        이미 야무 서비스를 알고 계신가요?<br />
-                        바로 결제를 진행합니다.
+                        {hasPaidSubscription
+                          ? '새 매장을 등록하고 구독을 시작합니다.'
+                          : <>이미 야무 서비스를 알고 계신가요?<br />바로 결제를 진행합니다.</>}
                       </p>
                     </div>
                   </div>
