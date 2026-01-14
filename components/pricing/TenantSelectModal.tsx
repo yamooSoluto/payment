@@ -444,13 +444,13 @@ export default function TenantSelectModal({
               <div className="space-y-4">
                 <p className="text-gray-600 text-center">
                   등록된 매장이 없습니다.<br />
-                  {hasPaidSubscription
+                  {(trialApplied || hasPaidSubscription)
                     ? '새 매장을 등록하고 구독을 시작하세요.'
                     : '아래 옵션 중 선택해주세요.'}
                 </p>
 
-                {/* 무료체험 옵션 (유료 구독 이력이 없는 경우에만 표시) */}
-                {!hasPaidSubscription && (
+                {/* 무료체험 옵션 (무료체험/유료 구독 이력이 없는 경우에만 표시) */}
+                {!trialApplied && !hasPaidSubscription && (
                   <button
                     onClick={handleTrialClick}
                     className="w-full p-5 rounded-xl border-2 border-yamoo-primary bg-yamoo-primary/5 text-left transition-all hover:bg-yamoo-primary/10"
@@ -476,7 +476,7 @@ export default function TenantSelectModal({
                   onClick={handleDirectPayment}
                   className={cn(
                     "w-full p-5 rounded-xl border-2 text-left transition-all",
-                    hasPaidSubscription
+                    (trialApplied || hasPaidSubscription)
                       ? "border-yamoo-primary bg-yamoo-primary/5 hover:bg-yamoo-primary/10"
                       : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   )}
@@ -484,16 +484,16 @@ export default function TenantSelectModal({
                   <div className="flex items-start gap-4">
                     <div className={cn(
                       "w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0",
-                      hasPaidSubscription ? "bg-yamoo-primary" : "bg-gray-100"
+                      (trialApplied || hasPaidSubscription) ? "bg-yamoo-primary" : "bg-gray-100"
                     )}>
-                      <CreditCard width={24} height={24} strokeWidth={1.5} className={hasPaidSubscription ? "text-white" : "text-gray-600"} />
+                      <CreditCard width={24} height={24} strokeWidth={1.5} className={(trialApplied || hasPaidSubscription) ? "text-white" : "text-gray-600"} />
                     </div>
                     <div>
                       <p className="font-bold text-gray-900 text-lg">
-                        {hasPaidSubscription ? '새 매장 등록하기' : '바로 결제하기'}
+                        {(trialApplied || hasPaidSubscription) ? '새 매장 등록하기' : '바로 결제하기'}
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {hasPaidSubscription
+                        {(trialApplied || hasPaidSubscription)
                           ? '새 매장을 등록하고 구독을 시작합니다.'
                           : <>이미 야무 서비스를 알고 계신가요?<br />바로 결제를 진행합니다.</>}
                       </p>
