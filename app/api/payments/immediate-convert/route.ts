@@ -119,7 +119,10 @@ export async function POST(request: NextRequest) {
 
     // 결제 수행
     const orderId = `SUB_${Date.now()}`;
-    const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
+    const brandName = subscription?.brandName || '';
+    const orderName = brandName
+      ? `YAMOO ${getPlanName(plan)} 플랜 (${brandName})`
+      : `YAMOO ${getPlanName(plan)} 플랜`;
 
     console.log('Processing immediate conversion payment:', { orderId, paymentAmount, tenantId });
 

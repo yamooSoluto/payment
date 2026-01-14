@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Mail, Plus, EditPencil, Trash, RefreshDouble, Xmark, Flash, Send, Clock, NavArrowLeft, NavArrowRight, Search } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 // ===== 인터페이스 =====
 interface Template {
@@ -739,7 +740,7 @@ export default function NotificationsPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             {templateLoading ? (
               <div className="flex items-center justify-center py-20">
-                <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+                <Spinner size="md" />
               </div>
             ) : templates.length === 0 ? (
               <div className="text-center py-20 text-gray-500">

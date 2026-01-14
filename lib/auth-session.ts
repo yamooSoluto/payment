@@ -27,6 +27,7 @@ function generateSessionId(): string {
 export async function createAuthSession(data: {
   email: string;
   token?: string;
+  ip?: string;
 }): Promise<string> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -47,6 +48,21 @@ export async function createAuthSession(data: {
   };
 
   await db.collection('auth_sessions').doc(sessionId).set(sessionData);
+
+  // 사용자 마지막 로그인 정보 업데이트
+  try {
+    const userRef = db.collection('users').doc(data.email);
+    const userDoc = await userRef.get();
+    if (userDoc.exists) {
+      await userRef.update({
+        lastLoginAt: now,
+        ...(data.ip && { lastLoginIP: data.ip }),
+      });
+    }
+  } catch (error) {
+    // 로그인 정보 업데이트 실패해도 세션 생성은 계속
+    console.error('Failed to update last login info:', error);
+  }
 
   return sessionId;
 }

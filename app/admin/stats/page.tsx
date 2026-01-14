@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { StatsUpSquare, Group, CreditCard, GraphUp, Calendar, RefreshDouble } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 interface Summary {
   totalMembers: number;
@@ -134,7 +135,7 @@ export default function StatsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+          <Spinner size="md" />
         </div>
       ) : data ? (
         <>

@@ -62,9 +62,14 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
     // 환불 타입들 (cancel_refund, downgrade_refund, plan_change_refund, refund 등)
     const refundTypes = ['refund', 'cancel_refund', 'downgrade_refund', 'plan_change_refund'];
 
+    // 환불 레코드 판별 함수: type이 환불 타입이거나, status가 refunded이면서 금액이 음수인 경우
+    const isRefundRecord = (p: Payment) =>
+      refundTypes.includes(p.type || '') ||
+      (p.status === 'refunded' && p.amount < 0);
+
     // 환불 레코드와 원결제 분리
-    const refundRecords = payments.filter(p => refundTypes.includes(p.type || ''));
-    const originalPayments = payments.filter(p => !refundTypes.includes(p.type || ''));
+    const refundRecords = payments.filter(p => isRefundRecord(p));
+    const originalPayments = payments.filter(p => !isRefundRecord(p));
 
     // 원결제에 환불 정보 병합
     const merged: MergedPayment[] = originalPayments.map(payment => {

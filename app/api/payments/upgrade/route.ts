@@ -62,7 +62,10 @@ export async function POST(request: NextRequest) {
     const orderId = `CHG_${Date.now()}`;
 
     if (proratedAmount > 0) {
-      const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
+      const brandName = subscription.brandName || '';
+      const orderName = brandName
+        ? `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경 (${brandName})`
+        : `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
 
       console.log('Processing upgrade payment:', {
         orderId,

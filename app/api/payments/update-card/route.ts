@@ -3,6 +3,12 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey } from '@/lib/toss';
 import { verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { CardItem, TenantCardsDocument } from '@/app/api/cards/route';
+
+// 카드 ID 생성
+function generateCardId(): string {
+  return `card_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // 카드 추가/변경 처리 (새 빌링키 발급 후 카드 컬렉션에 저장)
 export async function GET(request: NextRequest) {
@@ -66,57 +72,62 @@ export async function GET(request: NextRequest) {
 
     console.log('New billing key issued:', newBillingKey?.slice(0, 10) + '...');
 
-    // 같은 카드번호로 이미 등록된 카드가 있는지 확인
-    const existingCardSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .where('cardInfo.number', '==', cardInfo?.number)
-      .get();
-
-    if (!existingCardSnapshot.empty) {
-      return NextResponse.redirect(
-        new URL(`/account/${tenantId}?${authParam}&error=card_already_exists`, request.url)
-      );
-    }
-
-    // 카드 개수 확인 (최대 5개)
-    const cardCountSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .get();
-
-    if (cardCountSnapshot.size >= 5) {
-      return NextResponse.redirect(
-        new URL(`/account/${tenantId}?${authParam}&error=max_cards_exceeded`, request.url)
-      );
-    }
-
     const now = new Date();
-    const isFirstCard = cardCountSnapshot.empty;
-    const shouldSetPrimary = setAsPrimary || isFirstCard;
+    let newCardId = '';
+    const brandName = subscription?.brandName || '';
 
-    // 트랜잭션으로 카드 추가 및 관련 업데이트
+    // 트랜잭션으로 카드 추가
     await db.runTransaction(async (transaction) => {
-      // 새 카드가 primary로 설정되면 기존 primary 해제
-      if (shouldSetPrimary && !isFirstCard) {
-        const primaryCards = cardCountSnapshot.docs.filter(
-          (doc) => doc.data().isPrimary === true
-        );
-        for (const doc of primaryCards) {
-          transaction.update(doc.ref, { isPrimary: false });
-        }
+      const cardsDocRef = db.collection('cards').doc(tenantId);
+      const cardsDoc = await transaction.get(cardsDocRef);
+
+      let cards: CardItem[] = [];
+      let docEmail = email!;
+      let docBrandName = brandName;
+
+      if (cardsDoc.exists) {
+        const data = cardsDoc.data() as TenantCardsDocument;
+        cards = data.cards || [];
+        docEmail = data.email;
+        docBrandName = data.brandName || brandName;
       }
 
-      // 새 카드를 cards 컬렉션에 추가
-      const cardRef = db.collection('cards').doc();
-      transaction.set(cardRef, {
-        tenantId,
-        email,
+      // 중복 카드 체크
+      if (cards.some((card) => card.cardInfo.number === cardInfo?.number)) {
+        throw new Error('card_already_exists');
+      }
+
+      // 최대 5개 제한
+      if (cards.length >= 5) {
+        throw new Error('max_cards_exceeded');
+      }
+
+      const isFirstCard = cards.length === 0;
+      const shouldSetPrimary = setAsPrimary || isFirstCard;
+
+      // 새 카드가 primary로 설정되면 기존 primary 해제
+      if (shouldSetPrimary && !isFirstCard) {
+        cards = cards.map((card) => ({ ...card, isPrimary: false }));
+      }
+
+      // 새 카드 추가
+      newCardId = generateCardId();
+      cards.push({
+        id: newCardId,
         billingKey: newBillingKey,
         cardInfo,
         alias: cardAlias || null,
         isPrimary: shouldSetPrimary,
         createdAt: now,
+      });
+
+      // 카드 문서 저장
+      transaction.set(cardsDocRef, {
+        tenantId,
+        email: docEmail,
+        brandName: docBrandName,
+        cards,
+        updatedAt: now,
       });
 
       // 구독의 primary 카드 정보 업데이트
@@ -126,22 +137,11 @@ export async function GET(request: NextRequest) {
           billingKey: newBillingKey,
           cardInfo,
           cardAlias: cardAlias || null,
-          primaryCardId: cardRef.id,
+          primaryCardId: newCardId,
           cardUpdatedAt: now,
           updatedAt: now,
         });
       }
-
-      // 카드 변경 내역 저장
-      const changeRef = db.collection('card_changes').doc();
-      transaction.set(changeRef, {
-        tenantId,
-        email,
-        newCardInfo: cardInfo,
-        cardAlias: cardAlias || null,
-        action: isFirstCard ? 'added' : shouldSetPrimary ? 'added_as_primary' : 'added',
-        changedAt: now,
-      });
     });
 
     // n8n 웹훅 호출 (카드 추가 알림)
@@ -151,11 +151,11 @@ export async function GET(request: NextRequest) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            event: isFirstCard ? 'card_added' : 'card_updated',
+            event: 'card_added',
             tenantId,
             email,
             cardCompany: cardInfo?.company || null,
-            isPrimary: shouldSetPrimary,
+            isPrimary: setAsPrimary,
           }),
         });
       } catch {
@@ -169,6 +169,19 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Card update failed:', error);
+
+    const message = error instanceof Error ? error.message : '';
+
+    if (message === 'card_already_exists') {
+      return NextResponse.redirect(
+        new URL(`/account/${tenantId}?${authParam}&error=card_already_exists`, request.url)
+      );
+    }
+    if (message === 'max_cards_exceeded') {
+      return NextResponse.redirect(
+        new URL(`/account/${tenantId}?${authParam}&error=max_cards_exceeded`, request.url)
+      );
+    }
 
     return NextResponse.redirect(
       new URL(`/account/change-card?${authParam}${tenantParam}&error=card_update_failed`, request.url)

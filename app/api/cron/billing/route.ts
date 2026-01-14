@@ -66,7 +66,10 @@ export async function GET(request: NextRequest) {
 
             // 첫 결제 수행
             const orderId = `SUB_${Date.now()}`;
-            const orderName = `YAMOO ${getPlanName(plan)} 플랜`;
+            const brandName = subscription.brandName || '';
+            const orderName = brandName
+              ? `YAMOO ${getPlanName(plan)} 플랜 (${brandName})`
+              : `YAMOO ${getPlanName(plan)} 플랜`;
 
             const paymentResponse = await payWithBillingKey(
               billingKey,
@@ -412,7 +415,10 @@ export async function GET(request: NextRequest) {
 
         // 빌링키로 자동 결제
         const orderId = `REC_${Date.now()}`;
-        const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜`;
+        const brandName = subscription.brandName || '';
+        const orderName = brandName
+          ? `YAMOO ${getPlanName(subscription.plan)} 플랜 (${brandName})`
+          : `YAMOO ${getPlanName(subscription.plan)} 플랜`;
 
         // 가격 정책에 따른 실제 결제 금액 계산
         const effectiveAmount = getEffectiveAmount({

@@ -113,15 +113,12 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 3. 카드 정보 삭제
+    // 3. 카드 정보 삭제 (새 구조: tenantId가 문서 ID)
     for (const tenantId of tenantIds) {
-      const cardsSnapshot = await db
-        .collection('cards')
-        .where('tenantId', '==', tenantId)
-        .get();
-
-      for (const cardDoc of cardsSnapshot.docs) {
-        batch.delete(cardDoc.ref);
+      const cardsRef = db.collection('cards').doc(tenantId);
+      const cardsDoc = await cardsRef.get();
+      if (cardsDoc.exists) {
+        batch.delete(cardsRef);
       }
     }
 

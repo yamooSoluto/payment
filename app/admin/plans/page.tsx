@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Package, Plus, EditPencil, Trash, RefreshDouble, Xmark, Check, Menu, ViewGrid, Eye, UserStar } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 import {
   DndContext,
   closestCenter,
@@ -623,7 +624,7 @@ export default function PlansPage() {
           <div className={`grid ${getGridClass()} gap-6`}>
             {loading ? (
               <div className="col-span-full flex items-center justify-center py-20">
-                <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+                <Spinner size="md" />
               </div>
             ) : plans.length === 0 ? (
               <div className="col-span-full text-center py-20 text-gray-500">

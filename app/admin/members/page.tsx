@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, NavArrowLeft, NavArrowRight, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 interface TenantInfo {
   tenantId: string;
@@ -460,7 +461,7 @@ export default function MembersPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : members.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
@@ -479,11 +480,11 @@ export default function MembersPage() {
                       className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
                   </th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이름</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">매장</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
                   <th className="w-12 px-4 py-4"></th>
                 </tr>
               </thead>
@@ -502,16 +503,16 @@ export default function MembersPage() {
                         className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-600 text-center">
                       {member.email || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900 text-center">
                       {member.name || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-600 text-center">
                       {member.phone || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-600 text-center">
                       {member.tenantCount > 0 ? (
                         <div>
                           <span className="font-medium">{member.tenants[0]?.brandName || '-'}</span>
@@ -523,7 +524,7 @@ export default function MembersPage() {
                         </div>
                       ) : '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-gray-500 text-center">
                       {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
                     </td>
                     <td className="px-4 py-4 relative" onClick={(e) => e.stopPropagation()}>

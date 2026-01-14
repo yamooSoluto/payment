@@ -3,10 +3,9 @@ import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-a
 import { verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 
-export interface Card {
+// 카드 아이템 인터페이스 (배열 내 개별 카드)
+export interface CardItem {
   id: string;
-  tenantId: string;
-  email: string;
   billingKey: string;
   cardInfo: {
     company: string;
@@ -14,9 +13,40 @@ export interface Card {
     cardType?: string;
     ownerType?: string;
   };
-  alias?: string;
+  alias?: string | null;
   isPrimary: boolean;
   createdAt: Date;
+}
+
+// 테넌트별 카드 문서 인터페이스
+export interface TenantCardsDocument {
+  tenantId: string;
+  email: string;
+  brandName?: string;
+  cards: CardItem[];
+  updatedAt: Date;
+}
+
+// API 응답용 카드 인터페이스 (기존 호환성 유지)
+export interface Card {
+  id: string;
+  tenantId: string;
+  email: string;
+  billingKey?: string;
+  cardInfo: {
+    company: string;
+    number: string;
+    cardType?: string;
+    ownerType?: string;
+  };
+  alias?: string | null;
+  isPrimary: boolean;
+  createdAt: Date;
+}
+
+// 카드 ID 생성
+function generateCardId(): string {
+  return `card_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // Firebase ID Token에서 이메일 추출
@@ -73,59 +103,108 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
     }
 
-    // 해당 tenant의 카드 목록 조회
-    const cardsSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .get();
+    // 새 구조: tenantId를 문서 ID로 사용
+    const cardsDoc = await db.collection('cards').doc(tenantId).get();
 
-    let cards = cardsSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        tenantId: data.tenantId,
+    let cards: Card[] = [];
+
+    if (cardsDoc.exists) {
+      // 새 구조에서 카드 목록 반환
+      const data = cardsDoc.data() as TenantCardsDocument;
+      cards = (data.cards || []).map((card) => ({
+        id: card.id,
+        tenantId,
         email: data.email,
-        cardInfo: data.cardInfo,
-        alias: data.alias,
-        isPrimary: data.isPrimary || false,
-        createdAt: data.createdAt?.toDate?.() || data.createdAt,
-      };
-    });
+        cardInfo: card.cardInfo,
+        alias: card.alias,
+        isPrimary: card.isPrimary || false,
+        createdAt: (card.createdAt as unknown as { toDate?: () => Date })?.toDate?.() || card.createdAt,
+      }));
+    } else {
+      // 기존 구조에서 마이그레이션 시도
+      const oldCardsSnapshot = await db
+        .collection('cards')
+        .where('tenantId', '==', tenantId)
+        .get();
 
-    // cards 컬렉션이 비어있으면 subscriptions에서 기존 카드 마이그레이션
-    if (cards.length === 0) {
-      const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
-      if (subscriptionDoc.exists) {
-        const subscription = subscriptionDoc.data();
-        if (subscription?.billingKey && subscription?.cardInfo) {
-          // 기존 카드를 cards 컬렉션으로 마이그레이션
-          const now = new Date();
-          const cardRef = db.collection('cards').doc();
+      if (!oldCardsSnapshot.empty) {
+        // 기존 구조 → 새 구조로 마이그레이션
+        const now = new Date();
+        const oldCards = oldCardsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id, // 기존 문서 ID를 카드 ID로 사용
+            billingKey: data.billingKey,
+            cardInfo: data.cardInfo,
+            alias: data.alias || null,
+            isPrimary: data.isPrimary || false,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt || now,
+          };
+        });
 
-          await cardRef.set({
-            tenantId,
-            email: subscription.email,
-            billingKey: subscription.billingKey,
-            cardInfo: subscription.cardInfo,
-            alias: subscription.cardAlias || null,
-            isPrimary: true,
-            createdAt: subscription.cardUpdatedAt || subscription.createdAt || now,
-          });
+        const firstDocData = oldCardsSnapshot.docs[0].data();
 
-          // subscription에 primaryCardId 추가
-          await db.collection('subscriptions').doc(tenantId).update({
-            primaryCardId: cardRef.id,
-          });
+        // 새 구조로 저장
+        await db.collection('cards').doc(tenantId).set({
+          tenantId,
+          email: firstDocData.email,
+          cards: oldCards,
+          updatedAt: now,
+        });
 
-          cards = [{
-            id: cardRef.id,
-            tenantId,
-            email: subscription.email,
-            cardInfo: subscription.cardInfo,
-            alias: subscription.cardAlias || null,
-            isPrimary: true,
-            createdAt: subscription.cardUpdatedAt || subscription.createdAt || now,
-          }];
+        // 기존 문서들 삭제
+        const batch = db.batch();
+        oldCardsSnapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+
+        cards = oldCards.map((card) => ({
+          id: card.id,
+          tenantId,
+          email: firstDocData.email,
+          cardInfo: card.cardInfo,
+          alias: card.alias,
+          isPrimary: card.isPrimary,
+          createdAt: card.createdAt,
+        }));
+      } else {
+        // cards 컬렉션이 비어있으면 subscriptions에서 기존 카드 마이그레이션
+        const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+        if (subscriptionDoc.exists) {
+          const subscription = subscriptionDoc.data();
+          if (subscription?.billingKey && subscription?.cardInfo) {
+            const now = new Date();
+            const cardId = generateCardId();
+
+            // 새 구조로 저장
+            await db.collection('cards').doc(tenantId).set({
+              tenantId,
+              email: subscription.email,
+              cards: [{
+                id: cardId,
+                billingKey: subscription.billingKey,
+                cardInfo: subscription.cardInfo,
+                alias: subscription.cardAlias || null,
+                isPrimary: true,
+                createdAt: subscription.cardUpdatedAt?.toDate?.() || subscription.createdAt?.toDate?.() || now,
+              }],
+              updatedAt: now,
+            });
+
+            // subscription에 primaryCardId 추가
+            await db.collection('subscriptions').doc(tenantId).update({
+              primaryCardId: cardId,
+            });
+
+            cards = [{
+              id: cardId,
+              tenantId,
+              email: subscription.email,
+              cardInfo: subscription.cardInfo,
+              alias: subscription.cardAlias || null,
+              isPrimary: true,
+              createdAt: subscription.cardUpdatedAt?.toDate?.() || subscription.createdAt?.toDate?.() || now,
+            }];
+          }
         }
       }
     }
@@ -137,7 +216,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 새 카드 추가 (기존 update-card 로직을 확장)
+// 새 카드 추가
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -183,53 +262,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // 같은 카드번호로 이미 등록된 카드가 있는지 확인
-    const existingCardSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .where('cardInfo.number', '==', cardInfo.number)
-      .get();
-
-    if (!existingCardSnapshot.empty) {
-      return NextResponse.json({ error: 'Card already registered' }, { status: 400 });
-    }
-
-    // 최대 5개 카드 제한
-    const cardCountSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .get();
-
-    if (cardCountSnapshot.size >= 5) {
-      return NextResponse.json({ error: 'Maximum 5 cards allowed' }, { status: 400 });
-    }
-
     const now = new Date();
-    const isFirstCard = cardCountSnapshot.empty;
-    const shouldSetPrimary = setAsPrimary || isFirstCard;
+    let newCardId: string = '';
+    let shouldSetPrimary = false;
+    const brandName = subscription?.brandName || '';
 
-    // 트랜잭션으로 카드 추가 및 primary 설정
+    // 트랜잭션으로 카드 추가
     await db.runTransaction(async (transaction) => {
+      const cardsDocRef = db.collection('cards').doc(tenantId);
+      const cardsDoc = await transaction.get(cardsDocRef);
+
+      let cards: CardItem[] = [];
+      let docEmail = email!;
+      let docBrandName = brandName;
+
+      if (cardsDoc.exists) {
+        const data = cardsDoc.data() as TenantCardsDocument;
+        cards = data.cards || [];
+        docEmail = data.email;
+        docBrandName = data.brandName || brandName;
+      }
+
+      // 중복 카드 체크
+      if (cards.some((card) => card.cardInfo.number === cardInfo.number)) {
+        throw new Error('Card already registered');
+      }
+
+      // 최대 5개 제한
+      if (cards.length >= 5) {
+        throw new Error('Maximum 5 cards allowed');
+      }
+
+      const isFirstCard = cards.length === 0;
+      shouldSetPrimary = setAsPrimary || isFirstCard;
+
       // 새 카드가 primary로 설정되면 기존 primary 해제
       if (shouldSetPrimary && !isFirstCard) {
-        const primaryCards = cardCountSnapshot.docs.filter(
-          (doc) => doc.data().isPrimary === true
-        );
-        for (const doc of primaryCards) {
-          transaction.update(doc.ref, { isPrimary: false });
-        }
+        cards = cards.map((card) => ({ ...card, isPrimary: false }));
       }
 
       // 새 카드 추가
-      const cardRef = db.collection('cards').doc();
-      transaction.set(cardRef, {
-        tenantId,
-        email,
+      newCardId = generateCardId();
+      cards.push({
+        id: newCardId,
         billingKey,
         cardInfo,
         alias: alias || null,
         isPrimary: shouldSetPrimary,
         createdAt: now,
+      });
+
+      // 카드 문서 저장
+      transaction.set(cardsDocRef, {
+        tenantId,
+        email: docEmail,
+        brandName: docBrandName,
+        cards,
+        updatedAt: now,
       });
 
       // 구독의 primary 카드 정보 업데이트
@@ -239,7 +328,7 @@ export async function POST(request: NextRequest) {
           billingKey,
           cardInfo,
           cardAlias: alias || null,
-          primaryCardId: cardRef.id,
+          primaryCardId: newCardId,
           cardUpdatedAt: now,
           updatedAt: now,
         });
@@ -258,7 +347,10 @@ export async function POST(request: NextRequest) {
           const { payWithBillingKey, getPlanName, getEffectiveAmount } = await import('@/lib/toss');
 
           const orderId = `REC_${Date.now()}`;
-          const orderName = `YAMOO ${getPlanName(subscription.plan)} 플랜`;
+          const brandName = subscription.brandName || '';
+          const orderName = brandName
+            ? `YAMOO ${getPlanName(subscription.plan)} 플랜 (${brandName})`
+            : `YAMOO ${getPlanName(subscription.plan)} 플랜`;
 
           const effectiveAmount = getEffectiveAmount({
             plan: subscription.plan,
@@ -347,10 +439,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Card added successfully',
+      cardId: newCardId,
       autoRetry: retryResult,
     });
   } catch (error) {
     console.error('Failed to add card:', error);
+    const message = error instanceof Error ? error.message : 'Failed to add card';
+
+    if (message === 'Card already registered') {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    if (message === 'Maximum 5 cards allowed') {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
     return NextResponse.json({ error: 'Failed to add card' }, { status: 500 });
   }
 }

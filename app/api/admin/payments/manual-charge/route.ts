@@ -3,6 +3,7 @@ import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, PLAN_PRICES, getPlanName } from '@/lib/toss';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
+import { TenantCardsDocument } from '@/app/api/cards/route';
 
 // POST: 관리자 수동 결제 처리
 export async function POST(request: NextRequest) {
@@ -51,17 +52,21 @@ export async function POST(request: NextRequest) {
     let selectedCardInfo = null;
 
     if (cardId && cardId !== 'subscription') {
-      // 특정 카드 선택된 경우
-      const cardDoc = await db.collection('cards').doc(cardId).get();
-      if (!cardDoc.exists) {
+      // 특정 카드 선택된 경우 - 새 구조에서 조회
+      const cardsDoc = await db.collection('cards').doc(tenantId).get();
+      if (!cardsDoc.exists) {
         return NextResponse.json({ error: 'Card not found' }, { status: 404 });
       }
-      const card = cardDoc.data();
-      if (card?.tenantId !== tenantId) {
-        return NextResponse.json({ error: 'Card does not belong to this tenant' }, { status: 403 });
+
+      const data = cardsDoc.data() as TenantCardsDocument;
+      const card = (data.cards || []).find((c) => c.id === cardId);
+
+      if (!card) {
+        return NextResponse.json({ error: 'Card not found' }, { status: 404 });
       }
-      billingKey = card?.billingKey;
-      selectedCardInfo = card?.cardInfo;
+
+      billingKey = card.billingKey;
+      selectedCardInfo = card.cardInfo;
     } else {
       // 기본 카드 사용
       billingKey = subscription?.billingKey;
@@ -77,7 +82,10 @@ export async function POST(request: NextRequest) {
 
     // 결제 수행
     const orderId = `ADMIN_${Date.now()}`;
-    const orderName = `YAMOO ${getPlanName(plan)} 플랜 - 관리자 수동 결제`;
+    const brandName = subscription?.brandName || '';
+    const orderName = brandName
+      ? `YAMOO ${getPlanName(plan)} 플랜 (${brandName}) - 관리자 수동 결제`
+      : `YAMOO ${getPlanName(plan)} 플랜 - 관리자 수동 결제`;
 
     console.log('Admin manual charge:', {
       orderId,
@@ -232,21 +240,22 @@ export async function GET(request: NextRequest) {
 
     const subscription = subscriptionDoc.data();
 
-    // 카드 목록 조회
-    const cardsSnapshot = await db
-      .collection('cards')
-      .where('tenantId', '==', tenantId)
-      .get();
+    // 카드 목록 조회 (새 구조)
+    const cardsDoc = await db.collection('cards').doc(tenantId).get();
 
-    const cards = cardsSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        cardInfo: data.cardInfo,
-        alias: data.alias,
-        isPrimary: data.isPrimary || false,
-      };
-    });
+    const cards: { id: string; cardInfo: unknown; alias: string | null; isPrimary: boolean }[] = [];
+
+    if (cardsDoc.exists) {
+      const data = cardsDoc.data() as TenantCardsDocument;
+      (data.cards || []).forEach((card) => {
+        cards.push({
+          id: card.id,
+          cardInfo: card.cardInfo,
+          alias: card.alias || null,
+          isPrimary: card.isPrimary || false,
+        });
+      });
+    }
 
     // cards 컬렉션이 비어있으면 subscription의 카드 정보 사용
     if (cards.length === 0 && subscription?.billingKey) {

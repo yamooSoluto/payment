@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshDouble, NavArrowLeft, NavArrowRight, Edit, Xmark, Check } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 interface Subscription {
   id: string;
@@ -251,7 +252,7 @@ export default function SubscriptionsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : subscriptions.length === 0 ? (
           <div className="text-center py-20 text-gray-500">

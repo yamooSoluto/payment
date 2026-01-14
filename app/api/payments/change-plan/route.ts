@@ -142,6 +142,15 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const timestamp = Date.now();
 
+    // 매장명 가져오기 (subscription에 있으면 사용, 없으면 tenant 조회)
+    let brandName = subscription.brandName || '';
+    if (!brandName) {
+      const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+      if (tenantDoc.exists) {
+        brandName = tenantDoc.data()?.brandName || '';
+      }
+    }
+
     // 서버에서 일할계산 수행
     let creditAmount = 0;
     let proratedNewAmount = 0;
@@ -279,7 +288,9 @@ export async function POST(request: NextRequest) {
     const paymentOrderId = `CHG_${timestamp}`;
 
     if (proratedNewAmount && proratedNewAmount > 0) {
-      const orderName = `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
+      const orderName = brandName
+        ? `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경 (${brandName})`
+        : `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
 
       try {
         paymentResponse = await payWithBillingKey(

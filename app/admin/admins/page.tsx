@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 interface Admin {
   id: string;
@@ -331,7 +332,7 @@ export default function AdminsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : admins.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
@@ -399,7 +400,7 @@ export default function AdminsPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {permissionsLoading ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+              <Spinner size="md" />
             </div>
           ) : (
             <div className="overflow-x-auto">

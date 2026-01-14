@@ -2,8 +2,9 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight } from 'iconoir-react';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
+import Spinner from '@/components/admin/Spinner';
 
 interface Member {
   id: string;
@@ -12,6 +13,9 @@ interface Member {
   phone: string;
   createdAt: string;
   memo?: string;
+  lastLoginAt?: string | null;
+  lastLoginIP?: string | null;
+  totalAmount?: number;
 }
 
 interface TenantSubscription {
@@ -136,6 +140,70 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     confirmPassword: '',
   });
   const [changingPassword, setChangingPassword] = useState(false);
+
+  // 결제 내역 페이지네이션 및 필터 상태
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [paymentFilterType, setPaymentFilterType] = useState<'thisMonth' | 'custom'>('thisMonth');
+  const [paymentDateRange, setPaymentDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [tempDateRange, setTempDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const PAYMENTS_PER_PAGE = 10;
+
+  // 이번달 시작/끝 날짜 계산
+  const getThisMonthRange = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start, end };
+  };
+
+  // 필터링된 결제 내역
+  const filteredPayments = payments.filter((payment) => {
+    const paymentDate = new Date(payment.paidAt || payment.createdAt);
+
+    if (paymentFilterType === 'thisMonth') {
+      const { start, end } = getThisMonthRange();
+      return paymentDate >= start && paymentDate <= end;
+    } else if (paymentFilterType === 'custom' && paymentDateRange.start && paymentDateRange.end) {
+      const start = new Date(paymentDateRange.start);
+      const end = new Date(paymentDateRange.end);
+      end.setHours(23, 59, 59, 999);
+      return paymentDate >= start && paymentDate <= end;
+    }
+    return true;
+  });
+
+  // 페이지네이션 계산
+  const totalPaymentPages = Math.ceil(filteredPayments.length / PAYMENTS_PER_PAGE);
+  const paginatedPayments = filteredPayments.slice(
+    (paymentPage - 1) * PAYMENTS_PER_PAGE,
+    paymentPage * PAYMENTS_PER_PAGE
+  );
+
+  // 이번달 필터 선택
+  const handleThisMonthFilter = () => {
+    setPaymentFilterType('thisMonth');
+    setPaymentDateRange({ start: '', end: '' });
+    setPaymentPage(1);
+  };
+
+  // 직접 입력 모달 열기
+  const handleOpenDatePicker = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    setTempDateRange(paymentDateRange.start ? paymentDateRange : { start: monthAgo, end: today });
+    setShowDatePickerModal(true);
+  };
+
+  // 날짜 범위 적용
+  const handleApplyDateRange = () => {
+    if (tempDateRange.start && tempDateRange.end) {
+      setPaymentFilterType('custom');
+      setPaymentDateRange(tempDateRange);
+      setPaymentPage(1);
+      setShowDatePickerModal(false);
+    }
+  };
 
   useEffect(() => {
     fetchMemberDetail();
@@ -534,19 +602,27 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     });
   };
 
-  const getStatusBadge = (status: string, size: 'sm' | 'md' = 'md') => {
+  const getStatusBadge = (status: string | null | undefined, size: 'sm' | 'md' = 'md') => {
     const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
     switch (status) {
       case 'active':
-        return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>활성</span>;
+        return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>구독중</span>;
       case 'trial':
         return <span className={`${sizeClass} font-medium bg-blue-100 text-blue-700 rounded-full`}>체험중</span>;
       case 'canceled':
-        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-700 rounded-full`}>해지</span>;
+        return <span className={`${sizeClass} font-medium bg-orange-100 text-orange-700 rounded-full`}>해지 예정</span>;
+      case 'expired':
+        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-500 rounded-full`}>만료</span>;
       case 'past_due':
-        return <span className={`${sizeClass} font-medium bg-red-100 text-red-700 rounded-full`}>연체</span>;
+        return <span className={`${sizeClass} font-medium bg-red-100 text-red-700 rounded-full`}>결제 실패</span>;
+      case 'deleted':
+        return <span className={`${sizeClass} font-medium bg-red-100 text-red-500 rounded-full`}>삭제</span>;
+      case null:
+      case undefined:
+      case '':
+        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-400 rounded-full`}>미구독</span>;
       default:
-        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-500 rounded-full`}>{status || '-'}</span>;
+        return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-500 rounded-full`}>{status}</span>;
     }
   };
 
@@ -578,7 +654,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+        <Spinner size="md" />
       </div>
     );
   }
@@ -645,136 +721,128 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 기본 정보 */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <User className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold">기본 정보</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 이메일 */}
+      {/* 기본 정보 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-4">
+          <User className="w-5 h-5 text-blue-600" />
+          <h2 className="text-lg font-semibold">기본 정보</h2>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 이메일 */}
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">이메일</label>
+            {editMode ? (
               <div>
-                <label className="block text-sm text-gray-500 mb-1">이메일</label>
-                {editMode ? (
-                  <div>
-                    <input
-                      type="email"
-                      value={formData.newEmail}
-                      onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                    {formData.newEmail.toLowerCase() !== member.email.toLowerCase() && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        ⚠️ 이메일 변경 시 사용자가 재로그인해야 합니다
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="font-medium">{member.email || '-'}</p>
-                )}
-              </div>
-
-              {/* 비밀번호 */}
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">비밀번호</label>
-                <button
-                  onClick={() => {
-                    setPasswordForm({ newPassword: '', confirmPassword: '' });
-                    setPasswordModal(true);
-                  }}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  비밀번호 변경
-                </button>
-              </div>
-
-              {/* 이름 */}
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">이름</label>
-                {editMode ? (
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="font-medium">{member.name || '-'}</p>
-                )}
-              </div>
-
-              {/* 연락처 */}
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">연락처</label>
-                {editMode ? (
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="font-medium">{member.phone || '-'}</p>
-                )}
-              </div>
-            </div>
-
-            {/* 메모 */}
-            <div className="mt-4">
-              <label className="block text-sm text-gray-500 mb-1">메모</label>
-              {editMode ? (
-                <textarea
-                  value={formData.memo}
-                  onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
-                  rows={3}
+                <input
+                  type="email"
+                  value={formData.newEmail}
+                  onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="관리자 메모"
                 />
-              ) : (
-                <p className="text-gray-600">{member.memo || '-'}</p>
-              )}
-            </div>
+                {formData.newEmail.toLowerCase() !== member.email.toLowerCase() && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ 이메일 변경 시 재로그인 필요
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="font-medium">{member.email || '-'}</p>
+            )}
+          </div>
+
+          {/* 이름 */}
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">이름</label>
+            {editMode ? (
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            ) : (
+              <p className="font-medium">{member.name || '-'}</p>
+            )}
+          </div>
+
+          {/* 연락처 */}
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">연락처</label>
+            {editMode ? (
+              <input
+                type="text"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            ) : (
+              <p className="font-medium">{member.phone || '-'}</p>
+            )}
+          </div>
+
+          {/* 비밀번호 */}
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">비밀번호</label>
+            <button
+              onClick={() => {
+                setPasswordForm({ newPassword: '', confirmPassword: '' });
+                setPasswordModal(true);
+              }}
+              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              비밀번호 변경
+            </button>
           </div>
         </div>
 
-        {/* 사이드바 - 결제 내역 */}
-        <div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <CreditCard className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold">결제 내역</h2>
-            </div>
-            {payments.length === 0 ? (
-              <p className="text-gray-500 text-center py-6 text-sm">결제 내역이 없습니다.</p>
-            ) : (
-              <div className="space-y-2">
-                {payments.slice(0, 5).map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium">{payment.amount?.toLocaleString()}원</p>
-                      <p className="text-xs text-gray-500">
-                        {payment.paidAt
-                          ? new Date(payment.paidAt).toLocaleDateString('ko-KR')
-                          : payment.createdAt
-                          ? new Date(payment.createdAt).toLocaleDateString('ko-KR')
-                          : '-'}
-                      </p>
-                    </div>
-                    {getPaymentStatusBadge(payment.status)}
-                  </div>
-                ))}
-                {payments.length > 5 && (
-                  <p className="text-xs text-gray-400 text-center pt-2">외 {payments.length - 5}건</p>
-                )}
-              </div>
-            )}
+        {/* 가입일, 최종 로그인 정보, 이용금액 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">가입일</label>
+            <p className="font-medium">
+              {member.createdAt
+                ? new Date(member.createdAt).toLocaleDateString('ko-KR')
+                : '-'}
+            </p>
           </div>
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">최종 로그인</label>
+            <p className="font-medium">
+              {member.lastLoginAt
+                ? new Date(member.lastLoginAt).toLocaleString('ko-KR')
+                : '-'}
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">최종 로그인 IP</label>
+            <p className="font-medium text-sm">{member.lastLoginIP || '-'}</p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">이용금액</label>
+            <p className="font-medium text-blue-600">
+              {(member.totalAmount ?? 0).toLocaleString()}원
+            </p>
+          </div>
+        </div>
+
+        {/* 메모 - 별도 줄 */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="block text-sm text-gray-500 mb-1">메모</label>
+          {editMode ? (
+            <textarea
+              value={formData.memo}
+              onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="관리자 메모"
+            />
+          ) : (
+            <p className="text-gray-600">{member.memo || '-'}</p>
+          )}
         </div>
       </div>
 
-      {/* 매장 목록 - 전체 너비 */}
+      {/* 매장 목록 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -816,7 +884,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   >
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-semibold text-gray-900">{tenant.brandName}</h3>
-                      {tenant.subscription && getStatusBadge(tenant.subscription.status, 'sm')}
+                      {getStatusBadge(tenant.subscription?.status, 'sm')}
                     </div>
                     {tenant.subscription && (
                       <div className="flex items-center justify-between text-sm">
@@ -931,6 +999,115 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               );
             })}
           </div>
+        )}
+      </div>
+
+      {/* 결제 내역 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold">결제 내역</h2>
+            <span className="text-sm text-gray-400">({filteredPayments.length}건)</span>
+          </div>
+          {/* 기간 필터 */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleThisMonthFilter}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                paymentFilterType === 'thisMonth'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              이번달
+            </button>
+            <button
+              onClick={handleOpenDatePicker}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1 ${
+                paymentFilterType === 'custom'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Calendar className="w-3 h-3" />
+              {paymentFilterType === 'custom' && paymentDateRange.start
+                ? `${paymentDateRange.start} ~ ${paymentDateRange.end}`
+                : '기간 선택'}
+            </button>
+          </div>
+        </div>
+        {filteredPayments.length === 0 ? (
+          <p className="text-gray-500 text-center py-6 text-sm">결제 내역이 없습니다.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">날짜</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">금액</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">플랜</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">매장</th>
+                    <th className="text-center px-4 py-3 text-sm font-medium text-gray-500">상태</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {payment.paidAt
+                          ? new Date(payment.paidAt).toLocaleDateString('ko-KR')
+                          : payment.createdAt
+                          ? new Date(payment.createdAt).toLocaleDateString('ko-KR')
+                          : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {payment.amount?.toLocaleString()}원
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {getPlanName(payment.planId)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {getPaymentStatusBadge(payment.status)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* 페이지네이션 */}
+            {totalPaymentPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-2">
+                <p className="text-sm text-gray-500">
+                  {filteredPayments.length}건 중 {(paymentPage - 1) * PAYMENTS_PER_PAGE + 1}-
+                  {Math.min(paymentPage * PAYMENTS_PER_PAGE, filteredPayments.length)}건
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPaymentPage((p) => Math.max(1, p - 1))}
+                    disabled={paymentPage === 1}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {paymentPage} / {totalPaymentPages}
+                  </span>
+                  <button
+                    onClick={() => setPaymentPage((p) => Math.min(totalPaymentPages, p + 1))}
+                    disabled={paymentPage === totalPaymentPages}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1520,6 +1697,50 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 ) : (
                   '변경하기'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결제 내역 기간 선택 모달 */}
+      {showDatePickerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">기간 선택</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">시작일</label>
+                <input
+                  type="date"
+                  value={tempDateRange.start}
+                  onChange={(e) => setTempDateRange({ ...tempDateRange, start: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">종료일</label>
+                <input
+                  type="date"
+                  value={tempDateRange.end}
+                  onChange={(e) => setTempDateRange({ ...tempDateRange, end: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDatePickerModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleApplyDateRange}
+                disabled={!tempDateRange.start || !tempDateRange.end}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                적용
               </button>
             </div>
           </div>

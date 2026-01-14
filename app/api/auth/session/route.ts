@@ -23,8 +23,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
+    // IP 주소 가져오기
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      null;
+
     // 세션 생성
-    const sessionId = await createAuthSession({ email, token });
+    const sessionId = await createAuthSession({ email, token, ip: ip || undefined });
 
     // 쿠키 설정 후 리다이렉트
     const response = NextResponse.redirect(new URL(redirect, request.url));
@@ -60,8 +65,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    // IP 주소 가져오기
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      null;
+
     // 세션 생성
-    const sessionId = await createAuthSession({ email, token });
+    const sessionId = await createAuthSession({ email, token, ip: ip || undefined });
 
     // 쿠키 설정
     const cookieStore = await cookies();

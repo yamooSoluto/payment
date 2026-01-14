@@ -45,6 +45,8 @@ export async function GET(
       phone: userData.phone || '',
       createdAt: userData.createdAt?.toDate?.()?.toISOString() || null,
       memo: userData.memo || '',
+      lastLoginAt: userData.lastLoginAt?.toDate?.()?.toISOString() || null,
+      lastLoginIP: userData.lastLoginIP || null,
     };
 
     // 이메일로 tenants 조회 (매장 정보용)
@@ -142,14 +144,20 @@ export async function GET(
         const bTime = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
         return bTime - aTime;
       });
-
-      payments = payments.slice(0, 20);
     }
 
+    // 총 이용금액 계산 (완료된 결제만)
+    const totalAmount = payments
+      .filter((p) => p.status === 'completed' || p.status === 'done')
+      .reduce((sum, p) => sum + ((p.amount as number) || 0), 0);
+
     return NextResponse.json({
-      member,
+      member: {
+        ...member,
+        totalAmount,
+      },
       tenants,
-      payments,
+      payments: payments.slice(0, 20), // 최근 20건만 반환
     });
   } catch (error) {
     console.error('Get member detail error:', error);

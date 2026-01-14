@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CreditCards, NavArrowLeft, NavArrowRight, RefreshDouble, Download, Calendar, Xmark, Refresh } from 'iconoir-react';
+import Spinner from '@/components/admin/Spinner';
 
 type OrderType = 'subscription' | 'renewal' | 'upgrade' | 'downgrade' | 'downgrade_refund' | 'refund' | 'cancel_refund' | 'unknown';
 
@@ -350,7 +351,7 @@ export default function OrdersPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <RefreshDouble className="w-8 h-8 text-blue-600 animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : orders.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
