@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search } from 'iconoir-react';
 import { INDUSTRY_OPTIONS } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
 
@@ -44,15 +44,57 @@ interface Payment {
   amount: number;
   status: string;
   planId: string;
+  plan?: string;
   tenantId?: string;
+  orderId?: string;
+  category?: string;
+  type?: string;
+  transactionType?: 'charge' | 'refund';
+  initiatedBy?: 'system' | 'admin' | 'user';
+  adminId?: string;
+  adminName?: string;
+  changeGroupId?: string;
+  receiptUrl?: string;
   createdAt: string;
   paidAt: string | null;
+  [key: string]: unknown;
 }
 
 const PRICE_POLICY_LABELS: Record<string, string> = {
   grandfathered: '가격 보호 (영구)',
   protected_until: '기간 한정 보호',
   standard: '일반',
+};
+
+const PAYMENT_CATEGORY_LABELS: Record<string, string> = {
+  subscription: '신규 구독',
+  recurring: '정기 결제',
+  change: '플랜 변경',
+  cancel: '구독 취소',
+};
+
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  first_payment: '첫 결제',
+  trial_convert: 'Trial 전환',
+  auto: '자동 결제',
+  retry: '재결제',
+  upgrade: '업그레이드',
+  downgrade: '다운그레이드',
+  immediate: '즉시 취소',
+  end_of_period: '기간 만료',
+  admin_manual: '관리자 수동',
+  admin_refund: '관리자 환불',
+};
+
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  charge: '결제',
+  refund: '환불',
+};
+
+const INITIATED_BY_LABELS: Record<string, string> = {
+  system: '시스템',
+  admin: '관리자',
+  user: '사용자',
 };
 
 export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -147,6 +189,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [paymentDateRange, setPaymentDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [tempDateRange, setTempDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [paymentDetailModal, setPaymentDetailModal] = useState<Payment | null>(null);
+  const [paymentSearchId, setPaymentSearchId] = useState('');
   const PAYMENTS_PER_PAGE = 10;
 
   // 이번달 시작/끝 날짜 계산
@@ -159,6 +203,19 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
   // 필터링된 결제 내역
   const filteredPayments = payments.filter((payment) => {
+    // 검색어 필터 (ID, orderId, 매장명)
+    if (paymentSearchId) {
+      const searchLower = paymentSearchId.toLowerCase();
+      const paymentIdMatch = payment.id.toLowerCase().includes(searchLower);
+      const orderIdMatch = (payment.orderId as string)?.toLowerCase().includes(searchLower);
+      const tenantName = tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '';
+      const tenantMatch = tenantName.toLowerCase().includes(searchLower);
+      if (!paymentIdMatch && !orderIdMatch && !tenantMatch) {
+        return false;
+      }
+    }
+
+    // 날짜 필터
     const paymentDate = new Date(payment.paidAt || payment.createdAt);
 
     if (paymentFilterType === 'thisMonth') {
@@ -626,7 +683,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const getPlanName = (planId: string) => {
+  const getPlanName = (planId?: string) => {
     switch (planId) {
       case 'basic': return 'Basic';
       case 'business': return 'Business';
@@ -636,20 +693,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const getPaymentStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">완료</span>;
-      case 'pending':
-        return <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">대기</span>;
-      case 'failed':
-        return <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">실패</span>;
-      case 'refunded':
-        return <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">환불</span>;
-      default:
-        return <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">{status}</span>;
-    }
-  };
 
   if (loading) {
     return (
@@ -1004,37 +1047,66 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
       {/* 결제 내역 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">결제 내역</h2>
-            <span className="text-sm text-gray-400">({filteredPayments.length}건)</span>
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-semibold">결제 내역</h2>
+              <span className="text-sm text-gray-400">({filteredPayments.length}건)</span>
+            </div>
+            {/* 기간 필터 */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleThisMonthFilter}
+                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                  paymentFilterType === 'thisMonth'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                이번달
+              </button>
+              <button
+                onClick={handleOpenDatePicker}
+                className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1 ${
+                  paymentFilterType === 'custom'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Calendar className="w-3 h-3" />
+                {paymentFilterType === 'custom' && paymentDateRange.start
+                  ? `${paymentDateRange.start} ~ ${paymentDateRange.end}`
+                  : '기간 선택'}
+              </button>
+            </div>
           </div>
-          {/* 기간 필터 */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleThisMonthFilter}
-              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                paymentFilterType === 'thisMonth'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              이번달
-            </button>
-            <button
-              onClick={handleOpenDatePicker}
-              className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1 ${
-                paymentFilterType === 'custom'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <Calendar className="w-3 h-3" />
-              {paymentFilterType === 'custom' && paymentDateRange.start
-                ? `${paymentDateRange.start} ~ ${paymentDateRange.end}`
-                : '기간 선택'}
-            </button>
+          {/* 검색 필터 */}
+          <div className="flex items-center justify-end">
+            <div className="relative w-56">
+              <input
+                type="text"
+                value={paymentSearchId}
+                onChange={(e) => {
+                  setPaymentSearchId(e.target.value);
+                  setPaymentPage(1);
+                }}
+                placeholder="ID 또는 매장명 검색..."
+                className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              {paymentSearchId && (
+                <button
+                  onClick={() => {
+                    setPaymentSearchId('');
+                    setPaymentPage(1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                >
+                  <Xmark className="w-3 h-3 text-gray-400" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         {filteredPayments.length === 0 ? (
@@ -1045,37 +1117,56 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <table className="w-full min-w-max">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">날짜</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">금액</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">플랜</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">매장</th>
-                    <th className="text-center px-4 py-3 text-sm font-medium text-gray-500">상태</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-40">ID</th>
+                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">날짜</th>
+                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">매장</th>
+                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500">플랜</th>
+                    <th className="text-center px-3 py-3 text-sm font-medium text-gray-500 w-28">금액</th>
+                    <th className="w-12 px-1 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedPayments.map((payment) => (
-                    <tr key={payment.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {payment.paidAt
-                          ? new Date(payment.paidAt).toLocaleDateString('ko-KR')
-                          : payment.createdAt
-                          ? new Date(payment.createdAt).toLocaleDateString('ko-KR')
-                          : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {payment.amount?.toLocaleString()}원
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {getPlanName(payment.planId)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {getPaymentStatusBadge(payment.status)}
-                      </td>
-                    </tr>
-                  ))}
+                  {paginatedPayments.map((payment) => {
+                    // transactionType이 refund이거나 (레거시) category가 refund이거나 status가 refunded인 경우 환불로 판단
+                    const isRefund = payment.transactionType === 'refund' || payment.category === 'refund' || payment.status === 'refunded';
+                    const paymentDate = payment.paidAt || payment.createdAt;
+                    let formattedDate = '-';
+                    if (paymentDate) {
+                      const d = new Date(paymentDate);
+                      formattedDate = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    }
+                    // 금액 표시: 이미 음수면 그대로, 양수인데 환불이면 - 추가
+                    const displayAmount = payment.amount < 0
+                      ? payment.amount.toLocaleString()
+                      : (isRefund ? `-${payment.amount.toLocaleString()}` : payment.amount?.toLocaleString());
+                    return (
+                      <tr key={payment.id} className="hover:bg-gray-50">
+                        <td className="px-2 py-3 text-xs text-gray-400 font-mono text-center truncate max-w-40" title={payment.orderId || payment.id}>
+                          {payment.orderId || payment.id}
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                          {formattedDate}
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-600 text-center">
+                          {tenants.find(t => t.tenantId === payment.tenantId)?.brandName || '-'}
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-600 text-center">
+                          {getPlanName(payment.planId || payment.plan)}
+                        </td>
+                        <td className={`px-3 py-3 text-sm font-medium text-center whitespace-nowrap ${isRefund ? 'text-red-500' : 'text-gray-900'}`}>
+                          {displayAmount}원
+                        </td>
+                        <td className="px-1 py-3 text-center">
+                          <button
+                            onClick={() => setPaymentDetailModal(payment)}
+                            className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          >
+                            상세
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1697,6 +1788,105 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 ) : (
                   '변경하기'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결제 상세 모달 */}
+      {paymentDetailModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">결제 상세</h3>
+              <button
+                onClick={() => setPaymentDetailModal(null)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">계정</span>
+                <span className="text-gray-900">{paymentDetailModal.email as string || member?.email || '-'}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">결제일시</span>
+                <span className="text-gray-900">
+                  {paymentDetailModal.paidAt
+                    ? new Date(paymentDetailModal.paidAt).toLocaleString('ko-KR')
+                    : paymentDetailModal.createdAt
+                    ? new Date(paymentDetailModal.createdAt).toLocaleString('ko-KR')
+                    : '-'}
+                </span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">주문 ID</span>
+                <span className="text-gray-900 font-mono text-sm">{paymentDetailModal.orderId || paymentDetailModal.id}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">매장</span>
+                <span className="text-gray-900">{tenants.find(t => t.tenantId === paymentDetailModal.tenantId)?.brandName || '-'}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">분류</span>
+                <span className="text-gray-900">
+                  {paymentDetailModal.category ? PAYMENT_CATEGORY_LABELS[paymentDetailModal.category] || paymentDetailModal.category : '-'}
+                </span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">유형</span>
+                <span className="text-gray-900">
+                  {paymentDetailModal.type ? PAYMENT_TYPE_LABELS[paymentDetailModal.type] || paymentDetailModal.type : '-'}
+                </span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">거래</span>
+                <span className={`font-medium ${paymentDetailModal.transactionType === 'refund' ? 'text-red-500' : 'text-gray-900'}`}>
+                  {paymentDetailModal.transactionType ? TRANSACTION_TYPE_LABELS[paymentDetailModal.transactionType] || paymentDetailModal.transactionType : '-'}
+                </span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">처리자</span>
+                <span className="text-gray-900">
+                  {paymentDetailModal.initiatedBy ? (
+                    <>
+                      {INITIATED_BY_LABELS[paymentDetailModal.initiatedBy] || paymentDetailModal.initiatedBy}
+                      {paymentDetailModal.initiatedBy === 'admin' && paymentDetailModal.adminName && (
+                        <span className="text-gray-500 ml-1">({paymentDetailModal.adminName})</span>
+                      )}
+                    </>
+                  ) : '-'}
+                </span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">금액</span>
+                <span className={`font-medium ${paymentDetailModal.transactionType === 'refund' || paymentDetailModal.category === 'refund' || paymentDetailModal.status === 'refunded' ? 'text-red-500' : 'text-gray-900'}`}>
+                  {paymentDetailModal.transactionType === 'refund' || paymentDetailModal.category === 'refund' || paymentDetailModal.status === 'refunded' ? '-' : ''}{paymentDetailModal.amount?.toLocaleString()}원
+                </span>
+              </div>
+              {/* 영수증 버튼 */}
+              {paymentDetailModal.receiptUrl && (
+                <div className="pt-4">
+                  <a
+                    href={paymentDetailModal.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    영수증 확인
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="mt-6">
+              <button
+                onClick={() => setPaymentDetailModal(null)}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                닫기
               </button>
             </div>
           </div>

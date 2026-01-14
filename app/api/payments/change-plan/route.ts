@@ -183,7 +183,6 @@ export async function POST(request: NextRequest) {
     let refundResult = null;
     let originalPaymentId = null;
     let actualRefundedAmount = 0; // 실제 환불된 금액
-    const refundOrderId = `REF_${timestamp}`;
 
     // 업그레이드/다운그레이드 판별
     const isUpgrade = newPlanPrice > previousAmount;
@@ -285,7 +284,9 @@ export async function POST(request: NextRequest) {
 
     // 2. 새 플랜 결제 (일할계산)
     let paymentResponse = null;
-    const paymentOrderId = `CHG_${timestamp}`;
+    const changeGroupId = `CHG_${timestamp}`;  // 환불과 결제를 묶는 그룹 ID
+    const refundOrderId = `CHG_${timestamp}_refund`;  // 환불용 orderId
+    const paymentOrderId = `CHG_${timestamp}_charge`;  // 결제용 orderId
 
     if (proratedNewAmount && proratedNewAmount > 0) {
       const orderName = brandName
@@ -333,15 +334,22 @@ export async function POST(request: NextRequest) {
       if (actualRefundedAmount > 0 && refundResult) {
         const refundDocId = `${refundOrderId}_${Date.now()}`;
         const refundRef = db.collection('payments').doc(refundDocId);
+        const refundOrderName = brandName
+          ? `YAMOO ${getPlanName(previousPlan)} 환불 - ${getPlanName(newPlan)} 변경 (${brandName})`
+          : `YAMOO ${getPlanName(previousPlan)} 환불 - ${getPlanName(newPlan)} 변경`;
         transaction.set(refundRef, {
           tenantId,
           email: authenticatedEmail,
           orderId: refundOrderId,
+          orderName: refundOrderName,
           paymentKey: refundResult.paymentKey || null,
           amount: -actualRefundedAmount, // 음수로 저장 (환불)
           plan: previousPlan,
-          category: 'refund',
-          type: 'partial',
+          category: 'change',
+          type: isUpgrade ? 'upgrade' : 'downgrade',
+          transactionType: 'refund',
+          initiatedBy: 'user',
+          changeGroupId,
           previousPlan,
           newPlan,
           status: 'refunded',
@@ -367,21 +375,28 @@ export async function POST(request: NextRequest) {
       if (proratedNewAmount && proratedNewAmount > 0 && paymentResponse) {
         const paymentDocId = `${paymentOrderId}_${Date.now()}`;
         const paymentRef = db.collection('payments').doc(paymentDocId);
+        const chargeOrderName = brandName
+          ? `YAMOO ${getPlanName(newPlan)} 결제 - ${getPlanName(previousPlan)}에서 변경 (${brandName})`
+          : `YAMOO ${getPlanName(newPlan)} 결제 - ${getPlanName(previousPlan)}에서 변경`;
         transaction.set(paymentRef, {
           tenantId,
           email: authenticatedEmail,
           orderId: paymentOrderId,
+          orderName: chargeOrderName,
           paymentKey: paymentResponse.paymentKey,
           amount: proratedNewAmount,
           plan: newPlan,
           category: 'change',
           type: isUpgrade ? 'upgrade' : 'downgrade',
+          transactionType: 'charge',
+          initiatedBy: 'user',
+          changeGroupId,
           previousPlan,
           status: 'done',
           method: paymentResponse.method,
           cardInfo: paymentResponse.card || null,
           receiptUrl: paymentResponse.receipt?.url || null,
-          idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
+          idempotencyKey: idempotencyKey || null,
           paidAt: now,
           createdAt: now,
         });
@@ -428,7 +443,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      changeGroupId,
       orderId: paymentOrderId,
+      refundOrderId: actualRefundedAmount > 0 ? refundOrderId : null,
       refundAmount: actualRefundedAmount,
       paidAmount: proratedNewAmount || 0,
       message: `${getPlanName(newPlan)} 플랜으로 변경되었습니다.`,

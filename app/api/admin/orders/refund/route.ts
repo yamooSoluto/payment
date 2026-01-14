@@ -105,18 +105,26 @@ export async function POST(request: NextRequest) {
     });
 
     // 환불 내역 기록 (별도 문서)
+    const refundOrderId = `ADMIN_REF_${Date.now()}`;
+    const refundOrderName = `YAMOO ${paymentData?.plan || ''} 관리자 환불`;
     await db.collection('payments').add({
-      type: 'refund',
+      orderId: refundOrderId,
+      orderName: refundOrderName,
       originalPaymentId: paymentId,
       tenantId: tenantId || paymentData?.tenantId,
       email: paymentData?.email,
       plan: paymentData?.plan,
       amount: -refundAmount, // 음수로 기록
+      category: 'cancel',
+      type: 'admin_refund',
+      transactionType: 'refund',
+      initiatedBy: 'admin',
+      adminId: admin?.adminId || 'unknown',
+      adminName: admin?.name || '',
       status: 'done',
       refundReason: refundReason || '관리자 요청 환불',
       createdAt: now,
       paidAt: now,
-      createdBy: admin?.adminId || 'unknown',
     });
 
     // 구독 취소 옵션이 선택된 경우에만 구독 상태 업데이트

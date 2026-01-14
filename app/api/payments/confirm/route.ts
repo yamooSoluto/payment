@@ -88,17 +88,20 @@ export async function GET(request: NextRequest) {
     await db.collection('payments').add({
       email: customerKey,
       orderId,
+      orderName,
       paymentKey: paymentResponse.paymentKey,
       amount,
       plan,
       category: 'subscription',
       type: 'first_payment',
+      transactionType: 'charge',
+      initiatedBy: 'user',
       status: 'done',
       method: paymentResponse.method,
       cardCompany: card.company,
       cardNumber: card.number,
       receiptUrl: paymentResponse.receipt?.url || null,
-      idempotencyKey: idempotencyKey || null,  // 멱등성 키 저장
+      idempotencyKey: idempotencyKey || null,
       paidAt: now,
       createdAt: now,
     });

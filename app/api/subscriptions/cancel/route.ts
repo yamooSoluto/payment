@@ -181,15 +181,21 @@ export async function POST(request: NextRequest) {
       await db.runTransaction(async (transaction) => {
         // 환불 내역 저장 (성공한 경우에만)
         if (refundResult && refundAmount && refundAmount > 0) {
-          const refundOrderId = `REF_${Date.now()}`;
-          const refundDocId = `${refundOrderId}_${tenantId}`;
+          const timestamp = Date.now();
+          const refundOrderId = `CAN_${timestamp}`;
+          const refundDocId = `${refundOrderId}_${timestamp}`;
           const refundRef = db.collection('refunds').doc(refundDocId);
           transaction.set(refundRef, {
             tenantId,
             email,
+            orderId: refundOrderId,
+            originalPaymentId: latestPaymentId,
+            plan: subscription.plan,
             refundAmount,
             cancelReason: reason || 'User requested',
+            status: 'done',
             refundedAt: now,
+            createdAt: now,
             tossResponse: refundResult,
           });
 
@@ -200,14 +206,17 @@ export async function POST(request: NextRequest) {
             tenantId,
             email,
             orderId: refundOrderId,
+            orderName: `YAMOO ${subscription.plan} 구독 즉시 취소 환불`,
             amount: -refundAmount,
             plan: subscription.plan,
-            category: 'refund',
-            type: 'full',  // 구독 해지 환불 (전액 환불 의도)
+            category: 'cancel',
+            type: 'immediate',
+            transactionType: 'refund',
+            initiatedBy: 'user',
             status: 'done',
             cancelReason: reason || 'User requested',
             refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,
-            originalPaymentId: latestPaymentId,  // 원결제 ID 연결
+            originalPaymentId: latestPaymentId,
             paidAt: now,
             createdAt: now,
           });
