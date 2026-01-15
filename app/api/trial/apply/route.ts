@@ -333,6 +333,7 @@ export async function POST(request: Request) {
         email,
         name,
         phone,
+        group: 'normal', // 회원 그룹 (기본: 일반)
         trialApplied: true,
         trialAppliedAt: now,
         createdAt: now,

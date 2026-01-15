@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, NavArrowLeft, NavArrowRight, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download } from 'iconoir-react';
+import { Search, NavArrowLeft, NavArrowRight, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download, Filter } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
+import { MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 
 interface TenantInfo {
   tenantId: string;
@@ -54,11 +55,13 @@ export default function MembersPage() {
     password: '',
     name: '',
     phone: '',
+    group: 'normal',
   });
 
   // 선택 관련 상태
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
   // 모달 상태
@@ -71,6 +74,11 @@ export default function MembersPage() {
   const [smsMessage, setSmsMessage] = useState('');
   const [deleteTargets, setDeleteTargets] = useState<string[]>([]);
   const [smsTargets, setSmsTargets] = useState<Member[]>([]);
+
+  // 필터 상태
+  const [filterGroup, setFilterGroup] = useState<string[]>([]);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -110,6 +118,7 @@ export default function MembersPage() {
       password: '',
       name: '',
       phone: '',
+      group: 'normal',
     });
     setShowModal(true);
   };
@@ -234,7 +243,7 @@ export default function MembersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memberIds: Array.from(selectedMembers),
-          groupId: selectedGroup,
+          group: selectedGroup,
         }),
       });
       if (response.ok) {
@@ -368,11 +377,15 @@ export default function MembersPage() {
     URL.revokeObjectURL(url);
   };
 
-  // 액션 메뉴 외부 클릭 감지
+  // 액션 메뉴 및 필터 드롭다운 외부 클릭 감지
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
         setActionMenuOpen(null);
+        setActionMenuPosition(null);
+      }
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilterDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -387,13 +400,74 @@ export default function MembersPage() {
           <h1 className="text-2xl font-bold text-gray-900">회원</h1>
           <span className="text-sm text-gray-500">총 {pagination.total}명</span>
         </div>
-        <button
-          onClick={handleOpenModal}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          회원 추가
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 필터 버튼 */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              className={`relative p-2 border rounded-lg transition-colors ${
+                filterGroup.length > 0
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Filter className="w-5 h-5" />
+              {filterGroup.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                  {filterGroup.length}
+                </span>
+              )}
+            </button>
+            {showFilterDropdown && (
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-900">필터</h3>
+                  {filterGroup.length > 0 && (
+                    <button
+                      onClick={() => setFilterGroup([])}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      초기화
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-500 mb-2">그룹</p>
+                  {MEMBER_GROUP_OPTIONS.map(option => (
+                    <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filterGroup.includes(option.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilterGroup([...filterGroup, option.value]);
+                          } else {
+                            setFilterGroup(filterGroup.filter(g => g !== option.value));
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                      />
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        option.value === 'internal'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {option.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleOpenModal}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            회원 추가
+          </button>
+        </div>
       </div>
 
       {/* 검색 및 필터 */}
@@ -483,13 +557,19 @@ export default function MembersPage() {
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">그룹</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">매장</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
                   <th className="w-12 px-4 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {members.map((member, index) => (
+                {members
+                  .filter(member => {
+                    if (filterGroup.length === 0) return true;
+                    return filterGroup.includes(member.group || 'normal');
+                  })
+                  .map((member, index) => (
                   <tr
                     key={member.id}
                     onClick={() => router.push(`/admin/members/${member.id}`)}
@@ -512,6 +592,15 @@ export default function MembersPage() {
                     <td className="px-6 py-4 text-sm text-gray-600 text-center">
                       {member.phone || '-'}
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        member.group === 'internal'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {MEMBER_GROUPS[member.group as keyof typeof MEMBER_GROUPS] || '일반'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600 text-center">
                       {member.tenantCount > 0 ? (
                         <div>
@@ -528,41 +617,55 @@ export default function MembersPage() {
                       {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
                     </td>
                     <td className="px-4 py-4 relative" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setActionMenuOpen(actionMenuOpen === member.id ? null : member.id)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                      >
-                        <MoreHoriz className="w-5 h-5 text-gray-500" />
-                      </button>
-                      {actionMenuOpen === member.id && (
-                        <div
-                          ref={actionMenuRef}
-                          className={`absolute right-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[120px] ${
-                            index < 2 ? 'top-full mt-1' : 'bottom-full mb-1'
-                          }`}
+                      <div ref={actionMenuOpen === member.id ? actionMenuRef : undefined}>
+                        <button
+                          onClick={(e) => {
+                            if (actionMenuOpen === member.id) {
+                              setActionMenuOpen(null);
+                              setActionMenuPosition(null);
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setActionMenuPosition({
+                                top: rect.bottom + 4,
+                                left: rect.right - 120,
+                              });
+                              setActionMenuOpen(member.id);
+                            }
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded"
                         >
-                          <button
-                            onClick={() => {
-                              handleOpenSmsModal([member]);
-                              setActionMenuOpen(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          <MoreHoriz className="w-5 h-5 text-gray-500" />
+                        </button>
+                        {actionMenuOpen === member.id && actionMenuPosition && (
+                          <div
+                            className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[9999] py-1 min-w-[120px]"
+                            style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
                           >
-                            <MessageText className="w-4 h-4" />
-                            SMS
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleOpenDeleteModal([member.id]);
-                              setActionMenuOpen(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            <Trash className="w-4 h-4" />
-                            삭제
-                          </button>
-                        </div>
-                      )}
+                            <button
+                              onClick={() => {
+                                handleOpenSmsModal([member]);
+                                setActionMenuOpen(null);
+                                setActionMenuPosition(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <MessageText className="w-4 h-4" />
+                              SMS
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleOpenDeleteModal([member.id]);
+                                setActionMenuOpen(null);
+                                setActionMenuPosition(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              <Trash className="w-4 h-4" />
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -667,6 +770,23 @@ export default function MembersPage() {
                   placeholder="010-0000-0000"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  그룹
+                </label>
+                <select
+                  value={formData.group}
+                  onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  {MEMBER_GROUP_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -706,48 +826,32 @@ export default function MembersPage() {
               {selectedMembers.size}명의 회원에게 그룹을 지정합니다.
             </p>
 
-            {/* 기존 그룹 선택 */}
-            {groups.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">기존 그룹 선택</label>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {groups.map((group) => (
-                    <label
-                      key={group.id}
-                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${selectedGroup === group.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                    >
-                      <input
-                        type="radio"
-                        name="group"
-                        value={group.id}
-                        checked={selectedGroup === group.id}
-                        onChange={(e) => setSelectedGroup(e.target.value)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm">{group.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 새 그룹 생성 */}
-            <div className="border-t border-gray-200 pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">새 그룹 만들기</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="그룹명 입력"
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={handleCreateGroup}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  추가
-                </button>
+            {/* 그룹 선택 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">그룹 선택</label>
+              <div className="space-y-2">
+                {MEMBER_GROUP_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${selectedGroup === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="group"
+                      value={option.value}
+                      checked={selectedGroup === option.value}
+                      onChange={(e) => setSelectedGroup(e.target.value)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      option.value === 'internal'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {option.label}
+                    </span>
+                  </label>
+                ))}
               </div>
             </div>
 

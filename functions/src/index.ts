@@ -135,6 +135,7 @@ export const onTenantWriteAddUserId = functions
           await db.collection('users').doc(email).set({
             userId,
             email,
+            group: 'normal', // 회원 그룹 (기본: 일반)
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });

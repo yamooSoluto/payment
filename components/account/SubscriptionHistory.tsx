@@ -44,7 +44,7 @@ interface SubscriptionPeriod {
   plan: string;
   startDate: Date | string;
   endDate: Date | string | null;
-  status: 'active' | 'completed' | 'canceled' | 'pending_cancel';
+  status: 'active' | 'trial' | 'completed' | 'canceled' | 'pending_cancel';
 }
 
 interface SubscriptionHistoryProps {
@@ -62,7 +62,9 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
     subscriptionPeriods = historyData.map((record, index) => {
       // status 매핑
       let periodStatus: SubscriptionPeriod['status'] = 'completed';
-      if (record.status === 'active') {
+      if (record.status === 'trial') {
+        periodStatus = 'trial';
+      } else if (record.status === 'active') {
         periodStatus = 'active';
       } else if (record.status === 'canceled') {
         periodStatus = 'pending_cancel';
@@ -102,8 +104,10 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
     }
 
     // 상태 매핑
-    let periodStatus: 'active' | 'completed' | 'canceled' | 'pending_cancel' = 'active';
-    if (subscription.status === 'expired') {
+    let periodStatus: SubscriptionPeriod['status'] = 'active';
+    if (subscription.status === 'trial') {
+      periodStatus = 'trial';
+    } else if (subscription.status === 'expired') {
       periodStatus = 'canceled';
     } else if (subscription.status === 'canceled') {
       periodStatus = 'pending_cancel';
@@ -165,8 +169,9 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
     }
   }
 
-  // 정렬: 상태 우선 (사용중 > 해지예정 > 사용완료 > 해지됨), 같은 상태면 시작일 내림차순
+  // 정렬: 상태 우선 (체험중/사용중 > 해지예정 > 사용완료 > 해지됨), 같은 상태면 시작일 내림차순
   const statusPriority: Record<SubscriptionPeriod['status'], number> = {
+    trial: 1,
     active: 1,
     pending_cancel: 2,
     completed: 3,
@@ -181,6 +186,8 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
 
   const getStatusText = (status: SubscriptionPeriod['status']) => {
     switch (status) {
+      case 'trial':
+        return '체험중';
       case 'active':
         return '사용중';
       case 'completed':
@@ -196,6 +203,8 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
 
   const getStatusStyle = (status: SubscriptionPeriod['status']) => {
     switch (status) {
+      case 'trial':
+        return 'text-yellow-600';
       case 'active':
         return 'text-green-600';
       case 'completed':

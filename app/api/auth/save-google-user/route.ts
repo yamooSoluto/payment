@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       userId,
       email,
       displayName: displayName || '',
+      group: 'normal', // 회원 그룹 (기본: 일반)
       provider: 'google',
       createdAt: now,
       updatedAt: now,

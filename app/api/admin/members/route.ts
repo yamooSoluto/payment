@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
 
 // GET: 회원 목록 조회 (users 컬렉션 기반)
 export async function GET(request: NextRequest) {
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
       email: string;
       name: string;
       phone: string;
+      group: string;
       tenants: TenantInfo[];
       tenantCount: number;
       createdAt: string | null;
@@ -95,6 +97,7 @@ export async function GET(request: NextRequest) {
         email,
         name: data.name || '',
         phone: data.phone || '',
+        group: data.group || 'normal',
         tenants,
         tenantCount: tenants.length,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
@@ -169,7 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, password, name, phone } = body;
+    const { email, password, name, phone, group } = body;
 
     if (!email) {
       return NextResponse.json(
@@ -224,16 +227,24 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
 
+    // userId 생성
+    const userId = await generateUniqueUserId(db);
+
     // users 컬렉션에 저장
     await db.collection('users').doc(email).set({
+      userId,
       email,
       name: name || '',
       phone: phone || '',
+      group: group || 'normal',
       createdAt: now,
       updatedAt: now,
       createdBy: admin.adminId,
       isManualRegistration: true,
     });
+
+    // user_emails 인덱스 등록
+    await registerEmailIndex(db, email, userId);
 
     return NextResponse.json({
       success: true,

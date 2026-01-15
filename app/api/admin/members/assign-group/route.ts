@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { isValidMemberGroup } from '@/lib/constants';
 
 // POST: 회원에게 그룹 지정
 export async function POST(request: NextRequest) {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { memberIds, groupId } = body;
+    const { memberIds, group } = body;
 
     if (!memberIds || !Array.isArray(memberIds) || memberIds.length === 0) {
       return NextResponse.json(
@@ -30,23 +31,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!groupId) {
+    if (!group || !isValidMemberGroup(group)) {
       return NextResponse.json(
-        { error: '그룹을 선택해주세요.' },
+        { error: '유효한 그룹을 선택해주세요.' },
         { status: 400 }
       );
     }
 
-    // 그룹 존재 확인
-    const groupDoc = await db.collection('memberGroups').doc(groupId).get();
-    if (!groupDoc.exists) {
-      return NextResponse.json(
-        { error: '존재하지 않는 그룹입니다.' },
-        { status: 400 }
-      );
-    }
-
-    const groupName = groupDoc.data()?.name || '';
     const now = new Date();
 
     // 일괄 업데이트
@@ -55,9 +46,9 @@ export async function POST(request: NextRequest) {
       const email = decodeURIComponent(memberId);
       const userRef = db.collection('users').doc(email);
       batch.update(userRef, {
-        groupId,
-        groupName,
+        group,
         updatedAt: now,
+        updatedBy: admin.adminId,
       });
     }
 

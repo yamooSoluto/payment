@@ -94,12 +94,30 @@ export async function PUT(
 
     // 구독 문서가 없으면 생성, 있으면 업데이트
     const tenantData = tenantDoc.data();
+
+    // users 컬렉션에서 사용자 정보 조회
+    let userData: { name?: string; phone?: string; userId?: string } = {};
+    if (tenantData?.email) {
+      const userDoc = await db.collection('users').doc(tenantData.email).get();
+      if (userDoc.exists) {
+        const userInfo = userDoc.data();
+        userData = {
+          name: userInfo?.name,
+          phone: userInfo?.phone,
+          userId: userInfo?.userId,
+        };
+      }
+    }
+
     if (!subscriptionDoc.exists) {
       // 새 구독 생성
       const newSubscription = {
         tenantId,
         email: tenantData?.email,
         brandName: tenantData?.brandName,
+        name: userData.name || tenantData?.name || '',
+        phone: userData.phone || tenantData?.phone || '',
+        userId: userData.userId || tenantData?.userId || '',
         plan: plan || 'basic',
         status: status || 'active',
         amount: amount ?? PLAN_PRICES[plan || 'basic'] ?? 39000,
@@ -108,7 +126,13 @@ export async function PUT(
       };
       await db.collection('subscriptions').doc(tenantId).set(newSubscription);
     } else {
-      // 기존 구독 업데이트
+      // 기존 구독 업데이트 (userId가 없으면 추가)
+      const existingUserId = existingData?.userId;
+      if (!existingUserId && userData.userId) {
+        updateData.userId = userData.userId;
+        updateData.name = userData.name || '';
+        updateData.phone = userData.phone || '';
+      }
       await db.collection('subscriptions').doc(tenantId).update(updateData);
     }
 
@@ -136,6 +160,23 @@ export async function PUT(
 
     if (Object.keys(tenantSubscriptionUpdate).length > 0) {
       await db.collection('tenants').doc(tenantId).update(tenantSubscriptionUpdate);
+    }
+
+    // trial 플랜/상태로 변경 시 users 컬렉션에 trialApplied 기록
+    const isTrial = (plan === 'trial' || status === 'trial');
+    const wasTrial = existingData?.plan === 'trial' || existingData?.status === 'trial';
+
+    if (isTrial && !wasTrial && tenantData?.email) {
+      const userRef = db.collection('users').doc(tenantData.email);
+      const userDoc = await userRef.get();
+
+      if (userDoc.exists && !userDoc.data()?.trialApplied) {
+        await userRef.update({
+          trialApplied: true,
+          trialAppliedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     // 변경 로그 기록

@@ -695,8 +695,8 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 <div>
                   <p className="text-sm text-gray-500">이용기간</p>
                   <p className="font-medium">
-                    {subscription.currentPeriodStart && subscription.trialEndDate
-                      ? `${formatDate(subscription.currentPeriodStart)} ~ ${formatDate(subscription.trialEndDate)}`
+                    {subscription.currentPeriodStart && (subscription.trialEndDate || subscription.currentPeriodEnd)
+                      ? `${formatDate(subscription.currentPeriodStart)} ~ ${formatDate(subscription.trialEndDate || subscription.currentPeriodEnd)}`
                       : '-'}
                   </p>
                 </div>

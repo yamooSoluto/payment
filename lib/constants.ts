@@ -41,3 +41,30 @@ export const INDUSTRY_ICONS: Record<IndustryCode, string> = {
   retail_business: 'Cart',
   other: 'Sofa',
 };
+
+// 회원 그룹
+export const MEMBER_GROUPS = {
+  normal: '일반',
+  internal: '내부',
+} as const;
+
+export type MemberGroupCode = keyof typeof MEMBER_GROUPS;
+
+// 회원 그룹 기본값
+export const DEFAULT_MEMBER_GROUP: MemberGroupCode = 'normal';
+
+// 회원 그룹 유효성 검사
+export function isValidMemberGroup(code: string): code is MemberGroupCode {
+  return code in MEMBER_GROUPS;
+}
+
+// 회원 그룹 옵션 목록 (select 컴포넌트용)
+export const MEMBER_GROUP_OPTIONS = Object.entries(MEMBER_GROUPS).map(([code, label]) => ({
+  value: code,
+  label,
+}));
+
+// 내부 그룹 여부 (테스트 결제 판별용)
+export function isInternalGroup(group: string | undefined): boolean {
+  return group === 'internal';
+}

@@ -44,6 +44,7 @@ export async function GET(
       email,
       name: userData.name || '',
       phone: userData.phone || '',
+      group: userData.group || 'normal',
       createdAt: userData.createdAt?.toDate?.()?.toISOString() || null,
       memo: userData.memo || '',
       lastLoginAt: userData.lastLoginAt?.toDate?.()?.toISOString() || null,
@@ -65,6 +66,8 @@ export async function GET(
         industry: data.industry || '',
         address: data.address || '',
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        deleted: data.deleted || false,
+        deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
       };
     });
 
@@ -200,7 +203,7 @@ export async function PUT(
     const oldEmail = decodeURIComponent(id);
 
     const body = await request.json();
-    const { name, phone, memo, newEmail } = body;
+    const { name, phone, memo, newEmail, group } = body;
 
     // 이메일 변경 요청인 경우
     if (newEmail && newEmail !== oldEmail) {
@@ -254,6 +257,7 @@ export async function PUT(
           email: normalizedNewEmail, // 새 이메일로 명시적 업데이트
           ...(name !== undefined && { name }),
           ...(phone !== undefined && { phone }),
+          ...(group !== undefined && { group }),
           // 이전 이메일 이력
           previousEmails: FieldValue.arrayUnion(oldEmail),
           // 이전 이름 이력 (변경된 경우)
@@ -345,6 +349,7 @@ export async function PUT(
       ...(name !== undefined && { name }),
       ...(phone !== undefined && { phone }),
       ...(memo !== undefined && { memo }),
+      ...(group !== undefined && { group }),
       // 이전 이름 이력 추가 (변경된 경우만)
       ...(name !== undefined && currentName && currentName !== name && {
         previousNames: FieldValue.arrayUnion(currentName),

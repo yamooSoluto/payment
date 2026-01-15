@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       email,
       name,
       phone,
+      group: 'normal', // 회원 그룹 (기본: 일반)
       provider: provider || 'email', // 로그인 제공자 저장
       createdAt: existingData?.createdAt || now,
       updatedAt: now,

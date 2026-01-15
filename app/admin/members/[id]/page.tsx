@@ -4,7 +4,7 @@ import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz } from 'iconoir-react';
 import * as XLSX from 'xlsx';
-import { INDUSTRY_OPTIONS, INDUSTRY_LABEL_TO_CODE } from '@/lib/constants';
+import { INDUSTRY_OPTIONS, INDUSTRY_LABEL_TO_CODE, MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
 
 interface Member {
@@ -12,6 +12,7 @@ interface Member {
   email: string;
   name: string;
   phone: string;
+  group: string;
   createdAt: string;
   memo?: string;
   lastLoginAt?: string | null;
@@ -40,6 +41,8 @@ interface TenantInfo {
   address?: string;
   createdAt: string | null;
   subscription: TenantSubscription | null;
+  deleted?: boolean;
+  deletedAt?: string | null;
 }
 
 interface Payment {
@@ -68,6 +71,7 @@ interface Payment {
   originalPaymentId?: string;
   refundReason?: string;
   cancelReason?: string;
+  paymentKey?: string;
   // 기타
   email?: string;
   [key: string]: unknown;
@@ -144,6 +148,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     phone: '',
     memo: '',
     newEmail: '',
+    group: 'normal',
   });
   const [pricePolicyModal, setPricePolicyModal] = useState<{
     isOpen: boolean;
@@ -240,6 +245,23 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [paymentDetailModal, setPaymentDetailModal] = useState<Payment | null>(null);
   const [paymentSearchId, setPaymentSearchId] = useState('');
   const [showPaymentFilter, setShowPaymentFilter] = useState(false);
+
+  // 결제 내역 액션 드롭다운 및 환불 모달 상태
+  const [paymentActionDropdown, setPaymentActionDropdown] = useState<string | null>(null);
+  const [paymentDropdownPosition, setPaymentDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const paymentActionRef = useRef<HTMLDivElement>(null);
+  const [refundModal, setRefundModal] = useState<{
+    isOpen: boolean;
+    payment: Payment | null;
+    availableAmount: number;
+  }>({ isOpen: false, payment: null, availableAmount: 0 });
+  const [refundForm, setRefundForm] = useState({
+    type: 'full' as 'full' | 'partial',
+    amount: 0,
+    reason: '',
+    cancelSubscription: false,
+  });
+  const [processingRefund, setProcessingRefund] = useState(false);
   const [paymentTypeFilter, setPaymentTypeFilter] = useState<'all' | 'charge' | 'refund'>('all');
   const [paymentTenantFilter, setPaymentTenantFilter] = useState<string>('all');
   const [paymentPlanFilter, setPaymentPlanFilter] = useState<string>('all');
@@ -274,7 +296,68 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
   // 매장 목록 액션 드롭다운 상태
   const [tenantActionDropdown, setTenantActionDropdown] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const tenantActionRef = useRef<HTMLDivElement>(null);
+
+  // 매장 목록 필터 상태 (다중 선택)
+  const [tenantFilterIndustry, setTenantFilterIndustry] = useState<string[]>([]);
+  const [tenantFilterStatus, setTenantFilterStatus] = useState<string[]>([]);
+  const [tenantFilterPlan, setTenantFilterPlan] = useState<string[]>([]);
+  const [tenantFilterOpen, setTenantFilterOpen] = useState<string | null>(null);
+  const tenantFilterRef = useRef<HTMLDivElement>(null);
+
+  // 필터 토글 함수
+  const toggleTenantFilter = (type: 'industry' | 'status' | 'plan', value: string) => {
+    if (type === 'industry') {
+      setTenantFilterIndustry(prev =>
+        prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+      );
+    } else if (type === 'status') {
+      setTenantFilterStatus(prev =>
+        prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+      );
+    } else {
+      setTenantFilterPlan(prev =>
+        prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+      );
+    }
+  };
+
+  // 필터된 매장 목록
+  const filteredTenants = tenants.filter((tenant) => {
+    // 업종 필터 (코드 또는 라벨로 저장되어 있을 수 있음)
+    if (tenantFilterIndustry.length > 0) {
+      const industryCode = tenant.industry || '';
+      // tenant.industry가 라벨인 경우 코드로 변환
+      const normalizedCode = INDUSTRY_LABEL_TO_CODE[industryCode] || industryCode;
+      if (!tenantFilterIndustry.includes(normalizedCode)) {
+        return false;
+      }
+    }
+    // 상태 필터
+    if (tenantFilterStatus.length > 0) {
+      const tenantStatus = tenant.deleted ? 'deleted' : (tenant.subscription?.status || 'none');
+      if (!tenantFilterStatus.includes(tenantStatus)) {
+        return false;
+      }
+    }
+    // 플랜 필터
+    if (tenantFilterPlan.length > 0 && !tenantFilterPlan.includes(tenant.subscription?.plan || '')) {
+      return false;
+    }
+    return true;
+  });
+
+  // 필터 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tenantFilterRef.current && !tenantFilterRef.current.contains(event.target as Node)) {
+        setTenantFilterOpen(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // 이번달 시작/끝 날짜 계산
   const getThisMonthRange = () => {
@@ -414,6 +497,89 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     const fileName = `결제내역_${member?.name || member?.email || 'unknown'}_${today}.xlsx`;
 
     XLSX.writeFile(workbook, fileName);
+  };
+
+  // 환불 모달 열기
+  const openRefundModal = async (payment: Payment) => {
+    // 원본 결제 금액
+    const originalAmount = Math.abs(payment.amount || 0);
+
+    // 이미 환불된 금액 계산 (같은 originalPaymentId를 가진 환불 내역)
+    const refundedPayments = payments.filter(
+      p => p.originalPaymentId === payment.id && (p.transactionType === 'refund' || p.category === 'refund')
+    );
+    const totalRefunded = refundedPayments.reduce((sum, p) => sum + Math.abs(p.amount || 0), 0);
+    const availableAmount = originalAmount - totalRefunded;
+
+    setRefundModal({
+      isOpen: true,
+      payment,
+      availableAmount,
+    });
+    setRefundForm({
+      type: 'full',
+      amount: availableAmount,
+      reason: '',
+      cancelSubscription: false,
+    });
+    setPaymentActionDropdown(null);
+  };
+
+  // 환불 처리
+  const handleRefund = async () => {
+    if (!refundModal.payment) return;
+
+    const refundAmount = refundForm.type === 'full' ? refundModal.availableAmount : refundForm.amount;
+
+    if (refundAmount <= 0) {
+      alert('환불 금액을 입력해주세요.');
+      return;
+    }
+
+    if (refundAmount > refundModal.availableAmount) {
+      alert(`환불 가능 금액(${refundModal.availableAmount.toLocaleString()}원)을 초과했습니다.`);
+      return;
+    }
+
+    if (!refundModal.payment.paymentKey) {
+      alert('결제 키가 없어 환불할 수 없습니다.');
+      return;
+    }
+
+    setProcessingRefund(true);
+
+    try {
+      const response = await fetch('/api/admin/payments/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: refundModal.payment.id,
+          paymentKey: refundModal.payment.paymentKey,
+          refundAmount,
+          refundReason: refundForm.reason.trim(),
+          cancelSubscription: refundForm.cancelSubscription,
+          tenantId: refundModal.payment.tenantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '환불 처리 중 오류가 발생했습니다.');
+      }
+
+      alert('환불이 완료되었습니다.');
+
+      // 결제 내역 새로고침
+      fetchMemberDetail();
+
+      setRefundModal({ isOpen: false, payment: null, availableAmount: 0 });
+    } catch (error) {
+      console.error('Refund error:', error);
+      alert(error instanceof Error ? error.message : '환불 처리 중 오류가 발생했습니다.');
+    } finally {
+      setProcessingRefund(false);
+    }
   };
 
   // 구독 상태 라벨
@@ -621,6 +787,11 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       }
       if (tenantActionRef.current && !tenantActionRef.current.contains(event.target as Node)) {
         setTenantActionDropdown(null);
+        setDropdownPosition(null);
+      }
+      if (paymentActionRef.current && !paymentActionRef.current.contains(event.target as Node)) {
+        setPaymentActionDropdown(null);
+        setPaymentDropdownPosition(null);
       }
     };
 
@@ -646,6 +817,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           phone: data.member.phone || '',
           memo: data.member.memo || '',
           newEmail: data.member.email || '',
+          group: data.member.group || 'normal',
         });
       }
 
@@ -1477,38 +1649,153 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* 메모 - 별도 줄 */}
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <label className="block text-sm text-gray-500 mb-1">메모</label>
-          {editMode ? (
-            <textarea
-              value={formData.memo}
-              onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="관리자 메모"
-            />
-          ) : (
-            <p className="text-gray-600">{member.memo || '-'}</p>
-          )}
+        {/* 그룹 & 메모 - 별도 줄 */}
+        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">그룹</label>
+            {editMode ? (
+              <select
+                value={formData.group}
+                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                {MEMBER_GROUP_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                member.group === 'internal'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {MEMBER_GROUPS[member.group as keyof typeof MEMBER_GROUPS] || member.group || '일반'}
+              </span>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">메모</label>
+            {editMode ? (
+              <textarea
+                value={formData.memo}
+                onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="관리자 메모"
+              />
+            ) : (
+              <p className="text-gray-600">{member.memo || '-'}</p>
+            )}
+          </div>
         </div>
       </div>
 
       {/* 매장 목록 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 overflow-visible">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sofa className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold">매장 목록</h2>
             <span className="text-sm text-gray-400">({tenants.length})</span>
           </div>
-          <button
-            onClick={() => setAddTenantModal(true)}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            매장 추가
-          </button>
+          <div className="flex items-center gap-3" ref={tenantFilterRef}>
+            {/* 매장 필터 */}
+            {tenants.length > 0 && (
+              <>
+                {/* 업종 필터 */}
+                <div className="relative">
+                  <button
+                    onClick={() => setTenantFilterOpen(tenantFilterOpen === 'industry' ? null : 'industry')}
+                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterIndustry.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    업종 {tenantFilterIndustry.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterIndustry.length}</span>}
+                  </button>
+                  {tenantFilterOpen === 'industry' && (
+                    <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-20 min-w-[160px]">
+                      {INDUSTRY_OPTIONS.map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={tenantFilterIndustry.includes(opt.value)}
+                            onChange={() => toggleTenantFilter('industry', opt.value)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* 상태 필터 */}
+                <div className="relative">
+                  <button
+                    onClick={() => setTenantFilterOpen(tenantFilterOpen === 'status' ? null : 'status')}
+                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterStatus.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    상태 {tenantFilterStatus.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterStatus.length}</span>}
+                  </button>
+                  {tenantFilterOpen === 'status' && (
+                    <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-20 min-w-[120px]">
+                      {[
+                        { value: 'active', label: '구독중' },
+                        { value: 'trial', label: '체험중' },
+                        { value: 'canceled', label: '해지 예정' },
+                        { value: 'expired', label: '만료' },
+                        { value: 'deleted', label: '삭제' },
+                        { value: 'none', label: '미구독' },
+                      ].map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={tenantFilterStatus.includes(opt.value)}
+                            onChange={() => toggleTenantFilter('status', opt.value)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* 플랜 필터 */}
+                <div className="relative">
+                  <button
+                    onClick={() => setTenantFilterOpen(tenantFilterOpen === 'plan' ? null : 'plan')}
+                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterPlan.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    플랜 {tenantFilterPlan.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterPlan.length}</span>}
+                  </button>
+                  {tenantFilterOpen === 'plan' && (
+                    <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-20 min-w-[120px]">
+                      {[
+                        { value: 'trial', label: 'Trial' },
+                        { value: 'basic', label: 'Basic' },
+                        { value: 'business', label: 'Business' },
+                        { value: 'enterprise', label: 'Enterprise' },
+                      ].map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={tenantFilterPlan.includes(opt.value)}
+                            onChange={() => toggleTenantFilter('plan', opt.value)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            <button
+              onClick={() => setAddTenantModal(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              매장 추가
+            </button>
+          </div>
         </div>
         {tenants.length === 0 ? (
           <div className="text-center py-8">
@@ -1521,7 +1808,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -1538,8 +1825,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {tenants.map((tenant, index) => (
-                  <tr key={tenant.tenantId} className={`hover:bg-gray-50 transition-colors ${deletingTenantId === tenant.tenantId ? 'opacity-50 pointer-events-none' : ''}`}>
+                {filteredTenants.map((tenant, index) => (
+                  <tr key={tenant.tenantId} className={`hover:bg-gray-50 transition-colors ${deletingTenantId === tenant.tenantId ? 'opacity-50 pointer-events-none' : ''} ${tenant.deleted ? 'bg-red-50/50' : ''}`}>
                     <td className="px-3 py-3 text-center text-gray-500">
                       {deletingTenantId === tenant.tenantId ? (
                         <Spinner size="sm" />
@@ -1555,10 +1842,12 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       {INDUSTRY_OPTIONS.find(opt => opt.value === tenant.industry)?.label || tenant.industry || '-'}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      {getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)}
+                      {tenant.deleted
+                        ? getStatusBadge('deleted', 'sm')
+                        : getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)}
                     </td>
                     <td className="px-3 py-3 text-center text-gray-600">
-                      {getPlanName(tenant.subscription?.plan)}
+                      {tenant.deleted ? <span className="text-gray-400">-</span> : getPlanName(tenant.subscription?.plan)}
                     </td>
                     <td className="px-3 py-3 text-center text-gray-600">
                       {tenant.subscription?.currentPeriodStart
@@ -1580,43 +1869,70 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                     <td className="px-3 py-3 text-center">
                       <div className="relative" ref={tenantActionDropdown === tenant.tenantId ? tenantActionRef : undefined}>
                         <button
-                          onClick={() => setTenantActionDropdown(tenantActionDropdown === tenant.tenantId ? null : tenant.tenantId)}
+                          onClick={(e) => {
+                            if (tenantActionDropdown === tenant.tenantId) {
+                              setTenantActionDropdown(null);
+                              setDropdownPosition(null);
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setDropdownPosition({
+                                top: rect.bottom + 4,
+                                left: rect.right - 100, // 드롭다운 너비만큼 왼쪽으로
+                              });
+                              setTenantActionDropdown(tenant.tenantId);
+                            }
+                          }}
                           className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors"
                         >
                           <MoreHoriz className="w-5 h-5" />
                         </button>
-                        {tenantActionDropdown === tenant.tenantId && (
-                          <div className={`absolute right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 min-w-[100px] ${index < 2 ? 'top-full mt-1' : 'bottom-full mb-1'}`}>
-                            <button
-                              onClick={() => {
-                                openTenantDetailModal(tenant);
-                                setTenantActionDropdown(null);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <EditPencil className="w-4 h-4" />
-                              수정
-                            </button>
-                            <button
-                              onClick={() => {
-                                openManualChargeModal(tenant);
-                                setTenantActionDropdown(null);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <HandCash className="w-4 h-4" />
-                              결제
-                            </button>
-                            <button
-                              onClick={() => {
-                                handleDeleteTenant(tenant);
-                                setTenantActionDropdown(null);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                            >
-                              <Trash className="w-4 h-4" />
-                              삭제
-                            </button>
+                        {tenantActionDropdown === tenant.tenantId && dropdownPosition && (
+                          <div
+                            className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-[9999] min-w-[100px]"
+                            style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+                          >
+                            {!tenant.deleted ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    openTenantDetailModal(tenant);
+                                    setTenantActionDropdown(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  <EditPencil className="w-4 h-4" />
+                                  수정
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    openManualChargeModal(tenant);
+                                    setTenantActionDropdown(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  <HandCash className="w-4 h-4" />
+                                  결제
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDeleteTenant(tenant);
+                                    setTenantActionDropdown(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                  <Trash className="w-4 h-4" />
+                                  삭제
+                                </button>
+                              </>
+                            ) : null}
+                            {tenant.deleted && tenant.deletedAt && (
+                              <div className="px-4 py-2 text-xs text-gray-500">
+                                삭제일: {new Date(tenant.deletedAt).toLocaleDateString('ko-KR')}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1829,7 +2145,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           <p className="text-gray-500 text-center py-6 text-sm">결제 내역이 없습니다.</p>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <table className="w-full min-w-max">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
@@ -1885,12 +2201,51 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                           {payment.initiatedBy ? INITIATED_BY_LABELS[payment.initiatedBy] || payment.initiatedBy : '-'}
                         </td>
                         <td className="px-1 py-3 text-center">
-                          <button
-                            onClick={() => setPaymentDetailModal(payment)}
-                            className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          >
-                            상세
-                          </button>
+                          <div className="relative" ref={paymentActionDropdown === payment.id ? paymentActionRef : undefined}>
+                            <button
+                              onClick={(e) => {
+                                if (paymentActionDropdown === payment.id) {
+                                  setPaymentActionDropdown(null);
+                                  setPaymentDropdownPosition(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setPaymentDropdownPosition({
+                                    top: rect.bottom + 4,
+                                    left: rect.right - 80,
+                                  });
+                                  setPaymentActionDropdown(payment.id);
+                                }
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                            >
+                              <MoreHoriz className="w-4 h-4" />
+                            </button>
+                            {paymentActionDropdown === payment.id && paymentDropdownPosition && (
+                              <div
+                                className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-[9999] min-w-[80px]"
+                                style={{ top: paymentDropdownPosition.top, left: paymentDropdownPosition.left }}
+                              >
+                                <button
+                                  onClick={() => {
+                                    setPaymentDetailModal(payment);
+                                    setPaymentActionDropdown(null);
+                                    setPaymentDropdownPosition(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  상세
+                                </button>
+                                {!isRefund && payment.status === 'done' && (
+                                  <button
+                                    onClick={() => openRefundModal(payment)}
+                                    className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    환불
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1960,14 +2315,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 )}
               </div>
               <button
-                onClick={handleSubHistoryThisMonth}
+                onClick={() => { setSubHistoryFilterType('all'); setSubHistoryDateRange({ start: '', end: '' }); setSubHistoryPage(1); }}
                 className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                  subHistoryFilterType === 'thisMonth'
+                  subHistoryFilterType === 'all'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                이번달
+                전체
               </button>
               <button
                 onClick={handleOpenSubHistoryDatePicker}
@@ -2509,7 +2864,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       />
                     </div>
                     <p className="text-xs text-gray-400 mt-3 text-center">
-                      n8n 웹훅을 통해 매장을 생성하고 있습니다
+                      매장을 생성하고 있습니다
                     </p>
                   </div>
                 </div>
@@ -3144,6 +3499,146 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 환불 모달 */}
+      {refundModal.isOpen && refundModal.payment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">환불 처리</h3>
+              <button
+                onClick={() => setRefundModal({ isOpen: false, payment: null, availableAmount: 0 })}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 원본 결제 정보 */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">원본 결제</span>
+                <span className="font-medium">{refundModal.payment.orderId}</span>
+              </div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">결제 금액</span>
+                <span className="font-medium">{Math.abs(refundModal.payment.amount || 0).toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">환불 가능 금액</span>
+                <span className="font-medium text-blue-600">{refundModal.availableAmount.toLocaleString()}원</span>
+              </div>
+            </div>
+
+            {/* 환불 유형 선택 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">환불 유형</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="refundType"
+                    checked={refundForm.type === 'full'}
+                    onChange={() => {
+                      setRefundForm({ ...refundForm, type: 'full', amount: refundModal.availableAmount });
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">전액 환불</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="refundType"
+                    checked={refundForm.type === 'partial'}
+                    onChange={() => {
+                      setRefundForm({ ...refundForm, type: 'partial', amount: 0 });
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">부분 환불</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 부분 환불 금액 입력 */}
+            {refundForm.type === 'partial' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">환불 금액</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={refundForm.amount || ''}
+                    onChange={(e) => setRefundForm({ ...refundForm, amount: parseInt(e.target.value) || 0 })}
+                    max={refundModal.availableAmount}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                    placeholder="환불 금액 입력"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">최대 {refundModal.availableAmount.toLocaleString()}원</p>
+              </div>
+            )}
+
+            {/* 환불 사유 (선택) */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">환불 사유 <span className="text-gray-400 font-normal">(선택)</span></label>
+              <textarea
+                value={refundForm.reason}
+                onChange={(e) => setRefundForm({ ...refundForm, reason: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={2}
+                placeholder="환불 사유를 입력하세요 (미입력 시 '관리자 환불 처리'로 저장)"
+              />
+            </div>
+
+            {/* 구독 처리 옵션 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">구독 처리</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="subscriptionOption"
+                    checked={!refundForm.cancelSubscription}
+                    onChange={() => setRefundForm({ ...refundForm, cancelSubscription: false })}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">구독 유지</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="subscriptionOption"
+                    checked={refundForm.cancelSubscription}
+                    onChange={() => setRefundForm({ ...refundForm, cancelSubscription: true })}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-red-600">구독 즉시 해지</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 버튼 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRefundModal({ isOpen: false, payment: null, availableAmount: 0 })}
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={processingRefund}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRefund}
+                disabled={processingRefund || (refundForm.type === 'partial' && refundForm.amount <= 0)}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingRefund ? '처리 중...' : '환불 처리'}
               </button>
             </div>
           </div>
