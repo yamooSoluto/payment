@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
           orderId?: string;
           paidAt?: { toDate?: () => Date };
           createdAt?: { toDate?: () => Date };
+          initiatedBy?: 'system' | 'user' | 'admin';
         }
 
         const firstPayment = payments.find(p =>
@@ -113,6 +114,8 @@ export async function POST(request: NextRequest) {
 
         if (firstPayment) {
           const paidAt = firstPayment.paidAt?.toDate?.() || firstPayment.createdAt?.toDate?.() || new Date();
+          // initiatedBy 필드로 처리자 결정 (없으면 user로 기본값 - 신규 결제는 보통 사용자가 진행)
+          const changedBy = firstPayment.initiatedBy || 'user';
           historyRecords.push({
             tenantId,
             email: subscription.email || '',
@@ -124,7 +127,7 @@ export async function POST(request: NextRequest) {
             billingDate: paidAt,
             changeType: firstPayment.type === 'trial_convert' || firstPayment.type === 'conversion' ? 'new' : 'new',
             changedAt: paidAt,
-            changedBy: 'system',
+            changedBy,
             previousPlan: firstPayment.previousPlan || 'trial',
             paymentId: firstPayment.id,
             orderId: firstPayment.orderId || null,
@@ -155,7 +158,7 @@ export async function POST(request: NextRequest) {
             billingDate: paidAt,
             changeType: change.type || 'upgrade',
             changedAt: paidAt,
-            changedBy: 'user',
+            changedBy: change.initiatedBy || 'user',
             previousPlan: change.previousPlan || null,
             paymentId: change.id,
             orderId: change.orderId || null,
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
             billingDate: paidAt,
             changeType: 'renew',
             changedAt: paidAt,
-            changedBy: 'system',
+            changedBy: (renewal as PaymentDoc).initiatedBy || 'system', // 자동 갱신은 보통 system
             previousPlan: null,
             paymentId: renewal.id,
             orderId: renewal.orderId || null,

@@ -49,6 +49,8 @@ export async function GET(
       memo: userData.memo || '',
       lastLoginAt: userData.lastLoginAt?.toDate?.()?.toISOString() || null,
       lastLoginIP: userData.lastLoginIP || null,
+      trialApplied: userData.trialApplied || false,
+      trialAppliedAt: userData.trialAppliedAt?.toDate?.()?.toISOString() || null,
     };
 
     // 이메일로 tenants 조회 (매장 정보용)
@@ -114,6 +116,40 @@ export async function GET(
       subscription: subscriptionMap.get(tenant.tenantId) || null,
     }));
 
+    // trialApplied인 경우 trial 구독이 있었던 매장 찾기
+    let trialBrandName: string | null = null;
+    if (userData.trialApplied) {
+      // 현재 또는 과거에 trial이었던 매장 찾기
+      for (const tenant of tenants) {
+        const sub = tenant.subscription;
+        if (sub && (sub.plan === 'trial' || sub.status === 'trial')) {
+          trialBrandName = tenant.brandName;
+          break;
+        }
+      }
+      // 현재 trial이 없으면 subscription_history에서 찾기
+      if (!trialBrandName) {
+        try {
+          const historySnapshot = await db.collection('subscription_history')
+            .where('email', '==', email)
+            .where('plan', '==', 'trial')
+            .limit(10)
+            .get();
+          if (!historySnapshot.empty) {
+            // 가장 최근 것 찾기
+            const sortedDocs = historySnapshot.docs.sort((a, b) => {
+              const aTime = a.data().changedAt?.toDate?.()?.getTime() || 0;
+              const bTime = b.data().changedAt?.toDate?.()?.getTime() || 0;
+              return bTime - aTime;
+            });
+            trialBrandName = sortedDocs[0].data().brandName || null;
+          }
+        } catch (e) {
+          console.error('Failed to fetch trial history:', e);
+        }
+      }
+    }
+
     // 모든 tenantId로 결제 내역 조회
     const tenantIds = tenantDataList.map(t => t.tenantId);
     let payments: Array<{ id: string; [key: string]: unknown }> = [];
@@ -164,6 +200,7 @@ export async function GET(
       member: {
         ...member,
         totalAmount,
+        trialBrandName,
       },
       tenants,
       payments: payments.slice(0, 20), // 최근 20건만 반환

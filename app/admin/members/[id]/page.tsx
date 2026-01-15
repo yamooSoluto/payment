@@ -18,6 +18,9 @@ interface Member {
   lastLoginAt?: string | null;
   lastLoginIP?: string | null;
   totalAmount?: number;
+  trialApplied?: boolean;
+  trialAppliedAt?: string | null;
+  trialBrandName?: string | null;
 }
 
 interface TenantSubscription {
@@ -1649,8 +1652,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* 그룹 & 메모 - 별도 줄 */}
-        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 그룹, 무료체험 여부 & 메모 - 별도 줄 (1:1:2 비율) */}
+        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm text-gray-500 mb-1">그룹</label>
             {editMode ? (
@@ -1674,6 +1677,24 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             )}
           </div>
           <div>
+            <label className="block text-sm text-gray-500 mb-1">무료체험</label>
+            {member.trialApplied ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  이용완료
+                </span>
+                <span className="text-xs text-gray-500">
+                  {member.trialAppliedAt && new Date(member.trialAppliedAt).toLocaleDateString('ko-KR')}
+                  {member.trialBrandName && ` · ${member.trialBrandName}`}
+                </span>
+              </div>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                미사용
+              </span>
+            )}
+          </div>
+          <div className="md:col-span-2">
             <label className="block text-sm text-gray-500 mb-1">메모</label>
             {editMode ? (
               <textarea
