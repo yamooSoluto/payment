@@ -719,7 +719,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                         // currentPeriodEnd가 없고 nextBillingDate만 있으면 -1일 적용
                         const useCurrentPeriodEnd = !!subscription.currentPeriodEnd;
                         const baseDate = useCurrentPeriodEnd
-                          ? new Date(subscription.currentPeriodEnd)
+                          ? new Date(subscription.currentPeriodEnd!)
                           : new Date(subscription.nextBillingDate!);
                         const endDate = new Date(baseDate);
                         if (!useCurrentPeriodEnd) {

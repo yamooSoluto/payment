@@ -57,13 +57,13 @@ export async function POST(request: NextRequest) {
 
     const previousPlan = subscription.plan;
     const previousAmount = subscription.amount;
+    const brandName = subscription.brandName || '';
 
     // 차액 결제 (proratedAmount가 0보다 클 때만)
     let paymentResponse = null;
     const orderId = `CHG_${Date.now()}`;
 
     if (proratedAmount > 0) {
-      const brandName = subscription.brandName || '';
       const orderName = brandName
         ? `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경 (${brandName})`
         : `YAMOO ${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 변경`;
