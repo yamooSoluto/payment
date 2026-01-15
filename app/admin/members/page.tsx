@@ -489,7 +489,7 @@ export default function MembersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {members.map((member) => (
+                {members.map((member, index) => (
                   <tr
                     key={member.id}
                     onClick={() => router.push(`/admin/members/${member.id}`)}
@@ -537,7 +537,9 @@ export default function MembersPage() {
                       {actionMenuOpen === member.id && (
                         <div
                           ref={actionMenuRef}
-                          className="absolute right-4 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[120px]"
+                          className={`absolute right-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[120px] ${
+                            index < 2 ? 'top-full mt-1' : 'bottom-full mb-1'
+                          }`}
                         >
                           <button
                             onClick={() => {

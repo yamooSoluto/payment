@@ -412,7 +412,7 @@ export async function GET(request: NextRequest) {
       await handleSubscriptionChange(db, {
         tenantId: validTenantId,
         email,
-        brandName: subscriptionData?.brandName || null,
+        brandName: brandName || null,
         newPlan: plan,
         newStatus: 'active',
         amount: paymentAmount,
