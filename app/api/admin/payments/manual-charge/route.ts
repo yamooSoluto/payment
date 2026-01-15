@@ -233,8 +233,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
     }
 
-    // 구독 정보 조회
-    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    // 구독 정보와 카드 목록 병렬 조회
+    const [subscriptionDoc, cardsDoc] = await Promise.all([
+      db.collection('subscriptions').doc(tenantId).get(),
+      db.collection('cards').doc(tenantId).get(),
+    ]);
+
     if (!subscriptionDoc.exists) {
       return NextResponse.json({
         canCharge: false,
@@ -244,9 +248,6 @@ export async function GET(request: NextRequest) {
     }
 
     const subscription = subscriptionDoc.data();
-
-    // 카드 목록 조회 (새 구조)
-    const cardsDoc = await db.collection('cards').doc(tenantId).get();
 
     const cards: { id: string; cardInfo: unknown; alias: string | null; isPrimary: boolean }[] = [];
 

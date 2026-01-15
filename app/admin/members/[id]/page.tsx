@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz } from 'iconoir-react';
 import * as XLSX from 'xlsx';
-import { INDUSTRY_OPTIONS } from '@/lib/constants';
+import { INDUSTRY_OPTIONS, INDUSTRY_LABEL_TO_CODE } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
 
 interface Member {
@@ -24,10 +24,12 @@ interface TenantSubscription {
   status: string;
   amount: number;
   nextBillingDate: string | null;
+  currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   pricePolicy: string | null;
   priceProtectedUntil: string | null;
   originalAmount: number | null;
+  cancelMode?: 'scheduled' | 'immediate';
 }
 
 interface TenantInfo {
@@ -69,6 +71,25 @@ interface Payment {
   // 기타
   email?: string;
   [key: string]: unknown;
+}
+
+interface SubscriptionHistoryItem {
+  recordId: string;
+  tenantId: string;
+  brandName: string;
+  email: string;
+  plan: string;
+  status: string;
+  amount: number;
+  periodStart: string;
+  periodEnd: string | null;
+  billingDate?: string | null;
+  changeType: string;
+  changedAt: string;
+  changedBy: string;
+  previousPlan?: string | null;
+  previousStatus?: string | null;
+  note?: string | null;
 }
 
 const PRICE_POLICY_LABELS: Record<string, string> = {
@@ -114,6 +135,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [member, setMember] = useState<Member | null>(null);
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [subscriptionHistory, setSubscriptionHistory] = useState<SubscriptionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -162,17 +184,32 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   } | null>(null);
   const [loadingChargeInfo, setLoadingChargeInfo] = useState(false);
   const [processingCharge, setProcessingCharge] = useState(false);
-  const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
 
   // 매장 추가 모달 상태
   const [addTenantModal, setAddTenantModal] = useState(false);
   const [addTenantForm, setAddTenantForm] = useState({ brandName: '', industry: '' });
   const [addingTenant, setAddingTenant] = useState(false);
+  const [addTenantProgress, setAddTenantProgress] = useState(0);
 
-  // 매장 수정 모달 상태
+  // 매장 수정 모달 상태 (기존 - 단순 모달)
   const [editTenantModal, setEditTenantModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
   const [editTenantForm, setEditTenantForm] = useState({ brandName: '' });
   const [editingTenant, setEditingTenant] = useState(false);
+  const [deletingTenantId, setDeletingTenantId] = useState<string | null>(null);
+
+  // 매장 상세 수정 모달 상태 (통합 모달)
+  const [tenantDetailModal, setTenantDetailModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
+  const [tenantDetailForm, setTenantDetailForm] = useState({
+    brandName: '',
+    industry: '',
+    plan: 'basic',
+    status: 'active',
+    currentPeriodStart: '',
+    currentPeriodEnd: '',
+    nextBillingDate: '',
+  });
+  const [savingTenantDetail, setSavingTenantDetail] = useState(false);
+  const [saveTenantProgress, setSaveTenantProgress] = useState(0);
 
   // 구독 정보 수정 모달 상태
   const [editSubModal, setEditSubModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
@@ -207,6 +244,37 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [paymentTenantFilter, setPaymentTenantFilter] = useState<string>('all');
   const [paymentPlanFilter, setPaymentPlanFilter] = useState<string>('all');
   const PAYMENTS_PER_PAGE = 10;
+
+  // 필터 팝업 ref (외부 클릭 감지용)
+  const paymentFilterRef = useRef<HTMLDivElement>(null);
+  const subHistoryFilterRef = useRef<HTMLDivElement>(null);
+
+  // 구독 내역 필터 상태
+  const [subHistoryPage, setSubHistoryPage] = useState(1);
+  const [subHistoryFilterType, setSubHistoryFilterType] = useState<'all' | 'thisMonth' | 'custom'>('all');
+  const [subHistoryDateRange, setSubHistoryDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [showSubHistoryDatePicker, setShowSubHistoryDatePicker] = useState(false);
+  const [tempSubHistoryDateRange, setTempSubHistoryDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [subHistorySearch, setSubHistorySearch] = useState('');
+  const [showSubHistoryFilter, setShowSubHistoryFilter] = useState(false);
+  const [subHistoryTenantFilter, setSubHistoryTenantFilter] = useState<string>('all');
+  const [subHistoryPlanFilter, setSubHistoryPlanFilter] = useState<string>('all');
+  const [subHistoryStatusFilter, setSubHistoryStatusFilter] = useState<string>('all');
+  const SUBS_PER_PAGE = 10;
+
+  // 구독 수정 모달 (구독 내역에서)
+  const [editSubHistoryModal, setEditSubHistoryModal] = useState<{ isOpen: boolean; tenant: TenantInfo | null }>({ isOpen: false, tenant: null });
+  const [editSubHistoryForm, setEditSubHistoryForm] = useState({
+    currentPeriodStart: '',
+    currentPeriodEnd: '',
+    nextBillingDate: '',
+    status: '',
+  });
+  const [editingSubHistory, setEditingSubHistory] = useState(false);
+
+  // 매장 목록 액션 드롭다운 상태
+  const [tenantActionDropdown, setTenantActionDropdown] = useState<string | null>(null);
+  const tenantActionRef = useRef<HTMLDivElement>(null);
 
   // 이번달 시작/끝 날짜 계산
   const getThisMonthRange = () => {
@@ -348,15 +416,228 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     XLSX.writeFile(workbook, fileName);
   };
 
+  // 구독 상태 라벨
+  const getSubStatusLabel = (status: string | undefined) => {
+    switch (status) {
+      case 'trial':
+      case 'trialing': return '체험';
+      case 'active': return '구독중';
+      case 'completed': return '완료';
+      case 'expired': return '만료';
+      case 'canceled': return '해지';
+      default: return status || '-';
+    }
+  };
+
+  // 구독 내역 필터링 (subscription_history에서)
+  const filteredSubscriptions = subscriptionHistory.filter((record) => {
+    // 검색어 필터 (매장명)
+    if (subHistorySearch) {
+      const searchLower = subHistorySearch.toLowerCase();
+      if (!record.brandName.toLowerCase().includes(searchLower)) {
+        return false;
+      }
+    }
+
+    // 매장 필터
+    if (subHistoryTenantFilter !== 'all' && record.tenantId !== subHistoryTenantFilter) {
+      return false;
+    }
+
+    // 플랜 필터
+    if (subHistoryPlanFilter !== 'all' && record.plan !== subHistoryPlanFilter) {
+      return false;
+    }
+
+    // 상태 필터
+    if (subHistoryStatusFilter !== 'all' && record.status !== subHistoryStatusFilter) {
+      return false;
+    }
+
+    // 날짜 필터 (변경일 기준) - 'all'이면 필터링 안 함
+    if (subHistoryFilterType !== 'all' && record.changedAt) {
+      const changedDate = new Date(record.changedAt);
+
+      if (subHistoryFilterType === 'thisMonth') {
+        const { start, end } = getThisMonthRange();
+        if (changedDate < start || changedDate > end) {
+          return false;
+        }
+      } else if (subHistoryFilterType === 'custom' && subHistoryDateRange.start && subHistoryDateRange.end) {
+        const filterStart = new Date(subHistoryDateRange.start);
+        const filterEnd = new Date(subHistoryDateRange.end);
+        filterEnd.setHours(23, 59, 59, 999);
+        if (changedDate < filterStart || changedDate > filterEnd) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
+
+  // 구독 내역 페이지네이션
+  const totalSubHistoryPages = Math.ceil(filteredSubscriptions.length / SUBS_PER_PAGE);
+  const paginatedSubscriptions = filteredSubscriptions.slice(
+    (subHistoryPage - 1) * SUBS_PER_PAGE,
+    subHistoryPage * SUBS_PER_PAGE
+  );
+
+  // 구독 내역 이번달 필터
+  const handleSubHistoryThisMonth = () => {
+    setSubHistoryFilterType('thisMonth');
+    setSubHistoryDateRange({ start: '', end: '' });
+    setSubHistoryPage(1);
+  };
+
+  // 구독 내역 날짜 선택 모달 열기
+  const handleOpenSubHistoryDatePicker = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    setTempSubHistoryDateRange(subHistoryDateRange.start ? subHistoryDateRange : { start: monthAgo, end: today });
+    setShowSubHistoryDatePicker(true);
+  };
+
+  // 구독 내역 날짜 범위 적용
+  const handleApplySubHistoryDateRange = () => {
+    if (tempSubHistoryDateRange.start && tempSubHistoryDateRange.end) {
+      setSubHistoryFilterType('custom');
+      setSubHistoryDateRange(tempSubHistoryDateRange);
+      setSubHistoryPage(1);
+      setShowSubHistoryDatePicker(false);
+    }
+  };
+
+  // 구독 내역 xlsx 내보내기
+  const handleExportSubscriptions = () => {
+    if (filteredSubscriptions.length === 0) {
+      alert('내보낼 구독 내역이 없습니다.');
+      return;
+    }
+
+    const changeTypeLabels: Record<string, string> = {
+      new: '신규',
+      upgrade: '업그레이드',
+      downgrade: '다운그레이드',
+      renew: '갱신',
+      cancel: '해지',
+      expire: '만료',
+      reactivate: '재활성화',
+      admin_edit: '관리자 수정',
+    };
+
+    const changedByLabels: Record<string, string> = {
+      admin: '관리자',
+      system: '시스템',
+      user: '회원',
+    };
+
+    const exportData = filteredSubscriptions.map((record) => ({
+      '매장': record.brandName,
+      '플랜': getPlanName(record.plan),
+      '구분': changeTypeLabels[record.changeType] || record.changeType,
+      '시작일': record.periodStart
+        ? new Date(record.periodStart).toLocaleDateString('ko-KR')
+        : '-',
+      '종료일': record.periodEnd
+        ? new Date(record.periodEnd).toLocaleDateString('ko-KR')
+        : '-',
+      '처리일': record.changedAt
+        ? new Date(record.changedAt).toLocaleDateString('ko-KR')
+        : '-',
+      '상태': getSubStatusLabel(record.status),
+      '처리자': changedByLabels[record.changedBy] || record.changedBy || '-',
+      '금액': record.amount ?? 0,
+      '이전 플랜': record.previousPlan ? getPlanName(record.previousPlan) : '-',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '구독 내역');
+
+    worksheet['!cols'] = [
+      { wch: 20 },  // 매장
+      { wch: 12 },  // 플랜
+      { wch: 14 },  // 구분
+      { wch: 15 },  // 시작일
+      { wch: 15 },  // 종료일
+      { wch: 15 },  // 처리일
+      { wch: 10 },  // 상태
+      { wch: 10 },  // 처리자
+      { wch: 12 },  // 금액
+      { wch: 12 },  // 이전 플랜
+    ];
+
+    const today = new Date().toISOString().split('T')[0];
+    const fileName = `구독내역_${member?.name || member?.email || 'unknown'}_${today}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  // 구독 수정 처리 (구독 내역에서)
+  const handleEditSubHistory = async () => {
+    if (!editSubHistoryModal.tenant) return;
+
+    setEditingSubHistory(true);
+    try {
+      const response = await fetch(`/api/admin/tenants/${editSubHistoryModal.tenant.docId}/subscription`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPeriodStart: editSubHistoryForm.currentPeriodStart || null,
+          currentPeriodEnd: editSubHistoryForm.currentPeriodEnd || null,
+          nextBillingDate: editSubHistoryForm.nextBillingDate || null,
+          status: editSubHistoryForm.status || null,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('구독 정보가 수정되었습니다.');
+        setEditSubHistoryModal({ isOpen: false, tenant: null });
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '수정에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to update subscription:', error);
+      alert('수정 중 오류가 발생했습니다.');
+    } finally {
+      setEditingSubHistory(false);
+    }
+  };
+
   useEffect(() => {
     fetchMemberDetail();
   }, [id]);
 
+  // 필터 팝업 및 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paymentFilterRef.current && !paymentFilterRef.current.contains(event.target as Node)) {
+        setShowPaymentFilter(false);
+      }
+      if (subHistoryFilterRef.current && !subHistoryFilterRef.current.contains(event.target as Node)) {
+        setShowSubHistoryFilter(false);
+      }
+      if (tenantActionRef.current && !tenantActionRef.current.contains(event.target as Node)) {
+        setTenantActionDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchMemberDetail = async () => {
     try {
-      const response = await fetch(`/api/admin/members/${id}`);
-      if (response.ok) {
-        const data = await response.json();
+      // 회원 정보와 구독 히스토리를 병렬로 가져오기
+      const [memberResponse, historyResponse] = await Promise.all([
+        fetch(`/api/admin/members/${id}`),
+        fetch(`/api/admin/members/${id}/subscription-history`),
+      ]);
+
+      if (memberResponse.ok) {
+        const data = await memberResponse.json();
         setMember(data.member);
         setTenants(data.tenants || []);
         setPayments(data.payments || []);
@@ -366,6 +647,11 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           memo: data.member.memo || '',
           newEmail: data.member.email || '',
         });
+      }
+
+      if (historyResponse.ok) {
+        const historyData = await historyResponse.json();
+        setSubscriptionHistory(historyData.history || []);
       }
     } catch (error) {
       console.error('Failed to fetch member:', error);
@@ -562,6 +848,17 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       return;
     }
     setAddingTenant(true);
+    setAddTenantProgress(0);
+
+    // 진행률 시뮬레이션 (n8n 웹훅은 실시간 진행률 제공 안함)
+    const progressInterval = setInterval(() => {
+      setAddTenantProgress(prev => {
+        if (prev >= 90) return 90; // 90%에서 멈추고 완료까지 대기
+        const next = prev + 5 + Math.random() * 10;
+        return Math.min(next, 90); // 90% 초과 방지
+      });
+    }, 400);
+
     try {
       const response = await fetch('/api/admin/tenants', {
         method: 'POST',
@@ -572,18 +869,36 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           industry: addTenantForm.industry,
         }),
       });
+      clearInterval(progressInterval);
+      setAddTenantProgress(100);
+
       const data = await response.json();
       if (response.ok) {
-        alert('매장이 추가되었습니다.');
-        setAddTenantModal(false);
-        setAddTenantForm({ brandName: '', industry: '' });
-        fetchMemberDetail();
+        // 즉시 UI 업데이트 (새 매장 추가)
+        const newTenant: TenantInfo = {
+          docId: data.tenantId,
+          tenantId: data.tenantId,
+          brandName: data.brandName || addTenantForm.brandName.trim(),
+          industry: data.industry || addTenantForm.industry,
+          createdAt: new Date().toISOString(),
+          subscription: null,
+        };
+        setTenants(prev => [...prev, newTenant]);
+        setTimeout(() => {
+          alert('매장이 추가되었습니다.');
+          setAddTenantModal(false);
+          setAddTenantForm({ brandName: '', industry: '' });
+          setAddTenantProgress(0);
+        }, 300);
       } else {
         alert(data.error || '매장 추가에 실패했습니다.');
+        setAddTenantProgress(0);
       }
     } catch (error) {
+      clearInterval(progressInterval);
       console.error('Failed to add tenant:', error);
       alert('오류가 발생했습니다.');
+      setAddTenantProgress(0);
     } finally {
       setAddingTenant(false);
     }
@@ -604,9 +919,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       });
       const data = await response.json();
       if (response.ok) {
+        // 즉시 UI 업데이트
+        setTenants(prev => prev.map(t =>
+          t.tenantId === editTenantModal.tenant!.tenantId
+            ? { ...t, brandName: editTenantForm.brandName.trim() }
+            : t
+        ));
         alert('매장 정보가 수정되었습니다.');
         setEditTenantModal({ isOpen: false, tenant: null });
-        fetchMemberDetail();
       } else {
         alert(data.error || '매장 수정에 실패했습니다.');
       }
@@ -620,23 +940,27 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
   // 매장 삭제
   const handleDeleteTenant = async (tenant: TenantInfo) => {
-    if (!confirm(`'${tenant.brandName}' 매장을 삭제하시겠습니까?\n\n삭제 후 90일간 복구 가능합니다.`)) {
+    if (!confirm(`'${tenant.brandName}' 매장을 삭제하시겠습니까?`)) {
       return;
     }
+    setDeletingTenantId(tenant.tenantId);
     try {
       const response = await fetch(`/api/admin/tenants/${tenant.tenantId}`, {
         method: 'DELETE',
       });
       const data = await response.json();
       if (response.ok) {
+        // 즉시 UI 업데이트 (삭제된 매장 제거)
+        setTenants(prev => prev.filter(t => t.tenantId !== tenant.tenantId));
         alert('매장이 삭제되었습니다.');
-        fetchMemberDetail();
       } else {
         alert(data.error || '매장 삭제에 실패했습니다.');
       }
     } catch (error) {
       console.error('Failed to delete tenant:', error);
       alert('오류가 발생했습니다.');
+    } finally {
+      setDeletingTenantId(null);
     }
   };
 
@@ -652,6 +976,201 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       currentPeriodEnd: sub?.currentPeriodEnd?.split('T')[0] || '',
       nextBillingDate: sub?.nextBillingDate?.split('T')[0] || '',
     });
+  };
+
+  // 매장 상세 수정 모달 열기
+  const openTenantDetailModal = (tenant: TenantInfo) => {
+    const sub = tenant.subscription;
+    setTenantDetailModal({ isOpen: true, tenant });
+    // 업종: 한글 라벨로 저장된 경우 코드로 변환
+    const industryCode = tenant.industry
+      ? (INDUSTRY_LABEL_TO_CODE[tenant.industry] || tenant.industry)
+      : '';
+    setTenantDetailForm({
+      brandName: tenant.brandName,
+      industry: industryCode,
+      plan: sub?.plan || 'basic',
+      status: sub?.status || '',
+      currentPeriodStart: sub?.currentPeriodStart?.split('T')[0] || '',
+      currentPeriodEnd: sub?.currentPeriodEnd?.split('T')[0] || '',
+      nextBillingDate: sub?.nextBillingDate?.split('T')[0] || '',
+    });
+  };
+
+  // 수동 결제 정보 로드 (매장 상세 모달용)
+  const loadChargeInfoForTenant = async (tenant: TenantInfo) => {
+    setChargeInfo(null);
+    setLoadingChargeInfo(true);
+
+    const planPrices: Record<string, number> = {
+      basic: 39000,
+      business: 99000,
+      enterprise: 199000,
+    };
+    const currentPlan = tenant.subscription?.plan || 'basic';
+    const defaultPlan = currentPlan === 'trial' ? 'basic' : currentPlan;
+    setChargeFormData({
+      plan: defaultPlan,
+      amount: planPrices[defaultPlan] || 39000,
+      reason: '',
+      selectedCardId: '',
+    });
+
+    try {
+      const response = await fetch(`/api/admin/payments/manual-charge?tenantId=${tenant.tenantId}`);
+      const data = await response.json();
+      setChargeInfo(data);
+      if (data.cards && data.cards.length > 0) {
+        setChargeFormData(prev => ({ ...prev, selectedCardId: data.cards[0].id }));
+      }
+    } catch (error) {
+      console.error('Failed to check charge availability:', error);
+      setChargeInfo({ canCharge: false, reason: '정보를 불러올 수 없습니다.' });
+    } finally {
+      setLoadingChargeInfo(false);
+    }
+  };
+
+  // 매장 상세 정보 저장 (매장 + 구독 정보 동시 업데이트)
+  const handleSaveTenantDetail = async () => {
+    if (!tenantDetailModal.tenant) return;
+    if (!tenantDetailForm.brandName.trim()) {
+      alert('매장명을 입력해주세요.');
+      return;
+    }
+
+    setSavingTenantDetail(true);
+    setSaveTenantProgress(0);
+
+    // 진행률 시뮬레이션 (실제 단계별로 진행)
+    let currentProgress = 0;
+
+    try {
+      // 매장 정보 업데이트
+      currentProgress = 30;
+      setSaveTenantProgress(currentProgress);
+      const tenantResponse = await fetch(`/api/admin/tenants/${tenantDetailModal.tenant.tenantId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandName: tenantDetailForm.brandName.trim(),
+          industry: tenantDetailForm.industry || undefined,
+        }),
+      });
+
+      if (!tenantResponse.ok) {
+        const data = await tenantResponse.json();
+        alert(data.error || '매장 정보 수정에 실패했습니다.');
+        setSaveTenantProgress(0);
+        return;
+      }
+
+      // 구독 정보가 있거나 상태가 설정된 경우 구독 정보도 업데이트
+      currentProgress = 60;
+      setSaveTenantProgress(currentProgress);
+      if (tenantDetailForm.status) {
+        const subResponse = await fetch(`/api/admin/subscriptions/${tenantDetailModal.tenant.tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            plan: tenantDetailForm.plan,
+            status: tenantDetailForm.status,
+            currentPeriodStart: tenantDetailForm.currentPeriodStart || undefined,
+            currentPeriodEnd: tenantDetailForm.currentPeriodEnd || undefined,
+            nextBillingDate: tenantDetailForm.nextBillingDate || undefined,
+          }),
+        });
+
+        if (!subResponse.ok) {
+          const data = await subResponse.json();
+          alert(data.error || '구독 정보 수정에 실패했습니다.');
+          setSaveTenantProgress(0);
+          return;
+        }
+      }
+
+      setSaveTenantProgress(100);
+
+      // 즉시 UI 업데이트
+      setTenants(prev => prev.map(t =>
+        t.tenantId === tenantDetailModal.tenant!.tenantId
+          ? {
+              ...t,
+              brandName: tenantDetailForm.brandName.trim(),
+              industry: tenantDetailForm.industry || t.industry,
+              subscription: t.subscription ? {
+                ...t.subscription,
+                plan: tenantDetailForm.plan,
+                status: tenantDetailForm.status,
+                currentPeriodStart: tenantDetailForm.currentPeriodStart || t.subscription.currentPeriodStart,
+                currentPeriodEnd: tenantDetailForm.currentPeriodEnd || t.subscription.currentPeriodEnd,
+                nextBillingDate: tenantDetailForm.nextBillingDate || t.subscription.nextBillingDate,
+              } : tenantDetailForm.status ? {
+                plan: tenantDetailForm.plan,
+                status: tenantDetailForm.status,
+                amount: 0,
+                currentPeriodStart: tenantDetailForm.currentPeriodStart || null,
+                currentPeriodEnd: tenantDetailForm.currentPeriodEnd || null,
+                nextBillingDate: tenantDetailForm.nextBillingDate || null,
+                pricePolicy: null,
+                priceProtectedUntil: null,
+                originalAmount: null,
+              } : null,
+            }
+          : t
+      ));
+
+      setTimeout(() => {
+        alert('매장 정보가 수정되었습니다.');
+        setTenantDetailModal({ isOpen: false, tenant: null });
+        setSaveTenantProgress(0);
+      }, 300);
+    } catch (error) {
+      console.error('Failed to save tenant detail:', error);
+      alert('오류가 발생했습니다.');
+      setSaveTenantProgress(0);
+    } finally {
+      setSavingTenantDetail(false);
+    }
+  };
+
+  // 매장 상세 모달에서 수동 결제 실행
+  const handleTenantDetailManualCharge = async () => {
+    if (!tenantDetailModal.tenant || !chargeInfo?.canCharge) return;
+
+    if (!confirm(`${chargeFormData.amount.toLocaleString()}원을 결제하시겠습니까?`)) {
+      return;
+    }
+
+    setProcessingCharge(true);
+    try {
+      const response = await fetch('/api/admin/payments/manual-charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: tenantDetailModal.tenant.tenantId,
+          plan: chargeFormData.plan,
+          amount: chargeFormData.amount,
+          reason: chargeFormData.reason || '관리자 수동 결제',
+          cardId: chargeFormData.selectedCardId || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert(`결제가 완료되었습니다.\n주문번호: ${data.orderId}\n금액: ${data.amount.toLocaleString()}원`);
+        setTenantDetailModal({ isOpen: false, tenant: null });
+        fetchMemberDetail();
+      } else {
+        alert(data.error || '결제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Manual charge failed:', error);
+      alert('결제 처리 중 오류가 발생했습니다.');
+    } finally {
+      setProcessingCharge(false);
+    }
   };
 
   // 구독 정보 수정
@@ -745,8 +1264,12 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     });
   };
 
-  const getStatusBadge = (status: string | null | undefined, size: 'sm' | 'md' = 'md') => {
+  const getStatusBadge = (status: string | null | undefined, size: 'sm' | 'md' = 'md', cancelMode?: string) => {
     const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
+    // 즉시 해지(cancelMode === 'immediate')는 미구독으로 표시
+    if (status === 'canceled' && cancelMode === 'immediate') {
+      return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-400 rounded-full`}>미구독</span>;
+    }
     switch (status) {
       case 'active':
         return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>구독중</span>;
@@ -998,135 +1521,110 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tenants.map((tenant) => {
-              const isExpanded = expandedTenantId === tenant.tenantId;
-              return (
-                <div
-                  key={tenant.tenantId}
-                  className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-300 transition-colors"
-                >
-                  {/* 카드 헤더 - 항상 보이는 정보 */}
-                  <button
-                    onClick={() => setExpandedTenantId(isExpanded ? null : tenant.tenantId)}
-                    className="w-full p-4 text-left bg-white hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900">{tenant.brandName}</h3>
-                      {getStatusBadge(tenant.subscription?.status, 'sm')}
-                    </div>
-                    {tenant.subscription && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">{getPlanName(tenant.subscription.plan)}</span>
-                        {tenant.subscription.amount > 0 && (
-                          <span className="text-gray-500">{tenant.subscription.amount.toLocaleString()}원/월</span>
-                        )}
-                      </div>
-                    )}
-                    {tenant.subscription?.nextBillingDate && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        다음 결제: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}
-                      </p>
-                    )}
-                    {tenant.subscription?.status === 'trial' && tenant.subscription?.currentPeriodEnd && (
-                      <p className="text-xs text-blue-500 mt-1">
-                        체험 종료: {new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR')}
-                      </p>
-                    )}
-                  </button>
-
-                  {/* 확장 콘텐츠 */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
-                      {tenant.address && <p className="text-sm text-gray-500 py-2">{tenant.address}</p>}
-                      {tenant.subscription && (
-                        <div className="text-sm text-gray-600 space-y-1 py-2">
-                          {/* 가격 정책 */}
-                          <div className="flex justify-between items-center">
-                            <span>가격 정책</span>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              tenant.subscription.pricePolicy === 'grandfathered'
-                                ? 'bg-purple-100 text-purple-700'
-                                : tenant.subscription.pricePolicy === 'protected_until'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {PRICE_POLICY_LABELS[tenant.subscription.pricePolicy || 'standard']}
-                            </span>
-                          </div>
-                          {tenant.subscription.pricePolicy === 'protected_until' && tenant.subscription.priceProtectedUntil && (
-                            <div className="flex justify-between text-xs text-amber-600">
-                              <span>보호 기간</span>
-                              <span>~{new Date(tenant.subscription.priceProtectedUntil).toLocaleDateString('ko-KR')}</span>
-                            </div>
-                          )}
-                          {tenant.subscription.originalAmount && tenant.subscription.originalAmount !== tenant.subscription.amount && (
-                            <div className="flex justify-between text-xs text-gray-500">
-                              <span>원래 금액</span>
-                              <span>{tenant.subscription.originalAmount.toLocaleString()}원</span>
-                            </div>
-                          )}
-                          {/* 관리자 액션 버튼들 */}
-                          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
-                              className="flex-1 px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors flex items-center justify-center gap-1"
-                            >
-                              <Calendar className="w-3 h-3" />
-                              구독 정보
-                            </button>
-                            {tenant.subscription.status === 'active' && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openPricePolicyModal(tenant); }}
-                                className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                              >
-                                가격 정책
-                              </button>
-                            )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openManualChargeModal(tenant); }}
-                              className="flex-1 px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors flex items-center justify-center gap-1"
-                            >
-                              <HandCash className="w-3 h-3" />
-                              수동 결제
-                            </button>
-                          </div>
-                        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">No.</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">tenantId</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">매장명</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">업종</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">상태</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">플랜</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">시작일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">종료일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">다음 결제일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600">액션</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tenants.map((tenant, index) => (
+                  <tr key={tenant.tenantId} className={`hover:bg-gray-50 transition-colors ${deletingTenantId === tenant.tenantId ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <td className="px-3 py-3 text-center text-gray-500">
+                      {deletingTenantId === tenant.tenantId ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        index + 1
                       )}
-                      {/* 매장 관리 버튼들 */}
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className="text-xs font-mono text-gray-600">{tenant.tenantId}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center font-medium text-gray-900">{tenant.brandName}</td>
+                    <td className="px-3 py-3 text-center text-gray-600">
+                      {INDUSTRY_OPTIONS.find(opt => opt.value === tenant.industry)?.label || tenant.industry || '-'}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-600">
+                      {getPlanName(tenant.subscription?.plan)}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-600">
+                      {tenant.subscription?.currentPeriodStart
+                        ? new Date(tenant.subscription.currentPeriodStart).toLocaleDateString('ko-KR')
+                        : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-600">
+                      {tenant.subscription?.currentPeriodEnd
+                        ? new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR')
+                        : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-600">
+                      {tenant.subscription?.nextBillingDate &&
+                       tenant.subscription?.status !== 'expired' &&
+                       tenant.subscription?.status !== 'canceled'
+                        ? new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')
+                        : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="relative" ref={tenantActionDropdown === tenant.tenantId ? tenantActionRef : undefined}>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditTenantForm({ brandName: tenant.brandName });
-                            setEditTenantModal({ isOpen: true, tenant });
-                          }}
-                          className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors flex items-center justify-center gap-1"
+                          onClick={() => setTenantActionDropdown(tenantActionDropdown === tenant.tenantId ? null : tenant.tenantId)}
+                          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors"
                         >
-                          <EditPencil className="w-3 h-3" />
-                          매장 수정
+                          <MoreHoriz className="w-5 h-5" />
                         </button>
-                        {!tenant.subscription && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openEditSubModal(tenant); }}
-                            className="flex-1 px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors flex items-center justify-center gap-1"
-                          >
-                            <Plus className="w-3 h-3" />
-                            구독 생성
-                          </button>
+                        {tenantActionDropdown === tenant.tenantId && (
+                          <div className={`absolute right-0 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 min-w-[100px] ${index < 2 ? 'top-full mt-1' : 'bottom-full mb-1'}`}>
+                            <button
+                              onClick={() => {
+                                openTenantDetailModal(tenant);
+                                setTenantActionDropdown(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <EditPencil className="w-4 h-4" />
+                              수정
+                            </button>
+                            <button
+                              onClick={() => {
+                                openManualChargeModal(tenant);
+                                setTenantActionDropdown(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <HandCash className="w-4 h-4" />
+                              결제
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDeleteTenant(tenant);
+                                setTenantActionDropdown(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash className="w-4 h-4" />
+                              삭제
+                            </button>
+                          </div>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteTenant(tenant); }}
-                          className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Trash className="w-3 h-3" />
-                        </button>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -1192,7 +1690,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 )}
               </button>
               {/* 상세 필터 버튼 */}
-              <div className="relative">
+              <div className="relative" ref={paymentFilterRef}>
                 <button
                   onClick={() => setShowPaymentFilter(!showPaymentFilter)}
                   className={`p-1.5 rounded-lg transition-colors ${
@@ -1335,18 +1833,19 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <table className="w-full min-w-max">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">유형</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-32">ID</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-32">orderId</th>
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">날짜</th>
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-28">매장</th>
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">플랜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">유형</th>
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">금액</th>
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">처리자</th>
                     <th className="w-12 px-1 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedPayments.map((payment) => {
+                  {paginatedPayments.map((payment, index) => {
                     // transactionType이 refund이거나 (레거시) category가 refund이거나 status가 refunded인 경우 환불로 판단
                     const isRefund = payment.transactionType === 'refund' || payment.category === 'refund' || payment.status === 'refunded';
                     const paymentDate = payment.paidAt || payment.createdAt;
@@ -1361,10 +1860,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       : (isRefund ? `-${payment.amount.toLocaleString()}` : payment.amount?.toLocaleString());
                     return (
                       <tr key={payment.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                          {isRefund ? '환불' : '결제'}
+                        <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                          {(paymentPage - 1) * PAYMENTS_PER_PAGE + index + 1}
                         </td>
-                        <td className="px-2 py-3 text-xs text-gray-400 font-mono text-center truncate max-w-32" title={payment.orderId || payment.id}>
+                        <td className="px-2 py-3 text-xs text-gray-600 font-mono text-center truncate max-w-32" title={payment.orderId || payment.id}>
                           {payment.orderId || payment.id}
                         </td>
                         <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
@@ -1375,6 +1874,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                         </td>
                         <td className="px-2 py-3 text-sm text-gray-600 text-center">
                           {getPlanName(payment.planId || payment.plan)}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {isRefund ? '환불' : '결제'}
                         </td>
                         <td className={`px-2 py-3 text-sm font-medium text-center whitespace-nowrap ${isRefund ? 'text-red-500' : 'text-gray-900'}`}>
                           {displayAmount}원
@@ -1417,6 +1919,277 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   <button
                     onClick={() => setPaymentPage((p) => Math.min(totalPaymentPages, p + 1))}
                     disabled={paymentPage === totalPaymentPages}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 구독 내역 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <PageFlip className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-semibold">구독 내역</h2>
+              <span className="text-sm text-gray-400">({filteredSubscriptions.length}건)</span>
+            </div>
+            {/* 검색 및 필터 (PC) */}
+            <div className="flex items-center gap-2">
+              <div className="relative hidden sm:block">
+                <input
+                  type="text"
+                  value={subHistorySearch}
+                  onChange={(e) => { setSubHistorySearch(e.target.value); setSubHistoryPage(1); }}
+                  placeholder="매장명 검색..."
+                  className="w-48 pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                {subHistorySearch && (
+                  <button
+                    onClick={() => { setSubHistorySearch(''); setSubHistoryPage(1); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                  >
+                    <Xmark className="w-3 h-3 text-gray-400" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={handleSubHistoryThisMonth}
+                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                  subHistoryFilterType === 'thisMonth'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                이번달
+              </button>
+              <button
+                onClick={handleOpenSubHistoryDatePicker}
+                className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${
+                  subHistoryFilterType === 'custom' && subHistoryDateRange.start
+                    ? 'px-3 py-1.5 bg-blue-600 text-white'
+                    : 'p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="기간 선택"
+              >
+                <Calendar className="w-4 h-4" />
+                {subHistoryFilterType === 'custom' && subHistoryDateRange.start && (
+                  <span>{subHistoryDateRange.start} ~ {subHistoryDateRange.end}</span>
+                )}
+              </button>
+              <div className="relative" ref={subHistoryFilterRef}>
+                <button
+                  onClick={() => setShowSubHistoryFilter(!showSubHistoryFilter)}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    (subHistoryTenantFilter !== 'all' || subHistoryPlanFilter !== 'all' || subHistoryStatusFilter !== 'all')
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  title="필터"
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+              {showSubHistoryFilter && (
+                <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-[200px]">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">매장</label>
+                      <select
+                        value={subHistoryTenantFilter}
+                        onChange={(e) => { setSubHistoryTenantFilter(e.target.value); setSubHistoryPage(1); }}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                      >
+                        <option value="all">전체</option>
+                        {tenants.map((tenant) => (
+                          <option key={tenant.tenantId} value={tenant.tenantId}>
+                            {tenant.brandName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">플랜</label>
+                      <select
+                        value={subHistoryPlanFilter}
+                        onChange={(e) => { setSubHistoryPlanFilter(e.target.value); setSubHistoryPage(1); }}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                      >
+                        <option value="all">전체</option>
+                        <option value="trial">Trial</option>
+                        <option value="basic">Basic</option>
+                        <option value="business">Business</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">상태</label>
+                      <select
+                        value={subHistoryStatusFilter}
+                        onChange={(e) => { setSubHistoryStatusFilter(e.target.value); setSubHistoryPage(1); }}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                      >
+                        <option value="all">전체</option>
+                        <option value="trialing">체험</option>
+                        <option value="active">구독중</option>
+                        <option value="expired">만료</option>
+                        <option value="canceled">해지</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSubHistoryTenantFilter('all');
+                        setSubHistoryPlanFilter('all');
+                        setSubHistoryStatusFilter('all');
+                        setSubHistoryPage(1);
+                      }}
+                      className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
+                    >
+                      필터 초기화
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+              <button
+                onClick={handleExportSubscriptions}
+                className="p-1.5 rounded-lg transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200"
+                title="xlsx로 내보내기"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          {/* 검색 필터 - 모바일에서만 표시 */}
+          <div className="flex items-center justify-end sm:hidden">
+            <div className="relative w-full">
+              <input
+                type="text"
+                value={subHistorySearch}
+                onChange={(e) => { setSubHistorySearch(e.target.value); setSubHistoryPage(1); }}
+                placeholder="매장명 검색..."
+                className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              {subHistorySearch && (
+                <button
+                  onClick={() => { setSubHistorySearch(''); setSubHistoryPage(1); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                >
+                  <Xmark className="w-3 h-3 text-gray-400" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {filteredSubscriptions.length === 0 ? (
+          <p className="text-gray-500 text-center py-6 text-sm">구독 내역이 없습니다.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-28">매장</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">플랜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">구분</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">시작일</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">종료일</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">처리일</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-16">상태</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-16">처리자</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedSubscriptions.map((record, index) => {
+                    const changeTypeLabels: Record<string, string> = {
+                      new: '신규',
+                      upgrade: '업그레이드',
+                      downgrade: '다운그레이드',
+                      renew: '갱신',
+                      cancel: '해지',
+                      expire: '만료',
+                      reactivate: '재활성화',
+                      admin_edit: '수정',
+                    };
+                    const startDate = record.periodStart
+                      ? new Date(record.periodStart).toLocaleDateString('ko-KR')
+                      : '-';
+                    const endDate = record.periodEnd
+                      ? new Date(record.periodEnd).toLocaleDateString('ko-KR')
+                      : '-';
+                    const changedDate = record.changedAt
+                      ? new Date(record.changedAt).toLocaleDateString('ko-KR')
+                      : '-';
+                    const statusLabel = getSubStatusLabel(record.status);
+                    const statusColor = record.status === 'active' ? 'text-green-600' :
+                      record.status === 'trialing' || record.status === 'trial' ? 'text-blue-600' :
+                      record.status === 'canceled' || record.status === 'expired' ? 'text-red-500' :
+                      record.status === 'completed' ? 'text-gray-500' : 'text-gray-500';
+
+                    return (
+                      <tr key={record.recordId} className="hover:bg-gray-50">
+                        <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                          {(subHistoryPage - 1) * SUBS_PER_PAGE + index + 1}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center truncate max-w-28" title={record.brandName}>
+                          {record.brandName}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {getPlanName(record.plan)}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {changeTypeLabels[record.changeType] || record.changeType}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                          {startDate}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                          {endDate}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                          {changedDate}
+                        </td>
+                        <td className={`px-2 py-3 text-sm font-medium text-center ${statusColor}`}>
+                          {statusLabel}
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                          {record.changedBy === 'admin' ? '관리자' : record.changedBy === 'system' ? '시스템' : record.changedBy === 'user' ? '회원' : record.changedBy || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* 페이지네이션 */}
+            {totalSubHistoryPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-2">
+                <p className="text-sm text-gray-500">
+                  {filteredSubscriptions.length}건 중 {(subHistoryPage - 1) * SUBS_PER_PAGE + 1}-
+                  {Math.min(subHistoryPage * SUBS_PER_PAGE, filteredSubscriptions.length)}건
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSubHistoryPage((p) => Math.max(1, p - 1))}
+                    disabled={subHistoryPage === 1}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {subHistoryPage} / {totalSubHistoryPages}
+                  </span>
+                  <button
+                    onClick={() => setSubHistoryPage((p) => Math.min(totalSubHistoryPages, p + 1))}
+                    disabled={subHistoryPage === totalSubHistoryPages}
                     className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <NavArrowRight className="w-5 h-5" />
@@ -1563,14 +2336,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             </div>
 
             {/* 매장 정보 */}
-            <div className="bg-gray-50 rounded-lg p-3 text-sm mb-4">
-              <div className="flex justify-between mb-1">
-                <span className="text-gray-500">매장</span>
+            <div className="bg-gray-50 rounded-lg p-3 text-sm mb-4 space-y-2">
+              <div className="text-left">
+                <span className="text-gray-500 block text-xs mb-0.5">매장</span>
                 <span className="font-medium">{manualChargeModal.tenantName}</span>
               </div>
               {chargeInfo?.email && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">이메일</span>
+                <div className="text-left">
+                  <span className="text-gray-500 block text-xs mb-0.5">이메일</span>
                   <span className="font-medium text-xs">{chargeInfo.email}</span>
                 </div>
               )}
@@ -1720,63 +2493,79 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <h3 className="text-lg font-bold text-gray-900">새 매장 추가</h3>
               <p className="text-sm text-gray-500 mt-1">{member?.email} 계정에 매장을 추가합니다</p>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  매장명 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={addTenantForm.brandName}
-                  onChange={(e) => setAddTenantForm({ ...addTenantForm, brandName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="매장 이름을 입력하세요"
-                />
+            {addingTenant ? (
+              <div className="p-8">
+                <div className="flex flex-col items-center gap-4">
+                  <Spinner size="lg" />
+                  <div className="w-full">
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>매장 생성 중...</span>
+                      <span>{Math.round(addTenantProgress)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${addTenantProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3 text-center">
+                      n8n 웹훅을 통해 매장을 생성하고 있습니다
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  업종 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={addTenantForm.industry}
-                  onChange={(e) => setAddTenantForm({ ...addTenantForm, industry: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">업종을 선택하세요</option>
-                  {INDUSTRY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="p-6 border-t border-gray-100 flex gap-3">
-              <button
-                onClick={() => {
-                  setAddTenantModal(false);
-                  setAddTenantForm({ brandName: '', industry: '' });
-                }}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleAddTenant}
-                disabled={addingTenant || !addTenantForm.brandName.trim() || !addTenantForm.industry}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {addingTenant ? (
-                  <>
-                    <RefreshDouble className="w-4 h-4 animate-spin" />
-                    추가 중...
-                  </>
-                ) : (
-                  <>
+            ) : (
+              <>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      매장명 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={addTenantForm.brandName}
+                      onChange={(e) => setAddTenantForm({ ...addTenantForm, brandName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="매장 이름을 입력하세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      업종 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={addTenantForm.industry}
+                      onChange={(e) => setAddTenantForm({ ...addTenantForm, industry: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">업종을 선택하세요</option>
+                      {INDUSTRY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="p-6 border-t border-gray-100 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setAddTenantModal(false);
+                      setAddTenantForm({ brandName: '', industry: '' });
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleAddTenant}
+                    disabled={!addTenantForm.brandName.trim() || !addTenantForm.industry}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
                     <Plus className="w-4 h-4" />
                     매장 추가
-                  </>
-                )}
-              </button>
-            </div>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1957,6 +2746,195 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      {/* 매장 수정 모달 */}
+      {tenantDetailModal.isOpen && tenantDetailModal.tenant && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* 모달 헤더 */}
+            <div className="p-6 border-b border-gray-100 shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">매장 수정</h3>
+                <button
+                  onClick={() => setTenantDetailModal({ isOpen: false, tenant: null })}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <Xmark className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 모달 본문 */}
+            <div className="p-6 overflow-y-auto flex-1 relative">
+              {/* 저장 중 오버레이 */}
+              {savingTenantDetail && (
+                <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+                  <Spinner size="lg" />
+                  <div className="w-48 mt-4">
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>저장 중...</span>
+                      <span>{Math.round(saveTenantProgress)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${saveTenantProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 고정 정보 (항상 표시) */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="text-left">
+                    <span className="text-gray-500 block mb-1">계정</span>
+                    <span className="font-medium text-gray-900">{member?.email}</span>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-gray-500 block mb-1">tenantId</span>
+                    <span className="font-mono text-xs text-gray-700">{tenantDetailModal.tenant.tenantId}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                  {/* 매장명 */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      매장명 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={tenantDetailForm.brandName}
+                      onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, brandName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="매장 이름"
+                    />
+                  </div>
+
+                  {/* 업종 */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">업종</label>
+                    <select
+                      value={tenantDetailForm.industry}
+                      onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, industry: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">선택 안 함</option>
+                      {INDUSTRY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 구분선 */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">구독 정보</h4>
+                  </div>
+
+                  {/* 상태 */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
+                    <select
+                      value={tenantDetailForm.status}
+                      onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">미구독</option>
+                      <option value="trial">체험중</option>
+                      <option value="active">구독중</option>
+                      <option value="canceled">해지 예정</option>
+                      <option value="expired">만료</option>
+                      <option value="past_due">결제 실패</option>
+                    </select>
+                  </div>
+
+                  {/* 플랜 */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">플랜</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {['trial', 'basic', 'business', 'enterprise'].map((plan) => (
+                        <button
+                          key={plan}
+                          type="button"
+                          onClick={() => setTenantDetailForm({ ...tenantDetailForm, plan })}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                            tenantDetailForm.plan === plan
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {plan === 'trial' ? 'Trial' : plan === 'basic' ? 'Basic' : plan === 'business' ? 'Business' : 'Enterprise'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 날짜들 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-left">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">시작일</label>
+                      <input
+                        type="date"
+                        value={tenantDetailForm.currentPeriodStart}
+                        onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, currentPeriodStart: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="text-left">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">종료일</label>
+                      <input
+                        type="date"
+                        value={tenantDetailForm.currentPeriodEnd}
+                        onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, currentPeriodEnd: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">다음 결제일</label>
+                    <input
+                      type="date"
+                      value={tenantDetailForm.nextBillingDate}
+                      onChange={(e) => setTenantDetailForm({ ...tenantDetailForm, nextBillingDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="p-6 border-t border-gray-100 flex gap-3 shrink-0">
+              <button
+                onClick={() => setTenantDetailModal({ isOpen: false, tenant: null })}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveTenantDetail}
+                disabled={savingTenantDetail || !tenantDetailForm.brandName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingTenantDetail ? (
+                  <>
+                    <Spinner size="sm" color="#ffffff" />
+                    <span className="ml-1">저장 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <FloppyDisk className="w-4 h-4" />
+                    저장
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 비밀번호 변경 모달 */}
       {passwordModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -2055,6 +3033,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">매장</span>
                 <span className="text-gray-900">{tenants.find(t => t.tenantId === paymentDetailModal.tenantId)?.brandName || '-'}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">플랜</span>
+                <span className="text-gray-900">{getPlanName(paymentDetailModal.planId || paymentDetailModal.plan)}</span>
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">거래</span>
@@ -2206,6 +3188,152 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 구독 내역 기간 선택 모달 */}
+      {showSubHistoryDatePicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">기간 선택</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">시작일</label>
+                <input
+                  type="date"
+                  value={tempSubHistoryDateRange.start}
+                  onChange={(e) => setTempSubHistoryDateRange({ ...tempSubHistoryDateRange, start: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">종료일</label>
+                <input
+                  type="date"
+                  value={tempSubHistoryDateRange.end}
+                  onChange={(e) => setTempSubHistoryDateRange({ ...tempSubHistoryDateRange, end: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSubHistoryDatePicker(false)}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleApplySubHistoryDateRange}
+                disabled={!tempSubHistoryDateRange.start || !tempSubHistoryDateRange.end}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 구독 수정 모달 (구독 내역에서) */}
+      {editSubHistoryModal.isOpen && editSubHistoryModal.tenant && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">구독 정보 수정</h3>
+              <button
+                onClick={() => setEditSubHistoryModal({ isOpen: false, tenant: null })}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* 읽기 전용 정보 */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex text-sm">
+                  <span className="text-gray-500 w-16 shrink-0">이메일</span>
+                  <span className="text-gray-900">{member?.email || '-'}</span>
+                </div>
+                <div className="flex text-sm">
+                  <span className="text-gray-500 w-16 shrink-0">매장</span>
+                  <span className="text-gray-900">{editSubHistoryModal.tenant.brandName}</span>
+                </div>
+                <div className="flex text-sm">
+                  <span className="text-gray-500 w-16 shrink-0">회원명</span>
+                  <span className="text-gray-900">{member?.name || '-'}</span>
+                </div>
+                <div className="flex text-sm">
+                  <span className="text-gray-500 w-16 shrink-0">연락처</span>
+                  <span className="text-gray-900">{member?.phone || '-'}</span>
+                </div>
+                <div className="flex text-sm">
+                  <span className="text-gray-500 w-16 shrink-0">플랜</span>
+                  <span className="text-gray-900">{editSubHistoryModal.tenant.subscription?.plan ? getPlanName(editSubHistoryModal.tenant.subscription.plan) : '-'}</span>
+                </div>
+              </div>
+
+              {/* 수정 가능 필드 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">시작일</label>
+                <input
+                  type="date"
+                  value={editSubHistoryForm.currentPeriodStart}
+                  onChange={(e) => setEditSubHistoryForm({ ...editSubHistoryForm, currentPeriodStart: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">종료일</label>
+                <input
+                  type="date"
+                  value={editSubHistoryForm.currentPeriodEnd}
+                  onChange={(e) => setEditSubHistoryForm({ ...editSubHistoryForm, currentPeriodEnd: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">다음 결제일</label>
+                <input
+                  type="date"
+                  value={editSubHistoryForm.nextBillingDate}
+                  onChange={(e) => setEditSubHistoryForm({ ...editSubHistoryForm, nextBillingDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">상태</label>
+                <select
+                  value={editSubHistoryForm.status}
+                  onChange={(e) => setEditSubHistoryForm({ ...editSubHistoryForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="trialing">체험</option>
+                  <option value="active">구독중</option>
+                  <option value="expired">만료</option>
+                  <option value="canceled">해지</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => setEditSubHistoryModal({ isOpen: false, tenant: null })}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleEditSubHistory}
+                disabled={editingSubHistory}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {editingSubHistory ? <Spinner /> : null}
+                저장
               </button>
             </div>
           </div>

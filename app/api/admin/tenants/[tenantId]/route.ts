@@ -15,7 +15,7 @@ export async function PATCH(
   try {
     const { tenantId } = await params;
     const body = await request.json();
-    const { brandName } = body;
+    const { brandName, industry } = body;
 
     // 매장 존재 여부 확인
     const tenantDoc = await db.collection('tenants').doc(tenantId).get();
@@ -31,6 +31,10 @@ export async function PATCH(
 
     if (brandName && typeof brandName === 'string' && brandName.trim() !== '') {
       updateData.brandName = brandName.trim();
+    }
+
+    if (industry && typeof industry === 'string') {
+      updateData.industry = industry;
     }
 
     await db.collection('tenants').doc(tenantId).update(updateData);
@@ -88,15 +92,35 @@ export async function DELETE(
     const permanentDeleteAt = new Date(now);
     permanentDeleteAt.setDate(permanentDeleteAt.getDate() + 90); // 90일 후 영구 삭제
 
+    // 1. tenants 컬렉션 업데이트
     await db.collection('tenants').doc(tenantId).update({
       deleted: true,
       deletedAt: now,
       deletedBy: 'admin',
       permanentDeleteAt,
       updatedAt: FieldValue.serverTimestamp(),
+      // 구독 정보도 만료 처리
+      'subscription.status': 'expired',
+      'subscription.canceledAt': now,
     });
 
-    // 삭제 로그 기록
+    // 2. subscriptions 컬렉션 업데이트 (자동 결제 방지)
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    if (subscriptionDoc.exists) {
+      await db.collection('subscriptions').doc(tenantId).update({
+        status: 'expired',
+        canceledAt: now,
+        cancelReason: '매장 삭제',
+        // pending 플랜도 제거 (예약 결제 방지)
+        pendingPlan: null,
+        pendingAmount: null,
+        pendingChangeAt: null,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'admin',
+      });
+    }
+
+    // 3. 삭제 로그 기록
     await db.collection('tenant_deletions').add({
       tenantId,
       brandName: tenantData?.brandName,

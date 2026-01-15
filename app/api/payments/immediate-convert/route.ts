@@ -142,6 +142,10 @@ export async function POST(request: NextRequest) {
     const nextBillingDate = new Date(now);
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
+    // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+    const currentPeriodEnd = new Date(nextBillingDate);
+    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
     const paymentDocId = `${orderId}_${Date.now()}`;
 
     await db.runTransaction(async (transaction) => {
@@ -153,7 +157,7 @@ export async function POST(request: NextRequest) {
         status: 'active',
         amount: paymentAmount,
         currentPeriodStart: now,
-        currentPeriodEnd: nextBillingDate,
+        currentPeriodEnd,
         nextBillingDate,
         // pendingPlan 관련 필드 제거
         pendingPlan: null,

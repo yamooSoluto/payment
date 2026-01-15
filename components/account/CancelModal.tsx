@@ -32,12 +32,10 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
   const [cancelMode, setCancelMode] = useState<CancelMode>('scheduled');
   const [showRefundDetail, setShowRefundDetail] = useState(false);
 
-  // 실제 이용 마지막 날 (currentPeriodEnd가 다음 결제일인 경우 -1일)
+  // 실제 이용 마지막 날 (currentPeriodEnd에 이미 마지막 이용일이 저장됨)
   const actualEndDate = useMemo(() => {
     if (!currentPeriodEnd) return null;
-    const end = new Date(currentPeriodEnd);
-    end.setDate(end.getDate() - 1);
-    return end;
+    return new Date(currentPeriodEnd);
   }, [currentPeriodEnd]);
 
   // 남은 일수 기반 환불 금액 계산

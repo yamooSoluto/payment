@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyBearerToken } from '@/lib/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 /**
  * 이름 변경 API
@@ -56,8 +57,11 @@ export async function POST(request: Request) {
     // users 컬렉션 업데이트
     const userDoc = await db.collection('users').doc(email).get();
     if (userDoc.exists) {
+      const currentName = userDoc.data()?.name;
       await db.collection('users').doc(email).update({
         name: trimmedName,
+        // 이전 이름을 previousNames 배열에 추가 (중복 자동 방지)
+        ...(currentName && currentName !== trimmedName && { previousNames: FieldValue.arrayUnion(currentName) }),
         updatedAt: new Date(),
       });
     }

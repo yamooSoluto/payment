@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
 import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { getSubscriptionHistory } from '@/lib/subscription-history';
 import SubscriptionCard from '@/components/account/SubscriptionCard';
 import PaymentHistory from '@/components/account/PaymentHistory';
 import CardList from '@/components/account/CardList';
@@ -30,6 +31,11 @@ function serializeData(data: any): any {
 
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
+  }
+
+  // Date 객체 처리
+  if (data instanceof Date) {
+    return data.toISOString();
   }
 
   if (Array.isArray(data)) {
@@ -172,9 +178,13 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   });
   const limitedPayments = rawPayments.slice(0, 10);
 
+  // 구독 히스토리 조회 (subscription_history 컬렉션)
+  const rawHistoryData = await getSubscriptionHistory(db, tenantId);
+
   // 직렬화
   const subscription = rawSubscription ? serializeData(rawSubscription) : null;
   const payments = serializeData(limitedPayments);
+  const historyData = serializeData(rawHistoryData);
   // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
   const authParam = sessionToken ? `token=${sessionToken}` : '';
 
@@ -269,6 +279,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
               <SubscriptionHistory
                 subscription={subscription}
                 payments={payments}
+                historyData={historyData}
               />
             }
           />

@@ -5,6 +5,7 @@ import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
@@ -351,6 +352,10 @@ export async function GET(request: NextRequest) {
     const nextBillingDate = new Date(now);
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
+    // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+    const currentPeriodEnd = new Date(nextBillingDate);
+    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
     // 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
     const paymentDocId = `${orderId}_${Date.now()}`;
 
@@ -368,7 +373,7 @@ export async function GET(request: NextRequest) {
         status: 'active',
         amount: paymentAmount,
         currentPeriodStart: now,
-        currentPeriodEnd: nextBillingDate,
+        currentPeriodEnd,
         nextBillingDate,
         cardInfo: billingResponse.card || null,
         createdAt: now,
@@ -401,6 +406,29 @@ export async function GET(request: NextRequest) {
 
     // tenants 컬렉션에 구독 정보 동기화
     await syncNewSubscription(validTenantId, plan, nextBillingDate);
+
+    // subscription_history에 기록 추가
+    try {
+      await handleSubscriptionChange(db, {
+        tenantId: validTenantId,
+        email,
+        brandName: subscriptionData?.brandName || null,
+        newPlan: plan,
+        newStatus: 'active',
+        amount: paymentAmount,
+        periodStart: now,
+        periodEnd: currentPeriodEnd,
+        billingDate: now,
+        changeType: 'new',
+        changedBy: 'user',
+        paymentId: paymentDocId,
+        orderId,
+      });
+      console.log('✅ Subscription history recorded for new subscription');
+    } catch (historyError) {
+      console.error('Failed to record subscription history:', historyError);
+      // 히스토리 기록 실패해도 결제는 완료됨
+    }
 
     // users 컬렉션에 trialApplied 플래그 설정 (무료체험 재신청 방지)
     try {

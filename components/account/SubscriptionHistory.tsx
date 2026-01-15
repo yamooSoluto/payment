@@ -29,6 +29,16 @@ interface Payment {
   amount: number;
 }
 
+// 새 subscription_history 컬렉션에서 가져온 데이터
+interface HistoryRecord {
+  plan: string;
+  status: string;
+  periodStart: Date | string;
+  periodEnd: Date | string | null;
+  changeType: string;
+  changedAt: Date | string;
+}
+
 interface SubscriptionPeriod {
   id: string;
   plan: string;
@@ -40,37 +50,51 @@ interface SubscriptionPeriod {
 interface SubscriptionHistoryProps {
   subscription: Subscription | null;
   payments?: Payment[];
+  historyData?: HistoryRecord[]; // 새로운 prop: subscription_history에서 가져온 데이터
 }
 
-export default function SubscriptionHistory({ subscription, payments = [] }: SubscriptionHistoryProps) {
+export default function SubscriptionHistory({ subscription, payments = [], historyData }: SubscriptionHistoryProps) {
   // 구독 기간 목록 생성
-  const subscriptionPeriods: SubscriptionPeriod[] = [];
+  let subscriptionPeriods: SubscriptionPeriod[] = [];
 
-  if (subscription) {
+  // historyData가 있으면 그것을 사용 (새 subscription_history 컬렉션)
+  if (historyData && historyData.length > 0) {
+    subscriptionPeriods = historyData.map((record, index) => {
+      // status 매핑
+      let periodStatus: SubscriptionPeriod['status'] = 'completed';
+      if (record.status === 'active') {
+        periodStatus = 'active';
+      } else if (record.status === 'canceled') {
+        periodStatus = 'pending_cancel';
+      } else if (record.status === 'expired') {
+        periodStatus = 'canceled';
+      }
+
+      // 종료일: periodEnd에 이미 마지막 이용일이 저장되어 있음
+      const endDate = record.periodEnd;
+
+      return {
+        id: `history-${index}`,
+        plan: record.plan,
+        startDate: record.periodStart,
+        endDate,
+        status: periodStatus,
+      };
+    });
+  } else if (subscription) {
+    // 기존 로직: subscription + payments에서 추출
     // 현재 구독 추가 - SubscriptionCard와 동일한 로직 사용
     const currentStart = subscription.currentPeriodStart || subscription.planChangedAt || subscription.startDate || subscription.createdAt;
 
     // 종료일 계산
-    // - trial: trialEndDate 또는 currentPeriodEnd 사용
-    // - expired (즉시 해지): currentPeriodEnd 사용 (해지 시점)
-    // - canceled (예약 해지): currentPeriodEnd 사용 (기간 종료일)
-    // - active: nextBillingDate - 1일
     let currentEndDate: Date | string | null = null;
     if (subscription.status === 'trial' || subscription.plan === 'trial') {
-      // 무료체험: trialEndDate 사용
       currentEndDate = subscription.trialEndDate || subscription.currentPeriodEnd || null;
     } else if (subscription.status === 'expired') {
-      // 즉시 해지: currentPeriodEnd가 해지 시점으로 설정됨
       currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
     } else if (subscription.status === 'canceled') {
-      // 예약 해지: 기간 종료일까지 이용 가능 (currentPeriodEnd - 1일)
-      if (subscription.currentPeriodEnd) {
-        const endDate = new Date(subscription.currentPeriodEnd);
-        endDate.setDate(endDate.getDate() - 1);
-        currentEndDate = endDate.toISOString();
-      } else {
-        currentEndDate = subscription.canceledAt || null;
-      }
+      // currentPeriodEnd에 이미 마지막 이용일이 저장되어 있음
+      currentEndDate = subscription.currentPeriodEnd || subscription.canceledAt || null;
     } else if (subscription.nextBillingDate) {
       const endDate = new Date(subscription.nextBillingDate);
       endDate.setDate(endDate.getDate() - 1);
@@ -80,9 +104,9 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     // 상태 매핑
     let periodStatus: 'active' | 'completed' | 'canceled' | 'pending_cancel' = 'active';
     if (subscription.status === 'expired') {
-      periodStatus = 'canceled';  // 즉시 해지 완료
+      periodStatus = 'canceled';
     } else if (subscription.status === 'canceled') {
-      periodStatus = 'pending_cancel';  // 예약 해지 (해지예정)
+      periodStatus = 'pending_cancel';
     }
 
     subscriptionPeriods.push({
@@ -94,8 +118,6 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     });
 
     // 결제 내역에서 이전 구독 기간 추출
-    // upgrade: 업그레이드 결제, downgrade: 다운그레이드, refund: 다운그레이드 환불
-    // conversion/trial_conversion: Trial에서 유료 플랜 전환
     const planChanges = payments
       .filter(p =>
         p.type === 'upgrade' ||
@@ -109,12 +131,10 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     // 플랜 변경 내역으로 이전 구독 기간 구성
     planChanges.forEach((change, index) => {
       const changeDate = change.paidAt || change.createdAt;
-      // previousPlan이 있거나, conversion/trial_conversion 타입이면 이전 플랜 = trial
       const prevPlan = change.previousPlan ||
         ((change.type === 'conversion' || change.type === 'trial_conversion') ? 'trial' : null);
 
       if (prevPlan) {
-        // 이전 플랜의 시작일 추정 (이전 변경 날짜 또는 구독 시작일)
         const prevChange = planChanges[index + 1];
         const startDate = prevChange
           ? (prevChange.paidAt || prevChange.createdAt)
@@ -145,8 +165,7 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     }
   }
 
-  // 1. 상태 우선 정렬 (사용중 > 해지예정 > 사용완료 > 해지됨)
-  // 2. 같은 상태 내에서는 시작일 내림차순 (최신순)
+  // 정렬: 상태 우선 (사용중 > 해지예정 > 사용완료 > 해지됨), 같은 상태면 시작일 내림차순
   const statusPriority: Record<SubscriptionPeriod['status'], number> = {
     active: 1,
     pending_cancel: 2,
@@ -155,11 +174,8 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
   };
 
   subscriptionPeriods.sort((a, b) => {
-    // 상태 우선순위로 먼저 정렬
     const statusDiff = statusPriority[a.status] - statusPriority[b.status];
     if (statusDiff !== 0) return statusDiff;
-
-    // 같은 상태면 시작일 내림차순 (최신순)
     return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
   });
 
@@ -193,7 +209,7 @@ export default function SubscriptionHistory({ subscription, payments = [] }: Sub
     }
   };
 
-  if (!subscription) {
+  if (!subscription && (!historyData || historyData.length === 0)) {
     return (
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
         <h2 className="text-xl font-bold text-gray-900 mb-4">구독 내역</h2>

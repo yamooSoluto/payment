@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { updateEmailIndex } from '@/lib/user-utils';
 
 // GET: 회원 상세 조회 (이메일 기준)
 export async function GET(
@@ -61,6 +62,7 @@ export async function GET(
         docId: doc.id,
         tenantId: data.tenantId || doc.id,
         brandName: data.brandName || data.businessName || '이름 없음',
+        industry: data.industry || '',
         address: data.address || '',
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
       };
@@ -77,10 +79,12 @@ export async function GET(
       status: string;
       amount: number;
       nextBillingDate: string | null;
+      currentPeriodStart: string | null;
       currentPeriodEnd: string | null;
       pricePolicy: string | null;
       priceProtectedUntil: string | null;
       originalAmount: number | null;
+      cancelMode?: 'scheduled' | 'immediate';
     }>();
 
     subscriptionDocs.forEach((doc) => {
@@ -91,10 +95,12 @@ export async function GET(
           status: data?.status || '',
           amount: data?.amount || 0,
           nextBillingDate: data?.nextBillingDate?.toDate?.()?.toISOString() || null,
+          currentPeriodStart: data?.currentPeriodStart?.toDate?.()?.toISOString() || null,
           currentPeriodEnd: data?.currentPeriodEnd?.toDate?.()?.toISOString() || null,
           pricePolicy: data?.pricePolicy || null,
           priceProtectedUntil: data?.priceProtectedUntil?.toDate?.()?.toISOString() || null,
           originalAmount: data?.originalAmount || null,
+          cancelMode: data?.cancelMode || undefined,
         });
       }
     });
@@ -239,13 +245,25 @@ export async function PUT(
         const oldUserDoc = await transaction.get(db.collection('users').doc(oldEmail));
         const oldUserData = oldUserDoc.exists ? oldUserDoc.data() : {};
 
-        // 2. 새 users 문서 생성 (기존 데이터 복사 + previousEmails 추가)
+        // 2. 새 users 문서 생성 (기존 데이터 복사 + 이력 추가)
+        const oldName = oldUserData?.name;
+        const oldPhone = oldUserData?.phone;
+
         transaction.set(db.collection('users').doc(normalizedNewEmail), {
           ...oldUserData,
           email: normalizedNewEmail, // 새 이메일로 명시적 업데이트
           ...(name !== undefined && { name }),
           ...(phone !== undefined && { phone }),
+          // 이전 이메일 이력
           previousEmails: FieldValue.arrayUnion(oldEmail),
+          // 이전 이름 이력 (변경된 경우)
+          ...(name !== undefined && oldName && oldName !== name && {
+            previousNames: FieldValue.arrayUnion(oldName),
+          }),
+          // 이전 연락처 이력 (변경된 경우)
+          ...(phone !== undefined && oldPhone && oldPhone !== phone && {
+            previousPhones: FieldValue.arrayUnion(oldPhone),
+          }),
           emailChangedAt: now,
           updatedAt: now,
           updatedBy: admin.adminId,
@@ -294,6 +312,13 @@ export async function PUT(
         });
       });
 
+      // 7. user_emails 인덱스 업데이트 (트랜잭션 외부 - 인덱스는 별도 처리)
+      const oldUserDoc = await db.collection('users').doc(normalizedNewEmail).get();
+      const userId = oldUserDoc.data()?.userId;
+      if (userId) {
+        await updateEmailIndex(db, oldEmail, normalizedNewEmail, userId);
+      }
+
       return NextResponse.json({
         success: true,
         newEmail: normalizedNewEmail,
@@ -312,10 +337,22 @@ export async function PUT(
     const batch = db.batch();
 
     // users 컬렉션 업데이트 (기본 정보)
+    const currentUserData = userDoc.data();
+    const currentName = currentUserData?.name;
+    const currentPhone = currentUserData?.phone;
+
     batch.update(userRef, {
       ...(name !== undefined && { name }),
       ...(phone !== undefined && { phone }),
       ...(memo !== undefined && { memo }),
+      // 이전 이름 이력 추가 (변경된 경우만)
+      ...(name !== undefined && currentName && currentName !== name && {
+        previousNames: FieldValue.arrayUnion(currentName),
+      }),
+      // 이전 연락처 이력 추가 (변경된 경우만)
+      ...(phone !== undefined && currentPhone && currentPhone !== phone && {
+        previousPhones: FieldValue.arrayUnion(currentPhone),
+      }),
       updatedAt: new Date(),
       updatedBy: admin.adminId,
     });

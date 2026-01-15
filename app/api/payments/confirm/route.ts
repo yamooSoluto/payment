@@ -67,6 +67,10 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const nextBillingDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+    // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+    const currentPeriodEnd = new Date(nextBillingDate);
+    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
     await db.collection('subscriptions').doc(customerKey).set(
       {
         email: customerKey,
@@ -75,7 +79,7 @@ export async function GET(request: NextRequest) {
         amount,
         billingKey,
         currentPeriodStart: now,
-        currentPeriodEnd: nextBillingDate,
+        currentPeriodEnd,
         nextBillingDate,
         cardCompany: card.company,
         cardNumber: card.number,

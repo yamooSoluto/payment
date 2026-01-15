@@ -4,6 +4,7 @@ import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
 import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment, generateIdempotencyKey } from '@/lib/idempotency';
+import { handleSubscriptionChange, updateCurrentHistoryStatus } from '@/lib/subscription-history';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
 // 매일 00:00 (KST) 실행
@@ -85,6 +86,10 @@ export async function GET(request: NextRequest) {
             const nextBillingDate = new Date(now);
             nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
+            // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+            const currentPeriodEnd = new Date(nextBillingDate);
+            currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
             await db.runTransaction(async (transaction) => {
               // 구독 상태 변경
               transaction.update(doc.ref, {
@@ -92,7 +97,7 @@ export async function GET(request: NextRequest) {
                 status: 'active',
                 amount,
                 currentPeriodStart: now,
-                currentPeriodEnd: nextBillingDate,
+                currentPeriodEnd,
                 nextBillingDate,
                 pendingPlan: null,
                 pendingAmount: null,
@@ -128,6 +133,27 @@ export async function GET(request: NextRequest) {
             const { syncNewSubscription } = await import('@/lib/tenant-sync');
             await syncNewSubscription(tenantId, plan, nextBillingDate);
 
+            // subscription_history에 기록 추가
+            try {
+              await handleSubscriptionChange(db, {
+                tenantId,
+                email,
+                brandName,
+                newPlan: plan,
+                newStatus: 'active',
+                amount,
+                periodStart: now,
+                periodEnd: currentPeriodEnd,
+                billingDate: now,
+                changeType: 'new',
+                changedBy: 'system',
+                previousPlan: 'trial',
+                previousStatus: 'trial',
+              });
+            } catch (historyError) {
+              console.error('Failed to record subscription history:', historyError);
+            }
+
             convertedTrials.push({ tenantId, plan });
             console.log(`✅ Trial converted to ${plan}: ${tenantId}`);
           } catch (error) {
@@ -143,6 +169,16 @@ export async function GET(request: NextRequest) {
 
           // tenants 컬렉션 동기화
           await syncTrialExpired(tenantId);
+
+          // subscription_history 상태 업데이트
+          try {
+            await updateCurrentHistoryStatus(db, tenantId, 'expired', {
+              periodEnd: new Date(),
+              note: 'Trial expired without conversion',
+            });
+          } catch (historyError) {
+            console.error('Failed to update subscription history:', historyError);
+          }
 
           // N8N 웹훅 알림
           if (isN8NNotificationEnabled()) {
@@ -260,6 +296,27 @@ export async function GET(request: NextRequest) {
 
         // tenants 컬렉션 동기화
         await syncPlanChange(tenantId, newPlan);
+
+        // subscription_history에 기록 추가
+        try {
+          const isUpgrade = (newAmount || 0) > (subscription.amount || 0);
+          await handleSubscriptionChange(db, {
+            tenantId,
+            email: subscription.email,
+            brandName: subscription.brandName || null,
+            newPlan,
+            newStatus: 'active',
+            amount: newAmount || 0,
+            periodStart: new Date(),
+            periodEnd: subscription.currentPeriodEnd?.toDate?.() || null,
+            changeType: isUpgrade ? 'upgrade' : 'downgrade',
+            changedBy: 'system',
+            previousPlan,
+            previousStatus: 'active',
+          });
+        } catch (historyError) {
+          console.error('Failed to record subscription history:', historyError);
+        }
 
         // N8N 웹훅 알림
         if (isN8NNotificationEnabled()) {
@@ -442,14 +499,20 @@ export async function GET(request: NextRequest) {
 
         // 결제 성공
         if (response.status === 'DONE') {
-          const nextBillingDate = new Date(subscription.nextBillingDate.toDate());
+          // 새 기간 시작일 = 이전 결제일 (결제일 = 새 기간 첫 날)
+          const newPeriodStart = subscription.nextBillingDate.toDate();
+          const nextBillingDate = new Date(newPeriodStart);
           nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+          // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+          const currentPeriodEnd = new Date(nextBillingDate);
+          currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
           // 구독 정보 업데이트
           await db.collection('subscriptions').doc(tenantId).update({
             status: 'active',
-            currentPeriodStart: subscription.currentPeriodEnd,
-            currentPeriodEnd: nextBillingDate,
+            currentPeriodStart: newPeriodStart,
+            currentPeriodEnd,
             nextBillingDate,
             retryCount: 0,
             gracePeriodUntil: null,
@@ -490,6 +553,26 @@ export async function GET(request: NextRequest) {
 
           // tenants 컬렉션에 결제 성공 동기화
           await syncPaymentSuccess(tenantId, nextBillingDate);
+
+          // subscription_history에 갱신 기록 추가
+          try {
+            await handleSubscriptionChange(db, {
+              tenantId,
+              email,
+              brandName,
+              newPlan: subscription.plan,
+              newStatus: 'active',
+              amount: effectiveAmount,
+              periodStart: newPeriodStart,
+              periodEnd: currentPeriodEnd,
+              billingDate: new Date(),
+              changeType: 'renew',
+              changedBy: 'system',
+              orderId,
+            });
+          } catch (historyError) {
+            console.error('Failed to record subscription history:', historyError);
+          }
 
           // n8n 웹훅 (정기결제 성공 알림)
           if (isN8NNotificationEnabled()) {

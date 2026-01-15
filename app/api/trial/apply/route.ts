@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import crypto from 'crypto';
 import { verifyBearerToken } from '@/lib/auth';
+import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -273,8 +274,20 @@ export async function POST(request: Request) {
     const trialEndDate = new Date(now);
     trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
 
+    // currentPeriodEnd는 trialEndDate - 1일 (마지막 이용 가능일)
+    const currentPeriodEnd = new Date(trialEndDate);
+    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
+    // userId 조회 또는 생성
+    const existingUser = await db.collection('users').doc(email).get();
+    let userId = existingUser.data()?.userId;
+    if (!userId) {
+      userId = await generateUniqueUserId(db);
+    }
+
     await db.collection('subscriptions').doc(tenantId).set({
       tenantId,
+      userId, // userId 추가
       brandName,
       name,
       phone,
@@ -283,13 +296,14 @@ export async function POST(request: Request) {
       status: 'trial',
       trialEndDate,
       currentPeriodStart: now,
-      currentPeriodEnd: trialEndDate,
+      currentPeriodEnd,
       createdAt: now,
       updatedAt: now,
     });
 
-    // tenant에도 subscription 정보 업데이트
+    // tenant에도 subscription 정보 + userId 업데이트
     await db.collection('tenants').doc(tenantSnapshot.docs[0].id).update({
+      userId, // userId 추가
       subscription: {
         plan: 'trial',
         status: 'trial',
@@ -300,17 +314,22 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    // users 컬렉션 업데이트 (trialApplied 플래그)
-    const existingUser = await db.collection('users').doc(email).get();
+    // users 컬렉션 업데이트 (trialApplied 플래그 + userId)
     if (existingUser.exists) {
-      await db.collection('users').doc(email).update({
+      const updateData: Record<string, unknown> = {
         trialApplied: true,
         trialAppliedAt: now,
         updatedAt: now,
-      });
+      };
+      // userId가 없었으면 추가
+      if (!existingUser.data()?.userId) {
+        updateData.userId = userId;
+      }
+      await db.collection('users').doc(email).update(updateData);
     } else {
-      // users에 없으면 생성
+      // users에 없으면 생성 (userId 포함)
       await db.collection('users').doc(email).set({
+        userId,
         email,
         name,
         phone,
@@ -319,6 +338,8 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+      // user_emails 인덱스 등록
+      await registerEmailIndex(db, email, userId);
     }
 
     console.log(`Trial applied to existing tenant: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);

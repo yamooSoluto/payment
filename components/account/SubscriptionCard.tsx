@@ -446,6 +446,7 @@ interface SubscriptionCardProps {
     pendingAmount?: number;
     pendingChangeAt?: Date | string;
     billingKey?: string;
+    cancelMode?: 'scheduled' | 'immediate'; // 해지 모드: scheduled(예정 해지), immediate(즉시 해지)
   };
   authParam: string;
   tenantId?: string;
@@ -470,6 +471,11 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
   const isCanceled = subscription.status === 'canceled';
   const isPastDue = subscription.status === 'past_due';
   const isExpired = subscription.status === 'expired';
+
+  // 즉시 해지 여부 (해지가 이미 완료된 상태)
+  const isImmediateCanceled = isCanceled && subscription.cancelMode === 'immediate';
+  // 예정 해지 여부 (해지 예약만 된 상태, 아직 이용 가능)
+  const isScheduledCanceled = isCanceled && subscription.cancelMode !== 'immediate';
 
   // authParam 파싱 헬퍼
   const parseAuthParam = () => {
@@ -666,8 +672,10 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               <h2 className="text-xl font-bold text-gray-900">
                 {(isTrial || subscription.plan === 'trial') ? '무료체험' : subscription.plan ? `${getPlanName(subscription.plan)} 플랜` : '구독 없음'}
               </h2>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(subscription.status)}`}>
-                {getStatusText(subscription.status)}
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                isImmediateCanceled ? 'text-gray-600 bg-gray-100' : getStatusColor(subscription.status)
+              }`}>
+                {isImmediateCanceled ? '해지됨' : getStatusText(subscription.status)}
               </span>
             </div>
             {isActive && subscription.amount && (
@@ -707,12 +715,16 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 <p className="font-medium">
                   {subscription.currentPeriodStart && (subscription.nextBillingDate || subscription.currentPeriodEnd)
                     ? (() => {
-                        // canceled/active 모두 종료일은 다음 결제일 - 1일
-                        const baseDate = isCanceled && subscription.currentPeriodEnd
+                        // currentPeriodEnd가 있으면 그 값을 직접 사용 (어드민이 설정한 값 우선)
+                        // currentPeriodEnd가 없고 nextBillingDate만 있으면 -1일 적용
+                        const useCurrentPeriodEnd = !!subscription.currentPeriodEnd;
+                        const baseDate = useCurrentPeriodEnd
                           ? new Date(subscription.currentPeriodEnd)
                           : new Date(subscription.nextBillingDate!);
                         const endDate = new Date(baseDate);
-                        endDate.setDate(endDate.getDate() - 1);
+                        if (!useCurrentPeriodEnd) {
+                          endDate.setDate(endDate.getDate() - 1);
+                        }
                         return `${formatDate(subscription.currentPeriodStart)} ~ ${formatDate(endDate)}`;
                       })()
                     : '-'}
@@ -808,19 +820,28 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
           </div>
         )}
 
-        {/* Canceled Info */}
-        {isCanceled && subscription.currentPeriodEnd && (
+        {/* Canceled Info - 예정 해지 (scheduled) */}
+        {isScheduledCanceled && subscription.currentPeriodEnd && (
           <div className="bg-yellow-50 rounded-lg p-4 mb-6">
             <p className="text-sm text-yellow-800 font-medium mb-1">
               구독이 해지 예정입니다
             </p>
             <p className="text-sm text-yellow-700">
-              {(() => {
-                const endDate = new Date(subscription.currentPeriodEnd);
-                endDate.setDate(endDate.getDate() - 1);
-                return formatDate(endDate);
-              })()}까지 이용 가능하며,
+              {formatDate(subscription.currentPeriodEnd)}까지 이용 가능하며,
               &apos;다시 이용하기&apos;를 누르면 해지가 취소되고 다음 결제일에 {subscription.amount ? `${formatPrice(subscription.amount)}원이` : '요금이'} 결제됩니다.
+            </p>
+          </div>
+        )}
+
+        {/* Canceled Info - 즉시 해지 (immediate) */}
+        {isImmediateCanceled && subscription.currentPeriodEnd && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <p className="text-sm text-gray-800 font-medium mb-1">
+              구독이 해지되었습니다
+            </p>
+            <p className="text-sm text-gray-600">
+              {formatDate(subscription.currentPeriodEnd)}에 구독이 해지되었습니다.
+              다시 서비스를 이용하시려면 새로 구독해주세요.
             </p>
           </div>
         )}
@@ -893,13 +914,23 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               </a>
             </>
           )}
-          {isCanceled && (
+          {/* 예정 해지: 다시 이용하기 (재활성화) */}
+          {isScheduledCanceled && (
             <button
               onClick={handleReactivate}
               disabled={isLoading}
               className="btn-primary"
             >
               {isLoading ? '처리 중...' : '다시 이용하기'}
+            </button>
+          )}
+          {/* 즉시 해지: 새로 구독하기 */}
+          {isImmediateCanceled && (
+            <button
+              onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
+              className="btn-primary"
+            >
+              새로 구독하기
             </button>
           )}
           {isExpired && (
@@ -932,11 +963,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         onClose={handleCancelResultClose}
         mode={cancelResult.mode}
         refundAmount={cancelResult.refundAmount}
-        endDate={subscription.currentPeriodEnd ? (() => {
-          const endDate = new Date(subscription.currentPeriodEnd);
-          endDate.setDate(endDate.getDate() - 1);
-          return endDate.toISOString();
-        })() : undefined}
+        endDate={subscription.currentPeriodEnd
+          ? new Date(subscription.currentPeriodEnd).toISOString()
+          : undefined}
       />
 
       {/* Cancel Reservation Modal */}

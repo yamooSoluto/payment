@@ -5,6 +5,7 @@ import { cancelPayment, PLAN_PRICES } from '@/lib/toss';
 import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { FieldValue } from 'firebase-admin/firestore';
+import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
 
 // 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
 async function authenticateRequest(request: NextRequest, bodyToken?: string): Promise<string | null> {
@@ -210,7 +211,7 @@ export async function POST(request: NextRequest) {
             amount: -refundAmount,
             plan: subscription.plan,
             category: 'cancel',
-            type: 'immediate',
+            type: 'cancel_refund', // PaymentHistory에서 환불로 인식하도록
             transactionType: 'refund',
             initiatedBy: 'user',
             status: 'done',
@@ -247,6 +248,17 @@ export async function POST(request: NextRequest) {
         await syncSubscriptionExpired(tenantId);
       } else {
         await syncSubscriptionCancellation(tenantId);
+      }
+
+      // subscription_history 상태 업데이트 (즉시 해지: expired)
+      try {
+        await updateCurrentHistoryStatus(db, tenantId, 'expired', {
+          periodEnd: now,
+          note: reason || 'User requested immediate cancellation',
+        });
+        console.log('✅ Subscription history updated for immediate cancellation');
+      } catch (historyError) {
+        console.error('Failed to update subscription history:', historyError);
       }
 
       // n8n 웹훅 호출 (즉시 해지 알림)
@@ -293,6 +305,16 @@ export async function POST(request: NextRequest) {
 
       // tenants 컬렉션에 취소 상태 동기화
       await syncSubscriptionCancellation(tenantId);
+
+      // subscription_history 상태 업데이트 (예약 해지: canceled)
+      try {
+        await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
+          note: reason || 'User requested scheduled cancellation',
+        });
+        console.log('✅ Subscription history updated for scheduled cancellation');
+      } catch (historyError) {
+        console.error('Failed to update subscription history:', historyError);
+      }
 
       // n8n 웹훅 호출 (해지 예약 알림)
       if (isN8NNotificationEnabled()) {

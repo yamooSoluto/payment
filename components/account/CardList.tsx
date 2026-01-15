@@ -47,11 +47,18 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchCards = useCallback(async () => {
+    // 인증 정보가 없으면 fetch 하지 않음
+    const hasToken = authParam.includes('token=');
+    if (!hasToken && !user) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const headers: Record<string, string> = {};
-      // SSO token이 없으면 Firebase Auth Bearer token 사용
-      if (!authParam.includes('token=') && user) {
+      // Firebase Auth Bearer token이 있으면 항상 추가 (SSO 토큰 만료 시 폴백용)
+      if (user) {
         const idToken = await user.getIdToken();
         headers['Authorization'] = `Bearer ${idToken}`;
       }
@@ -68,10 +75,10 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
         `/api/cards?${params.toString()}`,
         { headers }
       );
-      if (!response.ok) {
-        throw new Error('Failed to fetch cards');
-      }
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch cards');
+      }
       // 기본 카드가 맨 위로 오도록 정렬
       const sortedCards = (data.cards || []).sort((a: Card, b: Card) => {
         if (a.isPrimary && !b.isPrimary) return -1;
@@ -80,8 +87,9 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
       });
       setCards(sortedCards);
     } catch (err) {
-      console.error('Error fetching cards:', err);
-      setError('카드 목록을 불러오는데 실패했습니다.');
+      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류';
+      console.error('Error fetching cards:', errorMessage, err);
+      setError(`카드 목록을 불러오는데 실패했습니다: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -460,22 +468,22 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
 
       {/* 안내 사항 */}
       <div className="mt-6 pt-4 border-t border-gray-100">
-        <div className="space-y-2 text-xs text-gray-500">
+        <div className="space-y-2 text-sm text-gray-500">
           <p className="flex items-start gap-2">
             <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
-            <span>유료 플랜 및 부가 서비스 등의 이용을 위해서 1개 이상의 카드가 필요합니다.</span>
+            <span>유료 플랜 및 부가 서비스 등의 이용을 위해서 <span className="font-semibold text-gray-600">1개 이상</span>의 카드가 필요합니다.</span>
           </p>
           <p className="flex items-start gap-2">
             <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
-            <span>결제수단은 국내에서 발급한 카드만 지원합니다. 해외카드는 지원하지 않습니다.</span>
+            <span>결제수단은 <span className="font-semibold text-gray-600">국내</span>에서 발급한 카드만 지원합니다. 해외카드는 지원하지 않습니다.</span>
           </p>
           <p className="flex items-start gap-2">
             <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
-            <span>&apos;기본 카드&apos;로 선택된 카드로 자동 결제가 진행됩니다.</span>
+            <span><span className="font-semibold text-gray-600">&apos;기본 카드&apos;</span>로 선택된 카드로 자동 결제가 진행됩니다.</span>
           </p>
           <p className="flex items-start gap-2">
             <Check width={14} height={14} strokeWidth={2} className="text-gray-400 flex-shrink-0 mt-0.5" />
-            <span>카드를 재발급 받거나 유효기간이 만료된 경우 새 카드 추가 후 &apos;기본 카드&apos;로 등록해 주세요.</span>
+            <span>카드를 재발급 받거나 유효기간이 만료된 경우 새 카드 추가 후 <span className="font-semibold text-gray-600">&apos;기본 카드&apos;</span>로 등록해 주세요.</span>
           </p>
         </div>
       </div>

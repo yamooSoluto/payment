@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +31,12 @@ export async function POST(request: Request) {
 
     // 기본 정보만 저장 (프로필 미완성 상태)
     const now = new Date();
+
+    // 새 userId 생성
+    const userId = await generateUniqueUserId(db);
+
     await db.collection('users').doc(email).set({
+      userId,
       email,
       displayName: displayName || '',
       provider: 'google',
@@ -38,6 +44,9 @@ export async function POST(request: Request) {
       updatedAt: now,
       // name, phone은 아직 없음 - 프로필 미완성 상태
     });
+
+    // user_emails 인덱스 등록
+    await registerEmailIndex(db, email, userId);
 
     return NextResponse.json({
       success: true,

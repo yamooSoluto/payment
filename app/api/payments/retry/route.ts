@@ -86,6 +86,10 @@ export async function POST(request: NextRequest) {
       const nextBillingDate = new Date(now);
       nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
+      // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+      const currentPeriodEnd = new Date(nextBillingDate);
+      currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
       // 트랜잭션으로 구독 정보 및 결제 내역 업데이트
       await db.runTransaction(async (transaction) => {
         // 구독 상태 업데이트
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
         transaction.update(subscriptionRef, {
           status: 'active',
           currentPeriodStart: now,
-          currentPeriodEnd: nextBillingDate,
+          currentPeriodEnd,
           nextBillingDate,
           retryCount: 0,
           lastPaymentError: null,

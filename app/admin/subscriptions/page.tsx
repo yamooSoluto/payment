@@ -137,8 +137,7 @@ export default function SubscriptionsPage() {
 
   const openEditModal = (subscription: Subscription) => {
     setEditingSubscription(subscription);
-    // 종료일은 nextBillingDate - 1로 표시 (마이페이지와 동일)
-    const endDate = getEndDateFromNextBilling(subscription.nextBillingDate);
+    // currentPeriodEnd에 이미 마지막 이용일이 저장되어 있음
     setEditForm({
       brandName: subscription.brandName || '',
       name: subscription.memberName || '',
@@ -146,7 +145,7 @@ export default function SubscriptionsPage() {
       plan: subscription.plan || '',
       status: subscription.status || '',
       currentPeriodStart: formatDateForInput(subscription.currentPeriodStart),
-      currentPeriodEnd: formatDateForInput(endDate),
+      currentPeriodEnd: formatDateForInput(subscription.currentPeriodEnd),
     });
     setEditModal(true);
   };
@@ -295,7 +294,7 @@ export default function SubscriptionsPage() {
                       {formatDate(subscription.currentPeriodStart)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 text-center">
-                      {formatDate(getEndDateFromNextBilling(subscription.nextBillingDate))}
+                      {formatDate(subscription.currentPeriodEnd)}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button

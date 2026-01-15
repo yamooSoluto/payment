@@ -73,6 +73,7 @@ interface Subscription {
   nextBillingDate: string | null;
   currentPeriodEnd: string | null;
   canceledAt: string | null;
+  cancelMode?: 'scheduled' | 'immediate'; // 해지 모드
 }
 
 interface Tenant {
@@ -258,6 +259,11 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
           if (plan === 'trial' && status !== 'expired') {
             status = 'trial';
           }
+          // 즉시 해지(cancelMode === 'immediate')는 expired(미구독)로 처리
+          const isImmediateCanceled = status === 'canceled' && tenant.subscription?.cancelMode === 'immediate';
+          if (isImmediateCanceled) {
+            status = 'expired';
+          }
           const statusConfig = STATUS_CONFIG[status];
           const StatusIcon = statusConfig?.icon || Sofa;
 
@@ -297,14 +303,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                               {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
                               {(status === 'canceled' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
                                 <span className="ml-0.5">
-                                  (~{(() => {
-                                    const endDate = new Date(tenant.subscription!.currentPeriodEnd);
-                                    // canceled 상태는 currentPeriodEnd - 1일 (마지막 이용일)
-                                    if (status === 'canceled') {
-                                      endDate.setDate(endDate.getDate() - 1);
-                                    }
-                                    return endDate.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
-                                  })()})
+                                  (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })})
                                 </span>
                               )}
                             </span>

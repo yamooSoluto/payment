@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 const VALID_PLANS = ['trial', 'basic', 'business', 'enterprise'];
 const VALID_STATUSES = ['trial', 'active', 'canceled', 'past_due', 'expired'];
@@ -61,8 +62,8 @@ export async function PUT(
 
     if (plan !== undefined) {
       updateData.plan = plan;
-      // 플랜 변경 시 기본 금액 설정 (amount가 별도로 지정되지 않은 경우)
-      if (amount === undefined && !existingData?.amount) {
+      // 플랜 변경 시 항상 해당 플랜 금액으로 업데이트 (amount가 별도로 지정되지 않은 경우)
+      if (amount === undefined) {
         updateData.amount = PLAN_PRICES[plan] || 0;
       }
     }
@@ -111,6 +112,32 @@ export async function PUT(
       await db.collection('subscriptions').doc(tenantId).update(updateData);
     }
 
+    // tenants 컬렉션의 subscription 필드도 함께 업데이트
+    const tenantSubscriptionUpdate: Record<string, unknown> = {};
+    if (plan !== undefined) {
+      tenantSubscriptionUpdate['subscription.plan'] = plan;
+      // 플랜 변경 시 금액도 함께 업데이트
+      tenantSubscriptionUpdate['subscription.amount'] = amount !== undefined ? amount : PLAN_PRICES[plan] || 0;
+    }
+    if (status !== undefined) tenantSubscriptionUpdate['subscription.status'] = status;
+    if (amount !== undefined && plan === undefined) {
+      // 금액만 별도로 변경하는 경우
+      tenantSubscriptionUpdate['subscription.amount'] = amount;
+    }
+    if (currentPeriodStart !== undefined) {
+      tenantSubscriptionUpdate['subscription.currentPeriodStart'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
+    }
+    if (currentPeriodEnd !== undefined) {
+      tenantSubscriptionUpdate['subscription.currentPeriodEnd'] = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+    }
+    if (nextBillingDate !== undefined) {
+      tenantSubscriptionUpdate['subscription.nextBillingDate'] = nextBillingDate ? new Date(nextBillingDate) : null;
+    }
+
+    if (Object.keys(tenantSubscriptionUpdate).length > 0) {
+      await db.collection('tenants').doc(tenantId).update(tenantSubscriptionUpdate);
+    }
+
     // 변경 로그 기록
     await db.collection('subscription_changes').add({
       tenantId,
@@ -121,6 +148,54 @@ export async function PUT(
       newData: updateData,
       reason: body.reason || '관리자 수정',
     });
+
+    // subscription_history 기록 (플랜 또는 상태가 변경된 경우)
+    const previousPlan = existingData?.plan;
+    const previousStatus = existingData?.status;
+    const newPlan = plan || previousPlan || 'basic';
+    const newStatus = status || previousStatus || 'active';
+    const newAmount = updateData.amount as number ?? existingData?.amount ?? PLAN_PRICES[newPlan] ?? 0;
+
+    // 플랜이 변경되었거나 상태가 변경된 경우에만 히스토리 기록
+    if (plan !== undefined || status !== undefined) {
+      // changeType 결정
+      let changeType: 'admin_edit' | 'upgrade' | 'downgrade' | 'cancel' | 'expire' | 'reactivate' = 'admin_edit';
+      const planOrder = { trial: 0, basic: 1, business: 2, enterprise: 3 };
+
+      if (plan && previousPlan && plan !== previousPlan) {
+        const prevOrder = planOrder[previousPlan as keyof typeof planOrder] ?? 0;
+        const newOrder = planOrder[plan as keyof typeof planOrder] ?? 0;
+        changeType = newOrder > prevOrder ? 'upgrade' : 'downgrade';
+      } else if (status === 'canceled') {
+        changeType = 'cancel';
+      } else if (status === 'expired') {
+        changeType = 'expire';
+      } else if ((previousStatus === 'canceled' || previousStatus === 'expired') && status === 'active') {
+        changeType = 'reactivate';
+      }
+
+      try {
+        await handleSubscriptionChange(db, {
+          tenantId,
+          email: tenantData?.email || '',
+          brandName: tenantData?.brandName,
+          newPlan,
+          newStatus,
+          amount: newAmount,
+          periodStart: currentPeriodStart ? new Date(currentPeriodStart) : (existingData?.currentPeriodStart?.toDate?.() || new Date()),
+          periodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : (existingData?.currentPeriodEnd?.toDate?.() || null),
+          billingDate: nextBillingDate ? new Date(nextBillingDate) : (existingData?.nextBillingDate?.toDate?.() || null),
+          changeType,
+          changedBy: 'admin',
+          previousPlan: previousPlan || null,
+          previousStatus: previousStatus || null,
+          note: body.reason || '관리자 수정',
+        });
+      } catch (historyError) {
+        console.error('Failed to record subscription history:', historyError);
+        // 히스토리 기록 실패는 무시하고 진행
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { sendAlimtalk } from '@/lib/bizm';
 import crypto from 'crypto';
+import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -393,9 +394,17 @@ export async function POST(request: Request) {
 
     // users 컬렉션에 저장 (이메일이 없는 경우만)
     const existingUser = await db.collection('users').doc(email).get();
+
+    // userId 조회 또는 생성
+    let userId = existingUser.data()?.userId;
+    if (!userId) {
+      userId = await generateUniqueUserId(db);
+    }
+
     if (!existingUser.exists) {
       const now = new Date();
       await db.collection('users').doc(email).set({
+        userId, // userId 추가
         email,
         name,
         phone,
@@ -405,13 +414,19 @@ export async function POST(request: Request) {
         trialAppliedAt: now,
         tempPassword: !userExists, // 신규 사용자만 임시 비밀번호 플래그 true
       });
+      // user_emails 인덱스 등록
+      await registerEmailIndex(db, email, userId);
     } else {
-      // 기존 사용자: trialApplied 플래그 업데이트
-      await db.collection('users').doc(email).update({
+      // 기존 사용자: trialApplied 플래그 업데이트 + userId 없으면 추가
+      const updateData: Record<string, unknown> = {
         trialApplied: true,
         trialAppliedAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+      if (!existingUser.data()?.userId) {
+        updateData.userId = userId;
+      }
+      await db.collection('users').doc(email).update(updateData);
     }
 
     // tenantId가 있으면 trial subscription 생성
@@ -420,9 +435,14 @@ export async function POST(request: Request) {
       const trialEndDate = new Date(now);
       trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
 
-      // subscription 생성 (trial 상태)
+      // currentPeriodEnd는 trialEndDate - 1일 (마지막 이용 가능일)
+      const currentPeriodEnd = new Date(trialEndDate);
+      currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
+      // subscription 생성 (trial 상태, userId 포함)
       await db.collection('subscriptions').doc(tenantId).set({
         tenantId,
+        userId, // userId 추가
         brandName,
         name,
         phone,
@@ -431,7 +451,7 @@ export async function POST(request: Request) {
         status: 'trial',
         trialEndDate,
         currentPeriodStart: now,
-        currentPeriodEnd: trialEndDate,
+        currentPeriodEnd,
         createdAt: now,
         updatedAt: now,
       });

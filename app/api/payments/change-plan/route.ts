@@ -5,6 +5,7 @@ import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
 import { verifyToken } from '@/lib/auth';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 인증 함수: SSO 토큰 또는 Firebase Auth 토큰 검증
 async function authenticateRequest(request: NextRequest): Promise<string | null> {
@@ -410,6 +411,7 @@ export async function POST(request: NextRequest) {
         previousPlan,
         previousAmount,
         planChangedAt: now,
+        currentPeriodStart: now, // 플랜 변경 시 구독 기간 시작일도 업데이트
         updatedAt: now,
         pendingPlan: null,
         pendingAmount: null,
@@ -419,6 +421,29 @@ export async function POST(request: NextRequest) {
 
     // tenants 컬렉션 동기화
     await syncPlanChange(tenantId, newPlan);
+
+    // subscription_history에 기록 추가
+    try {
+      await handleSubscriptionChange(db, {
+        tenantId,
+        email: authenticatedEmail,
+        brandName,
+        newPlan,
+        newStatus: 'active',
+        amount: newPlanPrice,
+        periodStart: now,
+        periodEnd: subscription.currentPeriodEnd?.toDate?.() || null,
+        billingDate: proratedNewAmount && proratedNewAmount > 0 ? now : undefined,
+        changeType: isUpgrade ? 'upgrade' : 'downgrade',
+        changedBy: 'user',
+        previousPlan,
+        previousStatus: 'active',
+        orderId: proratedNewAmount && proratedNewAmount > 0 ? paymentOrderId : undefined,
+      });
+      console.log('✅ Subscription history recorded for plan change');
+    } catch (historyError) {
+      console.error('Failed to record subscription history:', historyError);
+    }
 
     // n8n 웹훅
     if (isN8NNotificationEnabled()) {

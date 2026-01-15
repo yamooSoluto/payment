@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { syncSubscriptionReactivation } from '@/lib/tenant-sync';
+import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
 
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -66,6 +67,16 @@ export async function POST(request: NextRequest) {
     // tenants 컬렉션에 재활성화 상태 동기화
     const nextBillingDate = subscription.nextBillingDate?.toDate?.() || new Date(subscription.nextBillingDate);
     await syncSubscriptionReactivation(tenantId, subscription.plan, nextBillingDate);
+
+    // subscription_history 상태 업데이트 (재활성화)
+    try {
+      await updateCurrentHistoryStatus(db, tenantId, 'active', {
+        note: 'User reactivated subscription',
+      });
+      console.log('✅ Subscription history updated for reactivation');
+    } catch (historyError) {
+      console.error('Failed to update subscription history:', historyError);
+    }
 
     return NextResponse.json({
       success: true,

@@ -5,6 +5,7 @@ import { PLAN_PRICES, cancelPayment } from '@/lib/toss';
 import { syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 인증 함수: Authorization 헤더 또는 body의 token 처리
 async function authenticateRequest(request: NextRequest, bodyToken?: string, bodyEmail?: string): Promise<string | null> {
@@ -266,6 +267,28 @@ export async function POST(request: NextRequest) {
 
         // tenants 컬렉션에 플랜 변경 동기화
         await syncPlanChange(tenantId, newPlan);
+
+        // subscription_history에 기록 추가
+        try {
+          const now = new Date();
+          await handleSubscriptionChange(db, {
+            tenantId,
+            email,
+            brandName: subscription.brandName || null,
+            newPlan,
+            newStatus: 'active',
+            amount: newAmount,
+            periodStart: now,
+            periodEnd: subscription.currentPeriodEnd?.toDate?.() || null,
+            changeType: 'downgrade',
+            changedBy: 'user',
+            previousPlan: subscription.plan,
+            previousStatus: 'active',
+          });
+          console.log('✅ Subscription history recorded for downgrade');
+        } catch (historyError) {
+          console.error('Failed to record subscription history:', historyError);
+        }
 
         // n8n 웹훅 호출
         if (isN8NNotificationEnabled()) {

@@ -85,6 +85,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       nextBillingDate: string | null;
       currentPeriodEnd: string | null;
       canceledAt: string | null;
+      cancelMode?: 'scheduled' | 'immediate';
     } | null;
   }> = [];
 
@@ -184,6 +185,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           nextBillingDate: string | null;
           currentPeriodEnd: string | null;
           canceledAt: string | null;
+          cancelMode?: 'scheduled' | 'immediate';
         }>();
 
         subscriptionDocs.forEach((doc) => {
@@ -196,6 +198,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               nextBillingDate: serializeTimestamp(data?.nextBillingDate),
               currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
               canceledAt: serializeTimestamp(data?.canceledAt),
+              cancelMode: data?.cancelMode,
             });
           }
         });
@@ -221,12 +224,13 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     }
   }
 
-  // 활성/해지예정 구독 여부 확인 (active, trial, canceled 모두 탈퇴 불가)
+  // 활성/해지예정 구독 여부 확인 (active, trial, scheduled canceled 모두 탈퇴 불가)
+  // 즉시 해지(cancelMode: 'immediate')는 이미 해지 완료된 상태이므로 탈퇴 가능
   // plan이 'trial'인 경우도 체크 (status가 다른 값이어도 체험 중으로 처리)
   const hasActiveSubscriptions = tenants.some(
     (t) => t.subscription?.status === 'active' ||
            t.subscription?.status === 'trial' ||
-           t.subscription?.status === 'canceled' ||
+           (t.subscription?.status === 'canceled' && t.subscription?.cancelMode !== 'immediate') ||
            t.subscription?.plan === 'trial'
   );
 
