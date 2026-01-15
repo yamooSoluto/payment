@@ -41,43 +41,20 @@ async function generateUniqueUserId(): Promise<string> {
 }
 
 /**
- * email로 userId 조회 (user_emails 인덱스 사용)
- *
- * Note: previousEmails 확인은 제거됨
- * - 이유: 사용자 A가 email1→email2로 변경 후, 다른 사용자 B가 email1을 사용하면
- *   B의 tenant가 A의 userId로 잘못 연결될 수 있음
- * - 이메일 변경 시 user_emails 인덱스에 새 이메일이 등록되므로 그걸로 충분함
+ * email로 userId 조회 (users 컬렉션에서 직접 조회)
  */
 async function getUserIdByEmail(email: string): Promise<string | null> {
   if (!email) return null;
 
   const normalizedEmail = email.trim().toLowerCase();
 
-  // 1. user_emails 인덱스에서 조회
-  const indexDoc = await db.collection('user_emails').doc(normalizedEmail).get();
-  if (indexDoc.exists) {
-    return indexDoc.data()?.userId || null;
-  }
-
-  // 2. users 컬렉션 문서 ID로 직접 조회
+  // users 컬렉션 문서 ID로 직접 조회
   const userDoc = await db.collection('users').doc(normalizedEmail).get();
   if (userDoc.exists && userDoc.data()?.userId) {
     return userDoc.data()!.userId;
   }
 
   return null;
-}
-
-/**
- * user_emails 인덱스 등록
- */
-async function registerEmailIndex(email: string, userId: string): Promise<void> {
-  const normalizedEmail = email.trim().toLowerCase();
-  await db.collection('user_emails').doc(normalizedEmail).set({
-    userId,
-    email: normalizedEmail,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
 }
 
 /**
@@ -141,8 +118,6 @@ export const onTenantWriteAddUserId = functions
           });
         }
 
-        // user_emails 인덱스 등록
-        await registerEmailIndex(email, userId);
       }
 
       // tenant에 userId 업데이트

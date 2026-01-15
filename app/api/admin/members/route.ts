@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
-import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
+import { generateUniqueUserId } from '@/lib/user-utils';
 
 // GET: 회원 목록 조회 (users 컬렉션 기반)
 export async function GET(request: NextRequest) {
@@ -242,9 +242,6 @@ export async function POST(request: NextRequest) {
       createdBy: admin.adminId,
       isManualRegistration: true,
     });
-
-    // user_emails 인덱스 등록
-    await registerEmailIndex(db, email, userId);
 
     return NextResponse.json({
       success: true,

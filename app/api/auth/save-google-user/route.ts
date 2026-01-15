@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
+import { generateUniqueUserId } from '@/lib/user-utils';
 
 export async function POST(request: Request) {
   try {
@@ -45,9 +45,6 @@ export async function POST(request: Request) {
       updatedAt: now,
       // name, phone은 아직 없음 - 프로필 미완성 상태
     });
-
-    // user_emails 인덱스 등록
-    await registerEmailIndex(db, email, userId);
 
     return NextResponse.json({
       success: true,

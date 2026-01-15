@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { sendAlimtalk } from '@/lib/bizm';
 import crypto from 'crypto';
-import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
+import { generateUniqueUserId } from '@/lib/user-utils';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -415,8 +415,6 @@ export async function POST(request: Request) {
         trialAppliedAt: now,
         tempPassword: !userExists, // 신규 사용자만 임시 비밀번호 플래그 true
       });
-      // user_emails 인덱스 등록
-      await registerEmailIndex(db, email, userId);
     } else {
       // 기존 사용자: trialApplied 플래그 업데이트 + userId 없으면 추가
       const updateData: Record<string, unknown> = {

@@ -1,4 +1,4 @@
-import { Firestore, FieldValue } from 'firebase-admin/firestore';
+import { Firestore } from 'firebase-admin/firestore';
 
 /**
  * 8자리 고유 userId 생성 (영문+숫자)
@@ -38,75 +38,6 @@ export async function generateUniqueUserId(db: Firestore): Promise<string> {
 
   // 거의 불가능하지만 10번 시도 후에도 중복이면 timestamp 추가
   return `u_${Date.now().toString(36)}`;
-}
-
-/**
- * user_emails 인덱스에 이메일 등록
- * 이메일 → userId 빠른 조회용
- */
-export async function registerEmailIndex(
-  db: Firestore,
-  email: string,
-  userId: string
-): Promise<void> {
-  const normalizedEmail = email.toLowerCase().trim();
-
-  await db.collection('user_emails').doc(normalizedEmail).set({
-    userId,
-    email: normalizedEmail,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-}
-
-/**
- * 이메일로 userId 조회
- */
-export async function getUserIdByEmail(
-  db: Firestore,
-  email: string
-): Promise<string | null> {
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const doc = await db.collection('user_emails').doc(normalizedEmail).get();
-
-  if (doc.exists) {
-    return doc.data()?.userId || null;
-  }
-
-  return null;
-}
-
-/**
- * 이메일 인덱스 업데이트 (이메일 변경 시)
- * 기존 이메일 삭제 + 새 이메일 등록
- */
-export async function updateEmailIndex(
-  db: Firestore,
-  oldEmail: string,
-  newEmail: string,
-  userId: string
-): Promise<void> {
-  const normalizedOld = oldEmail.toLowerCase().trim();
-  const normalizedNew = newEmail.toLowerCase().trim();
-
-  const batch = db.batch();
-
-  // 기존 이메일 인덱스에 deleted 마킹 (이력 보존)
-  batch.update(db.collection('user_emails').doc(normalizedOld), {
-    deleted: true,
-    deletedAt: FieldValue.serverTimestamp(),
-    replacedBy: normalizedNew,
-  });
-
-  // 새 이메일 인덱스 생성
-  batch.set(db.collection('user_emails').doc(normalizedNew), {
-    userId,
-    email: normalizedNew,
-    previousEmail: normalizedOld,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
 }
 
 /**

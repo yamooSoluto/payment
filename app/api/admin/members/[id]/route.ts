@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { updateEmailIndex } from '@/lib/user-utils';
 
 // GET: 회원 상세 조회 (이메일 기준)
 export async function GET(
@@ -353,14 +352,7 @@ export async function PUT(
         });
       });
 
-      // 7. user_emails 인덱스 업데이트 (트랜잭션 외부 - 인덱스는 별도 처리)
-      const oldUserDoc = await db.collection('users').doc(normalizedNewEmail).get();
-      const userId = oldUserDoc.data()?.userId;
-      if (userId) {
-        await updateEmailIndex(db, oldEmail, normalizedNewEmail, userId);
-      }
-
-      return NextResponse.json({
+        return NextResponse.json({
         success: true,
         newEmail: normalizedNewEmail,
         message: '이메일이 변경되었습니다. 사용자는 새 이메일로 재로그인해야 합니다.',

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { generateToken } from '@/lib/auth';
-import { generateUniqueUserId, registerEmailIndex } from '@/lib/user-utils';
+import { generateUniqueUserId } from '@/lib/user-utils';
 
 export async function POST(request: Request) {
   try {
@@ -109,9 +109,6 @@ export async function POST(request: Request) {
       }),
       // deleted 플래그 제거 (재가입이므로)
     });
-
-    // user_emails 인덱스 등록 (이메일 → userId 빠른 조회용)
-    await registerEmailIndex(db, email, userId);
 
     // Google 로그인 사용자의 경우 비밀번호 설정 (포탈 로그인용)
     if (provider === 'google' && password) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { generateUserId, registerEmailIndex } from '@/lib/user-utils';
+import { generateUserId } from '@/lib/user-utils';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // 기존 users에 userId 부여 및 관련 컬렉션 연결 마이그레이션
@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
       refunds: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
       subscription_history: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
       cards: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
-      emailIndex: { created: 0, errors: [] as string[] },
     };
 
     // 1단계: users 컬렉션에 userId 부여
@@ -65,9 +64,7 @@ export async function POST(request: NextRequest) {
               userId,
               updatedAt: FieldValue.serverTimestamp(),
             });
-            await registerEmailIndex(db, email, userId);
             results.users.migrated++;
-            results.emailIndex.created++;
           } catch (error) {
             results.users.errors.push(`${email}: ${error instanceof Error ? error.message : 'Unknown'}`);
           }
@@ -390,9 +387,6 @@ export async function GET() {
     const cardsWithId = cardsSnapshot.docs.filter(d => d.data().userId).length;
     const cardsTotal = (await db.collection('cards').count().get()).data().count;
 
-    // user_emails 인덱스
-    const emailIndexTotal = (await db.collection('user_emails').count().get()).data().count;
-
     return NextResponse.json({
       success: true,
       sampleSize,
@@ -438,9 +432,6 @@ export async function GET() {
           sampleWithUserId: cardsWithId,
           sampleWithoutUserId: Math.min(sampleSize, cardsTotal) - cardsWithId,
           estimatedNeedsMigration: cardsTotal > 0 ? Math.round(((Math.min(sampleSize, cardsTotal) - cardsWithId) / Math.min(sampleSize, cardsTotal)) * cardsTotal) : 0,
-        },
-        emailIndex: {
-          total: emailIndexTotal,
         },
       },
     });
