@@ -100,6 +100,7 @@ export default function SubscriptionsPage() {
     status: '',
     currentPeriodStart: '',
     currentPeriodEnd: '',
+    nextBillingDate: '',
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -251,6 +252,7 @@ export default function SubscriptionsPage() {
       status: subscription.status || '',
       currentPeriodStart: formatDateForInput(subscription.currentPeriodStart),
       currentPeriodEnd: formatDateForInput(subscription.currentPeriodEnd),
+      nextBillingDate: formatDateForInput(subscription.nextBillingDate),
     });
     setEditModal(true);
   };
@@ -260,13 +262,6 @@ export default function SubscriptionsPage() {
 
     setIsSaving(true);
     try {
-      let nextBillingDate = null;
-      if (editForm.currentPeriodEnd) {
-        const endDate = new Date(editForm.currentPeriodEnd);
-        endDate.setDate(endDate.getDate() + 1);
-        nextBillingDate = endDate.toISOString();
-      }
-
       const response = await fetch('/api/admin/subscriptions/list', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -277,7 +272,7 @@ export default function SubscriptionsPage() {
           status: editForm.status,
           currentPeriodStart: editForm.currentPeriodStart || null,
           currentPeriodEnd: editForm.currentPeriodEnd || null,
-          nextBillingDate: nextBillingDate,
+          nextBillingDate: editForm.nextBillingDate || null,
         }),
       });
 
@@ -929,7 +924,7 @@ export default function SubscriptionsPage() {
             </div>
 
             {/* 종료일 */}
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 종료일
               </label>
@@ -937,6 +932,19 @@ export default function SubscriptionsPage() {
                 type="date"
                 value={editForm.currentPeriodEnd}
                 onChange={(e) => setEditForm(prev => ({ ...prev, currentPeriodEnd: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 다음 결제일 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                다음 결제일
+              </label>
+              <input
+                type="date"
+                value={editForm.nextBillingDate}
+                onChange={(e) => setEditForm(prev => ({ ...prev, nextBillingDate: e.target.value }))}
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             </div>

@@ -82,6 +82,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       plan: string;
       status: string;
       amount: number;
+      baseAmount?: number;  // 플랜 기본 가격 (정기결제 금액)
       nextBillingDate: string | null;
       currentPeriodEnd: string | null;
       canceledAt: string | null;
@@ -182,6 +183,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           plan: string;
           status: string;
           amount: number;
+          baseAmount?: number;
           nextBillingDate: string | null;
           currentPeriodEnd: string | null;
           canceledAt: string | null;
@@ -195,6 +197,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               plan: data?.plan,
               status: data?.status,
               amount: data?.amount,
+              baseAmount: data?.baseAmount,  // 플랜 기본 가격
               nextBillingDate: serializeTimestamp(data?.nextBillingDate),
               currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
               canceledAt: serializeTimestamp(data?.canceledAt),

@@ -367,6 +367,7 @@ export async function POST(request: NextRequest) {
           refundAmount: actualRefundedAmount,
           refundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경 (미사용분)`,
           originalPaymentId,
+          receiptUrl: refundResult.receipt?.url || null,
           paidAt: now,
           createdAt: now,
         });
@@ -417,8 +418,8 @@ export async function POST(request: NextRequest) {
       const subscriptionRef = db.collection('subscriptions').doc(tenantId);
       transaction.update(subscriptionRef, {
         plan: newPlan,
-        amount: proratedNewAmount, // 실제 결제한 금액 저장 (일할계산된 금액)
-        baseAmount: newPlanPrice,  // 플랜 기본가 (다음 결제 시 사용)
+        amount: proratedNewAmount, // 이번에 실제 결제한 금액 (일할계산)
+        baseAmount: newPlanPrice,  // 플랜 기본가 (정기결제 금액, UI 표시용)
         previousPlan,
         previousAmount,
         planChangedAt: now,

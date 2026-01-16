@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 
-// GET: 모든 회원의 구독 히스토리 조회 (페이지네이션)
+// GET: 모든 회원의 구독 히스토리 조회 (Collection Group Query 사용)
 export async function GET(request: NextRequest) {
   try {
     const admin = await getAdminFromRequest(request);
@@ -27,19 +27,21 @@ export async function GET(request: NextRequest) {
     const plan = searchParams.get('plan') || '';
     const status = searchParams.get('status') || '';
 
-    // 1. 모든 tenant 조회
-    const tenantsSnapshot = await db.collection('tenants').get();
-    const tenantDataList = tenantsSnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        tenantId: data.tenantId || doc.id,
-        brandName: data.brandName || data.name || doc.id,
-        email: data.email || '',
-      };
-    });
+    // Collection Group Query로 모든 records 서브컬렉션 한 번에 조회
+    // 인덱스 필요: records 컬렉션 그룹에 changedAt 내림차순
+    let query = db.collectionGroup('records').orderBy('changedAt', 'desc');
 
-    // 2. 각 tenant의 구독 히스토리 조회
-    const allRecords: Array<{
+    // 서버 사이드 필터링 (plan, status)
+    if (plan) {
+      query = query.where('plan', '==', plan);
+    }
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    const snapshot = await query.get();
+
+    interface RecordData {
       recordId: string;
       tenantId: string;
       email: string;
@@ -56,42 +58,32 @@ export async function GET(request: NextRequest) {
       previousPlan: string | null;
       previousStatus: string | null;
       note: string | null;
-    }> = [];
-
-    for (const tenant of tenantDataList) {
-      const historyRef = db.collection('subscription_history').doc(tenant.tenantId).collection('records');
-      // 인덱스 없이도 동작하도록 기본 쿼리만 사용
-      const snapshot = await historyRef.get();
-
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        allRecords.push({
-          recordId: doc.id,
-          tenantId: tenant.tenantId,
-          email: data.email || tenant.email || '',
-          brandName: data.brandName || tenant.brandName || '',
-          plan: data.plan || '',
-          status: data.status || '',
-          amount: data.amount || 0,
-          periodStart: data.periodStart?.toDate?.()?.toISOString() || null,
-          periodEnd: data.periodEnd?.toDate?.()?.toISOString() || null,
-          billingDate: data.billingDate?.toDate?.()?.toISOString() || null,
-          changeType: data.changeType || '',
-          changedAt: data.changedAt?.toDate?.()?.toISOString() || null,
-          changedBy: data.changedBy || '',
-          previousPlan: data.previousPlan || null,
-          previousStatus: data.previousStatus || null,
-          note: data.note || null,
-        });
-      });
     }
 
-    // changedAt 기준 내림차순 정렬
-    allRecords.sort((a, b) => {
-      if (!a.changedAt && !b.changedAt) return 0;
-      if (!a.changedAt) return 1;
-      if (!b.changedAt) return -1;
-      return new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime();
+    const allRecords: RecordData[] = snapshot.docs.map(doc => {
+      const data = doc.data();
+      // 부모 문서 경로에서 tenantId 추출: subscription_history/{tenantId}/records/{recordId}
+      const pathParts = doc.ref.path.split('/');
+      const tenantId = pathParts[1] || '';
+
+      return {
+        recordId: doc.id,
+        tenantId,
+        email: data.email || '',
+        brandName: data.brandName || '',
+        plan: data.plan || '',
+        status: data.status || '',
+        amount: data.amount || 0,
+        periodStart: data.periodStart?.toDate?.()?.toISOString() || null,
+        periodEnd: data.periodEnd?.toDate?.()?.toISOString() || null,
+        billingDate: data.billingDate?.toDate?.()?.toISOString() || null,
+        changeType: data.changeType || '',
+        changedAt: data.changedAt?.toDate?.()?.toISOString() || null,
+        changedBy: data.changedBy || '',
+        previousPlan: data.previousPlan || null,
+        previousStatus: data.previousStatus || null,
+        note: data.note || null,
+      };
     });
 
     // 회원 정보 조회 (이메일로 그룹핑)
@@ -125,20 +117,8 @@ export async function GET(request: NextRequest) {
       memberPhone: userMap.get(record.email)?.phone || '',
     }));
 
-    // 필터 적용 (plan, status, search)
+    // 검색 필터 (회원명, 매장명, 이메일) - 클라이언트 사이드
     let filteredRecords = recordsWithMember;
-
-    // 플랜 필터
-    if (plan) {
-      filteredRecords = filteredRecords.filter(record => record.plan === plan);
-    }
-
-    // 상태 필터
-    if (status) {
-      filteredRecords = filteredRecords.filter(record => record.status === status);
-    }
-
-    // 검색 필터 (회원명, 매장명, 이메일)
     if (search) {
       const searchLower = search.toLowerCase();
       filteredRecords = filteredRecords.filter(record =>

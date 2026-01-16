@@ -438,6 +438,7 @@ interface SubscriptionCardProps {
     status: string;
     plan?: string;
     amount?: number;
+    baseAmount?: number;  // 플랜 기본 가격 (정기결제 금액)
     nextBillingDate?: Date | string;
     currentPeriodStart?: Date | string;
     currentPeriodEnd?: Date | string;
@@ -678,9 +679,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 {isImmediateCanceled ? '해지됨' : getStatusText(subscription.status)}
               </span>
             </div>
-            {isActive && subscription.amount && (
+            {isActive && (subscription.baseAmount || subscription.amount) && (
               <p className="text-2xl font-bold text-blue-900">
-                {formatPrice(subscription.amount)}원<span className="text-sm font-normal text-gray-500"> / 월</span>
+                {formatPrice(subscription.baseAmount ?? subscription.amount ?? 0)}원<span className="text-sm font-normal text-gray-500"> / 월</span>
               </p>
             )}
           </div>
@@ -828,7 +829,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </p>
             <p className="text-sm text-yellow-700">
               {formatDate(subscription.currentPeriodEnd)}까지 이용 가능하며,
-              &apos;다시 이용하기&apos;를 누르면 해지가 취소되고 다음 결제일에 {subscription.amount ? `${formatPrice(subscription.amount)}원이` : '요금이'} 결제됩니다.
+              &apos;다시 이용하기&apos;를 누르면 해지가 취소되고 다음 결제일에 {(subscription.baseAmount || subscription.amount) ? `${formatPrice(subscription.baseAmount ?? subscription.amount ?? 0)}원이` : '요금이'} 결제됩니다.
             </p>
           </div>
         )}

@@ -387,6 +387,7 @@ export async function GET(request: NextRequest) {
         billingKey,
         status: 'active',
         amount: paymentAmount,
+        baseAmount: planInfo.price,    // 플랜 기본 가격 (정기결제 금액, UI 표시용)
         currentPeriodStart: now,
         currentPeriodEnd,
         nextBillingDate,

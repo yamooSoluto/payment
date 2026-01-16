@@ -218,6 +218,7 @@ export async function POST(request: NextRequest) {
             cancelReason: reason || 'User requested',
             refundReason: `구독 즉시 해지 (${reason || 'User requested'})`,
             originalPaymentId: latestPaymentId,
+            receiptUrl: refundResult.receipt?.url || null,
             paidAt: now,
             createdAt: now,
           });

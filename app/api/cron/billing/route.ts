@@ -4,6 +4,7 @@ import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
 import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment, generateIdempotencyKey } from '@/lib/idempotency';
+import { getPlanById } from '@/lib/auth';
 import { handleSubscriptionChange, updateCurrentHistoryStatus } from '@/lib/subscription-history';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
@@ -90,12 +91,17 @@ export async function GET(request: NextRequest) {
             const currentPeriodEnd = new Date(nextBillingDate);
             currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+            // 플랜 기본 가격 조회
+            const planInfo = await getPlanById(plan);
+            const baseAmount = planInfo?.price || amount;
+
             await db.runTransaction(async (transaction) => {
               // 구독 상태 변경
               transaction.update(doc.ref, {
                 plan,
                 status: 'active',
                 amount,
+                baseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
                 currentPeriodStart: now,
                 currentPeriodEnd,
                 nextBillingDate,
@@ -280,10 +286,15 @@ export async function GET(request: NextRequest) {
         const newPlan = subscription.pendingPlan;
         const newAmount = subscription.pendingAmount;
 
+        // 새 플랜 기본 가격 조회
+        const newPlanInfo = await getPlanById(newPlan);
+        const newBaseAmount = newPlanInfo?.price || newAmount;
+
         // 플랜 변경 적용
         await db.collection('subscriptions').doc(tenantId).update({
           plan: newPlan,
           amount: newAmount,
+          baseAmount: newBaseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
           previousPlan,
           previousAmount: subscription.amount,
           planChangedAt: new Date(),
@@ -546,6 +557,7 @@ export async function GET(request: NextRequest) {
           if (subscription.pricePolicy === 'protected_until' && effectiveAmount !== subscription.amount) {
             await db.collection('subscriptions').doc(tenantId).update({
               amount: effectiveAmount,
+              baseAmount: effectiveAmount,  // 새 정기결제 금액으로 업데이트
               pricePolicy: 'standard', // 보호 기간 종료 후 일반으로 변경
               updatedAt: new Date(),
             });

@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
         status: 'active',
         plan,
         amount,
+        baseAmount: amount, // 플랜 기본 가격 (신규 구독 시 amount와 동일)
         billingKey,
         currentPeriodStart: now,
         currentPeriodEnd,

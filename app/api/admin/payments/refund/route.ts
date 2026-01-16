@@ -113,7 +113,6 @@ export async function POST(request: NextRequest) {
 
       // 환불 상세
       refundReason,
-      cancelReason: refundReason,
       status: 'refunded',
 
       // 관리자 정보
