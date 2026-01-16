@@ -60,6 +60,9 @@ interface TossPaymentWidgetProps {
   currentPlanName?: string;   // 현재 플랜 이름
   brandName?: string;         // 신규 매장 이름
   industry?: string;          // 신규 매장 업종
+  customLinkId?: string;      // 커스텀 결제 링크 ID
+  customBillingType?: 'recurring' | 'onetime';  // 커스텀 링크 결제 유형
+  customSubscriptionDays?: number;  // 1회성 결제 시 이용 기간 (일 단위)
 }
 
 // 이용기간 계산 (종료일 = 다음 결제일 하루 전)
@@ -158,6 +161,9 @@ export default function TossPaymentWidget({
   currentPlanName,
   brandName,
   industry,
+  customLinkId,
+  customBillingType,
+  customSubscriptionDays,
 }: TossPaymentWidgetProps) {
   const { user } = useAuth();
   const { isReady: sdkReady, isLoading, error: sdkError } = useTossSDK();
@@ -356,9 +362,13 @@ export default function TossPaymentWidget({
         const reserveQuery = isReserve ? `&mode=reserve` : '';
         // 신규 매장인 경우 brandName과 industry 전달
         const newTenantQuery = isNewTenant && brandName ? `&brandName=${encodeURIComponent(brandName)}&industry=${encodeURIComponent(industry || '')}` : '';
+        // 커스텀 링크인 경우 linkId, billingType, subscriptionDays 전달
+        let customLinkQuery = customLinkId ? `&linkId=${encodeURIComponent(customLinkId)}` : '';
+        if (customBillingType) customLinkQuery += `&billingType=${customBillingType}`;
+        if (customSubscriptionDays) customLinkQuery += `&subscriptionDays=${customSubscriptionDays}`;
         await payment.requestBillingAuth({
           method: 'CARD',
-          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`,
+          successUrl: `${window.location.origin}/api/payments/billing-confirm?plan=${plan}&amount=${amount}&tenantId=${effectiveTenantId}${authQuery}${reserveQuery}${newTenantQuery}${customLinkQuery}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`,
           failUrl: `${window.location.origin}/checkout?plan=${plan}&tenantId=${effectiveTenantId}${authQuery}&error=payment_failed`,
           customerEmail: email,
         });

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo, getPlanById } from '@/lib/auth';
+import { verifyToken, getSubscription, getSubscriptionByTenantId, getTenantInfo, getPlanById, getPaymentHistoryByTenantId, validateCustomLink } from '@/lib/auth';
 import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import TossPaymentWidget from '@/components/checkout/TossPaymentWidget';
 import { NavArrowLeft, Shield, Lock, Sofa, WarningCircle } from 'iconoir-react';
@@ -8,6 +8,7 @@ import Link from 'next/link';
 interface CheckoutPageProps {
   searchParams: Promise<{
     plan?: string;
+    link?: string;      // 커스텀 결제 링크 ID
     token?: string;
     email?: string;
     tenantId?: string;  // 매장 ID
@@ -26,19 +27,27 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_params: '필수 정보가 누락되었습니다. 다시 시도해주세요.',
   database_unavailable: '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
   unknown_error: '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.',
+  link_not_found: '유효하지 않은 결제 링크입니다.',
+  link_expired: '결제 링크가 만료되었습니다.',
+  link_disabled: '비활성화된 결제 링크입니다.',
+  link_max_uses_reached: '결제 링크 사용 횟수가 초과되었습니다.',
+  email_not_allowed: '이 결제 링크는 다른 이메일로만 사용할 수 있습니다.',
+  link_not_yet_valid: '아직 사용할 수 없는 결제 링크입니다.',
 };
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const params = await searchParams;
-  const { plan, token, email: emailParam, tenantId, mode, refund, newTenant, brandName, industry, error } = params;
+  const { plan: planParam, link, token, email: emailParam, tenantId, mode, refund, newTenant, brandName, industry, error } = params;
 
-  if (!plan) {
+  // 커스텀 링크 또는 플랜 ID가 필요
+  if (!planParam && !link) {
     redirect('/error?message=invalid_access');
   }
 
-  // 신규 매장이 아닌 경우에만 tenantId 필수
+  // 신규 매장이 아니고, 커스텀 링크도 아닌 경우에만 tenantId 필수
   const isNewTenant = newTenant === 'true';
-  if (!tenantId && !isNewTenant) {
+  const isCustomLink = !!link;
+  if (!tenantId && !isNewTenant && !isCustomLink) {
     redirect('/error?message=missing_tenant_id');
   }
 
@@ -66,13 +75,37 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   if (!email) {
     // 모든 쿼리 파라미터 보존하여 로그인 후 돌아올 수 있도록
     const queryParams = new URLSearchParams();
-    queryParams.set('plan', plan);
+    if (planParam) queryParams.set('plan', planParam);
+    if (link) queryParams.set('link', link);
     if (tenantId) queryParams.set('tenantId', tenantId);
     if (mode) queryParams.set('mode', mode);
     if (newTenant) queryParams.set('newTenant', newTenant);
     if (brandName) queryParams.set('brandName', brandName);
     if (industry) queryParams.set('industry', industry);
     redirect(`/login?redirect=/checkout?${queryParams.toString()}`);
+  }
+
+  // 커스텀 링크 검증 및 플랜 정보 추출
+  let plan = planParam;
+  let customLinkId: string | undefined;
+  let customAmount: number | undefined;
+  let customBillingType: 'recurring' | 'onetime' | undefined;
+  let customSubscriptionDays: number | undefined;
+
+  if (link) {
+    const linkValidation = await validateCustomLink(link, email);
+    if (!linkValidation.valid) {
+      redirect(`/error?message=${linkValidation.error || 'link_not_found'}`);
+    }
+    plan = linkValidation.planId;
+    customLinkId = linkValidation.linkId;
+    customAmount = linkValidation.amount;
+    customBillingType = linkValidation.billingType;
+    customSubscriptionDays = linkValidation.subscriptionDays || undefined;
+  }
+
+  if (!plan) {
+    redirect('/error?message=invalid_access');
   }
 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
@@ -92,12 +125,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect('/error?message=invalid_plan');
   }
 
-  // 이미 같은 플랜을 사용 중인 경우
-  if (subscription?.plan === plan && subscription?.status === 'active') {
+  // 이미 같은 플랜을 사용 중인 경우 (커스텀 링크 제외)
+  if (!isCustomLink && subscription?.plan === plan && subscription?.status === 'active') {
     redirect(`/account?${authParam}`);
   }
 
-  const fullAmount = planInfo.price;
+  // 커스텀 링크인 경우 customAmount 사용, 아니면 플랜 기본 가격
+  const fullAmount = customAmount ?? planInfo.price;
   const planName = planInfo.name;
 
   // 즉시 플랜 변경인 경우 일할 계산
@@ -164,12 +198,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     isChangePlanMode = true;
     const currentPlanInfo = await getPlanById(subscription.plan);
     currentPlanName = currentPlanInfo?.name || subscription.plan;
-    const currentAmount = currentPlanInfo?.price || 0;
 
-    // 결제 기간 계산 (실제 기간 일수 기준)
+    // 결제 기간 계산 (실제 기간 일수 기준) - currentAmount 계산 전에 먼저 수행
     let totalDays = 31; // 기본값
+    let billingCycleTotalDays = 31; // 원래 결제 주기 총 일수 (기본값)
     let usedDays = 1;   // 기본값 (오늘 사용)
     let daysLeft = 30;
+    let newPlanDays = 31; // 새 플랜 이용 일수 (기본값)
     let periodStartStr: string | undefined;
     let periodEndStr: string | undefined;
 
@@ -182,36 +217,62 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         : new Date(subscription.nextBillingDate);
 
       nextBillingDateStr = nextDate.toISOString();
-      currentPeriodEndStr = nextBillingDateStr; // 플랜 변경 후 success 페이지에서 사용
+      currentPeriodEndStr = nextBillingDateStr;
 
-      // 총 기간 일수 (currentPeriodStart ~ nextBillingDate 전날)
       const startDateOnly = new Date(startDate);
       startDateOnly.setHours(0, 0, 0, 0);
       const nextDateOnly = new Date(nextDate);
       nextDateOnly.setHours(0, 0, 0, 0);
       totalDays = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
 
-      // 사용 일수 (currentPeriodStart ~ 오늘, 오늘 포함)
+      const originalBillingCycleStart = new Date(nextDateOnly);
+      originalBillingCycleStart.setMonth(originalBillingCycleStart.getMonth() - 1);
+      billingCycleTotalDays = Math.round((nextDateOnly.getTime() - originalBillingCycleStart.getTime()) / (1000 * 60 * 60 * 24));
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-      // 남은 일수
       daysLeft = Math.max(0, totalDays - usedDays);
+      newPlanDays = daysLeft + 1;
 
-      // 기간 문자열 (표시용)
       const endDate = new Date(nextDateOnly);
       endDate.setDate(endDate.getDate() - 1);
       periodStartStr = startDateOnly.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
       periodEndStr = endDate.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
     }
 
-    // 즉시 플랜 변경 계산 (실제 기간 일수 기준)
-    // 기존 플랜: 변경일(오늘)까지 사용 → usedDays만큼 차감 후 daysLeft만큼 환불
+    // 실제 결제한 금액 조회
+    // 우선순위: 1) payments에서 조회 → 2) 일할계산 → 3) subscription.amount → 4) 플랜 기본가
+    let currentAmount = 0;
+    if (tenantId) {
+      const payments = await getPaymentHistoryByTenantId(tenantId, 10);
+      // 현재 플랜의 마지막 결제 (charge 타입) 찾기
+      const lastPaymentForCurrentPlan = payments.find(
+        (p: { plan?: string; transactionType?: string; amount?: number }) =>
+          p.plan === subscription.plan && p.transactionType === 'charge' && p.amount && p.amount > 0
+      );
+      if (lastPaymentForCurrentPlan?.amount) {
+        currentAmount = lastPaymentForCurrentPlan.amount;
+      }
+    }
+    // payments에서 못 찾은 경우: 일할계산 수행 (다운그레이드 후 재변경 케이스)
+    if (!currentAmount && totalDays > 0 && billingCycleTotalDays > 0) {
+      const planPrice = currentPlanInfo?.price || 0;
+      // 현재 기간에 해당하는 플랜 가치 = 플랜기본가 * (현재기간일수 / 원래결제주기일수)
+      currentAmount = Math.round((planPrice / billingCycleTotalDays) * totalDays);
+    }
+    // 그래도 없으면 subscription.amount 또는 플랜 기본가 사용 (최후의 fallback)
+    if (!currentAmount) {
+      currentAmount = subscription.amount || currentPlanInfo?.price || 0;
+    }
+
+    // 즉시 플랜 변경 계산
+    // 기존 플랜: 변경일(오늘)까지 사용 → 현재 기간 기준으로 사용금액 계산 후 환불
     const usedAmount = Math.round((currentAmount / totalDays) * usedDays);
     const currentRefund = currentAmount - usedAmount;
-    // 새 플랜: 변경일(오늘)부터 종료일까지 이용 → (daysLeft + 1)일 결제
-    const newPlanCharge = Math.round((fullAmount / totalDays) * (daysLeft + 1));
+    // 새 플랜: 변경일(오늘)부터 종료일까지 이용 → 원래 결제 주기 기준으로 일할 계산
+    // 원래 결제 주기(예: 31일)에서 새 플랜이 이용할 일수(예: 30일)만큼만 결제
+    const newPlanCharge = Math.round((fullAmount / billingCycleTotalDays) * newPlanDays);
 
     if (fullAmount < currentAmount) {
       // 다운그레이드: 환불
@@ -337,7 +398,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           isReserve={isReserveMode}
           isTrialImmediate={isTrialImmediate}
           fullAmount={fullAmount}
-          isNewTenant={isNewTenant}
+          isNewTenant={isNewTenant || isCustomLink}
           authParam={authParam}
           nextBillingDate={nextBillingDateStr}
           trialEndDate={trialEndDateStr}
@@ -347,6 +408,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           currentPlanName={currentPlanName}
           brandName={brandName}
           industry={industry}
+          customLinkId={customLinkId}
+          customBillingType={customBillingType}
+          customSubscriptionDays={customSubscriptionDays}
         />
       </div>
 

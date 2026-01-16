@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
 
 // GET: 구독 목록 조회
 export async function GET(request: NextRequest) {
@@ -115,11 +116,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 최신순 정렬
+    // 시작일 오름차순 정렬
     subscriptions.sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
+      const aTime = a.currentPeriodStart ? new Date(a.currentPeriodStart).getTime() : 0;
+      const bTime = b.currentPeriodStart ? new Date(b.currentPeriodStart).getTime() : 0;
+      return aTime - bTime;
     });
 
     // 페이지네이션
@@ -179,6 +180,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '구독 정보를 찾을 수 없습니다.' }, { status: 404 });
     }
 
+    // 기존 구독 데이터 저장 (히스토리 기록용)
+    const previousData = subscriptionDoc.data();
+
     // 업데이트할 데이터
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: Record<string, any> = {
@@ -224,6 +228,31 @@ export async function PUT(request: NextRequest) {
     }
 
     await subscriptionRef.update(updateData);
+
+    // 구독 히스토리에 수정 기록 추가
+    const finalPlan = plan !== undefined ? plan : previousData?.plan || '';
+    const finalStatus = status !== undefined ? status : previousData?.status || '';
+    const finalPeriodStart = currentPeriodStart ? new Date(currentPeriodStart) : (previousData?.currentPeriodStart?.toDate?.() || new Date());
+    const finalPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : (previousData?.currentPeriodEnd?.toDate?.() || null);
+    const finalBillingDate = updateData.nextBillingDate || previousData?.nextBillingDate?.toDate?.() || null;
+
+    await addSubscriptionHistoryRecord(db, {
+      tenantId,
+      email: previousData?.email || '',
+      brandName: brandName !== undefined ? brandName : previousData?.brandName || null,
+      plan: finalPlan,
+      status: finalStatus,
+      amount: previousData?.amount || 0,
+      periodStart: finalPeriodStart,
+      periodEnd: finalPeriodEnd,
+      billingDate: finalBillingDate,
+      changeType: 'admin_edit',
+      changedAt: new Date(),
+      changedBy: 'admin',
+      changedByAdminId: admin.adminId,
+      previousPlan: previousData?.plan || null,
+      previousStatus: previousData?.status || null,
+    });
 
     return NextResponse.json({
       success: true,

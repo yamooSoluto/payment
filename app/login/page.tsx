@@ -447,10 +447,21 @@ function LoginForm() {
       }
 
       // 세션 API를 통해 쿠키 설정 후 리다이렉트
-      // window.location.href 사용 (API route의 Set-Cookie가 제대로 적용되도록)
       if (authToken) {
-        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(authToken)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        window.location.href = sessionUrl;
+        // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+        const sessionRes = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: authToken }),
+        });
+
+        if (!sessionRes.ok) {
+          throw new Error('세션 생성에 실패했습니다. 다시 시도해주세요.');
+        }
+
+        // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
+        window.location.href = redirectUrl;
+        return; // 이후 코드 실행 방지
       } else {
         throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
       }
@@ -523,16 +534,27 @@ function LoginForm() {
         body: JSON.stringify({ email: userEmail, rememberMe }),
       });
 
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
-        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(tokenData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        window.location.href = sessionUrl;
-      } else {
+      if (!tokenRes.ok) {
         throw new Error('인증 토큰 발급에 실패했습니다.');
       }
+
+      const tokenData = await tokenRes.json();
+
+      // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+      const sessionRes = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: tokenData.token }),
+      });
+
+      if (!sessionRes.ok) {
+        throw new Error('세션 생성에 실패했습니다.');
+      }
+
+      // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
+      window.location.href = redirectUrl;
     } catch {
       setError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
-    } finally {
       setLoading(false);
     }
   };
@@ -587,17 +609,26 @@ function LoginForm() {
       }
 
       // 프로필 저장 완료 - 세션 API를 통해 쿠키 설정 후 리다이렉트
-      // window.location.href 사용 (API route의 Set-Cookie가 제대로 적용되도록)
       if (saveData.token) {
-        const sessionUrl = `/api/auth/session?token=${encodeURIComponent(saveData.token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-        window.location.href = sessionUrl;
+        // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+        const sessionRes = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: saveData.token }),
+        });
+
+        if (!sessionRes.ok) {
+          throw new Error('세션 생성에 실패했습니다. 다시 시도해주세요.');
+        }
+
+        // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
+        window.location.href = redirectUrl;
       } else {
         throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
       }
     } catch (err: unknown) {
       const error = err as { message?: string };
       setError(error.message || '프로필 저장 중 오류가 발생했습니다.');
-    } finally {
       setLoading(false);
     }
   };

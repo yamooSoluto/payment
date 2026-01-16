@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Package, Plus, EditPencil, Trash, RefreshDouble, Xmark, Check, Menu, ViewGrid, Eye, UserStar } from 'iconoir-react';
+import { Package, Plus, EditPencil, Trash, RefreshDouble, Xmark, Check, Menu, ViewGrid, Eye, Link as LinkIcon, Copy, Search, User } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import {
   DndContext,
@@ -37,22 +37,67 @@ interface Plan {
   isNegotiable: boolean;
 }
 
-interface PricePolicyStats {
-  plan: string;
-  currentPlanPrice: number;
-  totalSubscribers: number;
-  stats: {
-    grandfathered: { count: number; totalAmount: number };
-    protected_until: { count: number; totalAmount: number };
-    standard: { count: number; totalAmount: number };
-  };
+interface CustomLink {
+  id: string;
+  planId: string;
+  planName: string;
+  customAmount?: number;
+  targetEmail?: string;
+  targetUserName?: string;
+  billingType: 'recurring' | 'onetime';
+  subscriptionDays?: number;  // 1회성 결제 시 이용 기간 (일 단위)
+  validFrom: string;
+  validUntil: string;
+  maxUses: number;
+  currentUses: number;
+  memo?: string;
+  createdAt: string;
+  status: 'active' | 'expired' | 'disabled';
 }
 
-const PRICE_POLICY_LABELS: Record<string, string> = {
-  grandfathered: '가격 보호 (영구)',
-  protected_until: '기간 한정 보호',
-  standard: '일반 (최신 가격 적용)',
-};
+interface Member {
+  id: string;
+  email: string;
+  displayName?: string;
+  name?: string;
+}
+
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+function formatDateTime(dateString: string): string {
+  return new Date(dateString).toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getLinkStatus(link: CustomLink): { label: string; color: string } {
+  if (link.status === 'disabled') {
+    return { label: '비활성', color: 'bg-gray-100 text-gray-600' };
+  }
+  const now = new Date();
+  const validUntil = new Date(link.validUntil);
+  const validFrom = new Date(link.validFrom);
+  if (now < validFrom) {
+    return { label: '대기', color: 'bg-yellow-100 text-yellow-700' };
+  }
+  if (now > validUntil) {
+    return { label: '만료', color: 'bg-red-100 text-red-600' };
+  }
+  if (link.maxUses > 0 && link.currentUses >= link.maxUses) {
+    return { label: '소진', color: 'bg-orange-100 text-orange-600' };
+  }
+  return { label: '활성', color: 'bg-green-100 text-green-600' };
+}
 
 // 드래그 가능한 플랜 카드 컴포넌트
 function SortablePlanCard({
@@ -60,13 +105,13 @@ function SortablePlanCard({
   onEdit,
   onDelete,
   onToggleActive,
-  onPricePolicy,
+  onTogglePopular,
 }: {
   plan: Plan;
   onEdit: (plan: Plan) => void;
   onDelete: (plan: Plan) => void;
   onToggleActive: (plan: Plan) => void;
-  onPricePolicy: (plan: Plan) => void;
+  onTogglePopular: (plan: Plan) => void;
 }) {
   const {
     attributes,
@@ -117,13 +162,6 @@ function SortablePlanCard({
         </div>
         <div className="flex gap-1">
           <button
-            onClick={() => onPricePolicy(plan)}
-            className="p-2 hover:bg-purple-50 rounded-lg transition-colors"
-            title="구독자 가격 정책"
-          >
-            <UserStar className="w-4 h-4 text-purple-500" />
-          </button>
-          <button
             onClick={() => onEdit(plan)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             title="수정"
@@ -141,7 +179,7 @@ function SortablePlanCard({
       </div>
 
       {/* 노출 여부 토글 */}
-      <div className="flex items-center justify-between py-3 px-4 -mx-4 mb-4 bg-gray-50 border-y border-gray-100">
+      <div className="flex items-center justify-between py-2 px-4 -mx-4 bg-gray-50 border-t border-gray-100">
         <span className="text-sm text-gray-600">요금제 페이지 노출</span>
         <button
           type="button"
@@ -153,6 +191,24 @@ function SortablePlanCard({
           <span
             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
               plan.isActive ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* 인기 표시 토글 */}
+      <div className="flex items-center justify-between py-2 px-4 -mx-4 mb-4 bg-gray-50 border-y border-gray-100">
+        <span className="text-sm text-gray-600">인기 표시</span>
+        <button
+          type="button"
+          onClick={() => onTogglePopular(plan)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            plan.popular ? 'bg-orange-500' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              plan.popular ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>
@@ -203,6 +259,10 @@ function SortablePlanCard({
 }
 
 export default function PlansPage() {
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<'plans' | 'links'>('plans');
+
+  // 플랜 관련 상태
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -212,16 +272,33 @@ export default function PlansPage() {
   const [showGridSelector, setShowGridSelector] = useState(false);
   const [savingGrid, setSavingGrid] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [showPricePolicyModal, setShowPricePolicyModal] = useState(false);
-  const [selectedPlanForPolicy, setSelectedPlanForPolicy] = useState<Plan | null>(null);
-  const [pricePolicyStats, setPricePolicyStats] = useState<PricePolicyStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
-  const [policyFormData, setPolicyFormData] = useState({
-    pricePolicy: 'standard',
-    priceProtectedUntil: '',
-    newPlanPrice: 0,
+
+  // 커스텀 링크 관련 상태
+  const [customLinks, setCustomLinks] = useState<CustomLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [editingLink, setEditingLink] = useState<CustomLink | null>(null);
+  const [savingLink, setSavingLink] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [linkFormData, setLinkFormData] = useState({
+    planId: '',
+    customAmount: '',
+    targetEmail: '',
+    targetUserName: '',
+    billingType: 'recurring' as 'recurring' | 'onetime',
+    subscriptionDays: '30',  // 기본 30일 (1개월)
+    validFrom: '',
+    validUntil: '',
+    maxUses: '1',
+    memo: '',
   });
-  const [savingPolicy, setSavingPolicy] = useState(false);
+
+  // 회원 검색 관련 상태
+  const [showMemberSearch, setShowMemberSearch] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState<Member[]>([]);
+  const [memberSearchLoading, setMemberSearchLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -461,72 +538,212 @@ export default function PlansPage() {
     }
   };
 
-  const handleOpenPricePolicyModal = async (plan: Plan) => {
-    setSelectedPlanForPolicy(plan);
-    setShowPricePolicyModal(true);
-    setPolicyFormData({
-      pricePolicy: 'standard',
-      priceProtectedUntil: '',
-      newPlanPrice: plan.price,
-    });
-
-    // 해당 플랜의 구독자 가격 정책 통계 조회
-    setLoadingStats(true);
+  const handleTogglePopular = async (plan: Plan) => {
     try {
-      const response = await fetch(`/api/admin/subscriptions/price-policy?plan=${plan.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPricePolicyStats(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch price policy stats:', error);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  const handleClosePricePolicyModal = () => {
-    setShowPricePolicyModal(false);
-    setSelectedPlanForPolicy(null);
-    setPricePolicyStats(null);
-  };
-
-  const handleSaveBulkPricePolicy = async () => {
-    if (!selectedPlanForPolicy) return;
-
-    if (policyFormData.pricePolicy === 'protected_until' && !policyFormData.priceProtectedUntil) {
-      alert('보호 종료일을 선택해주세요.');
-      return;
-    }
-
-    setSavingPolicy(true);
-    try {
-      const response = await fetch('/api/admin/subscriptions/price-policy', {
-        method: 'POST',
+      const response = await fetch(`/api/admin/plans/${plan.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: selectedPlanForPolicy.id,
-          pricePolicy: policyFormData.pricePolicy,
-          priceProtectedUntil: policyFormData.pricePolicy === 'protected_until' ? policyFormData.priceProtectedUntil : null,
-          newPlanPrice: policyFormData.pricePolicy === 'standard' ? policyFormData.newPlanPrice : undefined,
-        }),
+        body: JSON.stringify({ ...plan, popular: !plan.popular }),
       });
 
       if (response.ok) {
-        const data = await response.json();
-        alert(data.message || '가격 정책이 일괄 변경되었습니다.');
-        handleClosePricePolicyModal();
+        fetchPlans();
       } else {
         const data = await response.json();
-        alert(data.error || '가격 정책 변경에 실패했습니다.');
+        alert(data.error || '변경에 실패했습니다.');
       }
     } catch (error) {
-      console.error('Failed to save bulk price policy:', error);
-      alert('오류가 발생했습니다.');
-    } finally {
-      setSavingPolicy(false);
+      console.error('Failed to toggle popular:', error);
+      alert('변경에 실패했습니다.');
     }
   };
+
+  // 커스텀 링크 함수들
+  const fetchCustomLinks = async () => {
+    setLinksLoading(true);
+    try {
+      const response = await fetch('/api/admin/custom-links');
+      if (response.ok) {
+        const data = await response.json();
+        setCustomLinks(data.links);
+      }
+    } catch (error) {
+      console.error('Failed to fetch custom links:', error);
+    } finally {
+      setLinksLoading(false);
+    }
+  };
+
+  const handleOpenLinkModal = (link?: CustomLink) => {
+    if (link) {
+      setEditingLink(link);
+      setLinkFormData({
+        planId: link.planId,
+        customAmount: link.customAmount?.toString() || '',
+        targetEmail: link.targetEmail || '',
+        targetUserName: link.targetUserName || '',
+        billingType: link.billingType || 'recurring',
+        subscriptionDays: link.subscriptionDays?.toString() || '30',
+        validFrom: link.validFrom ? new Date(link.validFrom).toISOString().slice(0, 16) : '',
+        validUntil: link.validUntil ? new Date(link.validUntil).toISOString().slice(0, 16) : '',
+        maxUses: link.maxUses?.toString() || '0',
+        memo: link.memo || '',
+      });
+    } else {
+      setEditingLink(null);
+      const now = new Date();
+      const validUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      setLinkFormData({
+        planId: '',
+        customAmount: '',
+        targetEmail: '',
+        targetUserName: '',
+        billingType: 'recurring',
+        subscriptionDays: '30',
+        validFrom: now.toISOString().slice(0, 16),
+        validUntil: validUntil.toISOString().slice(0, 16),
+        maxUses: '1',
+        memo: '',
+      });
+    }
+    setShowMemberSearch(false);
+    setMemberSearchQuery('');
+    setMemberSearchResults([]);
+    setShowLinkModal(true);
+  };
+
+  const handleCloseLinkModal = () => {
+    setShowLinkModal(false);
+    setEditingLink(null);
+    setShowMemberSearch(false);
+  };
+
+  // 회원 검색
+  const searchMembers = async (query: string) => {
+    if (!query.trim()) {
+      setMemberSearchResults([]);
+      return;
+    }
+    setMemberSearchLoading(true);
+    try {
+      const response = await fetch(`/api/admin/members?search=${encodeURIComponent(query)}&limit=10`);
+      if (response.ok) {
+        const data = await response.json();
+        setMemberSearchResults(data.members || []);
+      }
+    } catch (error) {
+      console.error('Failed to search members:', error);
+    } finally {
+      setMemberSearchLoading(false);
+    }
+  };
+
+  // 회원 선택
+  const handleSelectMember = (member: Member) => {
+    setLinkFormData({
+      ...linkFormData,
+      targetEmail: member.email,
+      targetUserName: member.displayName || member.name || '',
+    });
+    setShowMemberSearch(false);
+    setMemberSearchQuery('');
+    setMemberSearchResults([]);
+  };
+
+  // 대상 회원 초기화
+  const handleClearTargetMember = () => {
+    setLinkFormData({
+      ...linkFormData,
+      targetEmail: '',
+      targetUserName: '',
+    });
+  };
+
+  const handleSaveLink = async () => {
+    if (!linkFormData.planId) {
+      alert('플랜을 선택해주세요.');
+      return;
+    }
+    if (!linkFormData.validFrom || !linkFormData.validUntil) {
+      alert('유효기간을 설정해주세요.');
+      return;
+    }
+
+    setSavingLink(true);
+    try {
+      const selectedPlan = plans.find(p => p.id === linkFormData.planId);
+      const body = {
+        planId: linkFormData.planId,
+        planName: selectedPlan?.name || linkFormData.planId,
+        customAmount: linkFormData.customAmount ? parseInt(linkFormData.customAmount) : null,
+        targetEmail: linkFormData.targetEmail.trim() || null,
+        targetUserName: linkFormData.targetUserName.trim() || null,
+        billingType: linkFormData.billingType,
+        subscriptionDays: linkFormData.billingType === 'onetime' ? parseInt(linkFormData.subscriptionDays) || 30 : null,
+        validFrom: linkFormData.validFrom,
+        validUntil: linkFormData.validUntil,
+        maxUses: parseInt(linkFormData.maxUses) || 0,
+        memo: linkFormData.memo.trim() || null,
+      };
+
+      const url = editingLink
+        ? `/api/admin/custom-links/${editingLink.id}`
+        : '/api/admin/custom-links';
+
+      const response = await fetch(url, {
+        method: editingLink ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        handleCloseLinkModal();
+        fetchCustomLinks();
+      } else {
+        const data = await response.json();
+        alert(data.error || '저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to save link:', error);
+      alert('저장에 실패했습니다.');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleDeleteLink = async (link: CustomLink) => {
+    if (!confirm(`정말 이 링크를 비활성화하시겠습니까?\n(${link.planName} - ${link.id})`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/custom-links/${link.id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        fetchCustomLinks();
+      } else {
+        const data = await response.json();
+        alert(data.error || '비활성화에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to delete link:', error);
+      alert('비활성화에 실패했습니다.');
+    }
+  };
+
+  const copyLink = async (linkId: string) => {
+    const baseUrl = window.location.origin;
+    const url = `${baseUrl}/checkout?link=${linkId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(linkId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      alert('복사에 실패했습니다. URL: ' + url);
+    }
+  };
+
+  const selectedPlanForLink = plans.find(p => p.id === linkFormData.planId);
 
   const getGridClass = () => {
     switch (gridCols) {
@@ -545,76 +762,130 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-6">
+      {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Package className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">상품 관리</h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* 미리보기 버튼 */}
-          <button
-            onClick={() => setShowPreview(true)}
-            className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            title="요금제 페이지 미리보기"
-          >
-            <Eye className="w-4 h-4 text-gray-600" />
-            <span className="hidden sm:inline text-sm text-gray-700">미리보기</span>
-          </button>
-          {/* 그리드 열 수 선택 */}
-          <div className="relative">
+          {activeTab === 'plans' && (
+            <>
+              {/* 미리보기 버튼 */}
+              <button
+                onClick={() => setShowPreview(true)}
+                className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                title="요금제 페이지 미리보기"
+              >
+                <Eye className="w-4 h-4 text-gray-600" />
+                <span className="hidden sm:inline text-sm text-gray-700">미리보기</span>
+              </button>
+              {/* 그리드 열 수 선택 */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowGridSelector(!showGridSelector)}
+                  className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  title="그리드 열 수 변경"
+                >
+                  <ViewGrid className="w-4 h-4 text-gray-600" />
+                  <span className="hidden sm:inline text-sm text-gray-700">{gridCols}열</span>
+                </button>
+                {showGridSelector && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowGridSelector(false)}
+                    />
+                    <div className="absolute right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20 min-w-[120px]">
+                      {[1, 2, 3, 4].map((cols) => (
+                        <button
+                          key={cols}
+                          onClick={() => {
+                            setGridCols(cols);
+                            saveGridSettings(cols);
+                            setShowGridSelector(false);
+                          }}
+                          disabled={savingGrid}
+                          className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                            gridCols === cols ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
+                          } disabled:opacity-50`}
+                        >
+                          <span>{cols}열 보기</span>
+                          {gridCols === cols && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={() => handleOpenModal()}
+                className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">플랜 추가</span>
+              </button>
+            </>
+          )}
+          {activeTab === 'links' && (
             <button
-              onClick={() => setShowGridSelector(!showGridSelector)}
-              className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              title="그리드 열 수 변경"
+              onClick={() => handleOpenLinkModal()}
+              className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <ViewGrid className="w-4 h-4 text-gray-600" />
-              <span className="hidden sm:inline text-sm text-gray-700">{gridCols}열</span>
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">새 링크 만들기</span>
             </button>
-            {showGridSelector && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowGridSelector(false)}
-                />
-                <div className="absolute right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20 min-w-[120px]">
-                  {[1, 2, 3, 4].map((cols) => (
-                    <button
-                      key={cols}
-                      onClick={() => {
-                        setGridCols(cols);
-                        saveGridSettings(cols);
-                        setShowGridSelector(false);
-                      }}
-                      disabled={savingGrid}
-                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                        gridCols === cols ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
-                      } disabled:opacity-50`}
-                    >
-                      <span>{cols}열 보기</span>
-                      {gridCols === cols && <Check className="w-4 h-4" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">플랜 추가</span>
-          </button>
+          )}
         </div>
       </div>
 
-      {/* 드래그 안내 메시지 */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-lg">
-        <Menu className="w-4 h-4" />
-        <span>카드 왼쪽의 핸들을 드래그하여 순서를 변경할 수 있습니다.</span>
+      {/* 탭 네비게이션 */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-4">
+          <button
+            onClick={() => setActiveTab('plans')}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'plans'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              플랜 목록
+            </div>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('links');
+              if (customLinks.length === 0 && !linksLoading) {
+                fetchCustomLinks();
+              }
+            }}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'links'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4" />
+              커스텀 링크
+            </div>
+          </button>
+        </nav>
       </div>
 
-      {/* 플랜 목록 */}
+      {/* 플랜 목록 탭 */}
+      {activeTab === 'plans' && (
+        <>
+          {/* 드래그 안내 메시지 */}
+          <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-lg">
+            <Menu className="w-4 h-4" />
+            <span>카드 왼쪽의 핸들을 드래그하여 순서를 변경할 수 있습니다.</span>
+          </div>
+
+          {/* 플랜 목록 */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -638,15 +909,148 @@ export default function PlansPage() {
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
                   onToggleActive={handleToggleActive}
-                  onPricePolicy={handleOpenPricePolicyModal}
+                  onTogglePopular={handleTogglePopular}
                 />
               ))
             )}
           </div>
         </SortableContext>
       </DndContext>
+        </>
+      )}
 
-      {/* 모달 */}
+      {/* 커스텀 링크 탭 */}
+      {activeTab === 'links' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {linksLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="md" />
+            </div>
+          ) : customLinks.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <LinkIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p>생성된 커스텀 링크가 없습니다.</p>
+              <button
+                onClick={() => handleOpenLinkModal()}
+                className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+              >
+                + 새 링크 만들기
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">링크 ID</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">플랜</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">유형</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">금액</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">대상 회원</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">링크 유효기간</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">사용</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">상태</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">액션</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {customLinks.map((link) => {
+                    const status = getLinkStatus(link);
+                    return (
+                      <tr key={link.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">
+                              {link.id}
+                            </code>
+                            <button
+                              onClick={() => copyLink(link.id)}
+                              className="p-1 hover:bg-gray-200 rounded transition-colors"
+                              title="링크 복사"
+                            >
+                              {copiedId === link.id ? (
+                                <Check className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                          {link.memo && (
+                            <p className="text-xs text-gray-500 mt-1">{link.memo}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{link.planName}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                            link.billingType === 'onetime'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {link.billingType === 'onetime' ? '1회성' : '정기'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {link.customAmount
+                            ? `${link.customAmount.toLocaleString()}원`
+                            : <span className="text-gray-400">플랜 가격</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {link.targetEmail ? (
+                            <div>
+                              {link.targetUserName && (
+                                <p className="font-medium text-gray-900">{link.targetUserName}</p>
+                              )}
+                              <p className="text-gray-600 text-xs">{link.targetEmail}</p>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">제한없음</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          <div>{formatDate(link.validFrom)}</div>
+                          <div className="text-gray-400">~ {formatDate(link.validUntil)}</div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-medium">{link.currentUses}</span>
+                          <span className="text-gray-400">
+                            /{link.maxUses === 0 ? '무제한' : link.maxUses}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${status.color}`}>
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenLinkModal(link)}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="수정"
+                            >
+                              <EditPencil className="w-4 h-4 text-gray-500" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteLink(link)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              title="비활성화"
+                            >
+                              <Trash className="w-4 h-4 text-red-500" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 플랜 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -986,144 +1390,317 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* 가격 정책 일괄 변경 모달 */}
-      {showPricePolicyModal && selectedPlanForPolicy && (
+      {/* 커스텀 링크 모달 */}
+      {showLinkModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">
-                {selectedPlanForPolicy.name} 플랜 구독자 가격 정책
-              </h3>
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">
+                {editingLink ? '링크 수정' : '새 커스텀 링크'}
+              </h2>
               <button
-                onClick={handleClosePricePolicyModal}
+                onClick={handleCloseLinkModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <Xmark className="w-5 h-5" />
               </button>
             </div>
 
-            {/* 현재 통계 */}
-            {loadingStats ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshDouble className="w-6 h-6 text-blue-600 animate-spin" />
+            <div className="space-y-4">
+              {/* 플랜 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  플랜 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={linkFormData.planId}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, planId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">플랜을 선택하세요</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} ({plan.price.toLocaleString()}원/월)
+                      {!plan.isActive && ' [숨김]'}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : pricePolicyStats ? (
-              <div className="mb-6">
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-500">현재 플랜 가격</span>
-                    <span className="font-semibold">{pricePolicyStats.currentPlanPrice.toLocaleString()}원/월</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">활성 구독자</span>
-                    <span className="font-semibold">{pricePolicyStats.totalSubscribers}명</span>
-                  </div>
+
+              {/* 커스텀 금액 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  커스텀 금액 (선택)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={linkFormData.customAmount}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, customAmount: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-12"
+                    placeholder={selectedPlanForLink ? selectedPlanForLink.price.toString() : '플랜 가격 사용'}
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">원</span>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  비워두면 플랜의 기본 가격이 적용됩니다.
+                </p>
+              </div>
 
-                {/* 정책별 현황 */}
-                <div className="space-y-2 mb-4">
-                  <h4 className="text-sm font-medium text-gray-700">현재 가격 정책별 현황</h4>
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="bg-purple-50 rounded-lg p-3 text-center">
-                      <p className="text-purple-700 font-semibold">{pricePolicyStats.stats.grandfathered.count}명</p>
-                      <p className="text-xs text-purple-600">영구 보호</p>
-                    </div>
-                    <div className="bg-amber-50 rounded-lg p-3 text-center">
-                      <p className="text-amber-700 font-semibold">{pricePolicyStats.stats.protected_until.count}명</p>
-                      <p className="text-xs text-amber-600">기간 한정</p>
-                    </div>
-                    <div className="bg-gray-100 rounded-lg p-3 text-center">
-                      <p className="text-gray-700 font-semibold">{pricePolicyStats.stats.standard.count}명</p>
-                      <p className="text-xs text-gray-600">일반</p>
-                    </div>
-                  </div>
+              {/* 결제 유형 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  결제 유형 <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setLinkFormData({ ...linkFormData, billingType: 'recurring' })}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 transition-colors ${
+                      linkFormData.billingType === 'recurring'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className="font-medium">정기 결제</div>
+                    <div className="text-xs mt-0.5 opacity-75">매월 자동 갱신</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLinkFormData({ ...linkFormData, billingType: 'onetime' })}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 transition-colors ${
+                      linkFormData.billingType === 'onetime'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className="font-medium">1회성 결제</div>
+                    <div className="text-xs mt-0.5 opacity-75">지정 기간 후 해지</div>
+                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center py-4 text-gray-500 mb-4">
-                통계를 불러오지 못했습니다.
-              </div>
-            )}
 
-            {/* 일괄 변경 폼 */}
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">일괄 가격 정책 변경</h4>
-
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="bulkPricePolicy"
-                    value="grandfathered"
-                    checked={policyFormData.pricePolicy === 'grandfathered'}
-                    onChange={(e) => setPolicyFormData({ ...policyFormData, pricePolicy: e.target.value })}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <p className="font-medium text-sm">가격 보호 (영구)</p>
-                    <p className="text-xs text-gray-500">모든 활성 구독자가 현재 결제 금액을 영구적으로 유지</p>
-                  </div>
-                </label>
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="bulkPricePolicy"
-                    value="protected_until"
-                    checked={policyFormData.pricePolicy === 'protected_until'}
-                    onChange={(e) => setPolicyFormData({ ...policyFormData, pricePolicy: e.target.value })}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">기간 한정 보호</p>
-                    <p className="text-xs text-gray-500">지정 날짜까지만 현재 금액 유지</p>
-                  </div>
-                </label>
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="bulkPricePolicy"
-                    value="standard"
-                    checked={policyFormData.pricePolicy === 'standard'}
-                    onChange={(e) => setPolicyFormData({ ...policyFormData, pricePolicy: e.target.value })}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <p className="font-medium text-sm">일반 (최신 가격 적용)</p>
-                    <p className="text-xs text-gray-500">다음 결제부터 지정한 금액으로 청구</p>
-                  </div>
-                </label>
-              </div>
-
-              {/* 기간 한정 시 날짜 선택 */}
-              {policyFormData.pricePolicy === 'protected_until' && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    보호 종료일
+              {/* 이용 기간 (1회성일 때만) */}
+              {linkFormData.billingType === 'onetime' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-blue-700 mb-2">
+                    이용 기간 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={policyFormData.priceProtectedUntil}
-                    onChange={(e) => setPolicyFormData({ ...policyFormData, priceProtectedUntil: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    min={new Date().toISOString().split('T')[0]}
-                  />
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { days: 30, label: '1개월' },
+                      { days: 60, label: '2개월' },
+                      { days: 90, label: '3개월' },
+                      { days: 180, label: '6개월' },
+                      { days: 365, label: '1년' },
+                    ].map((option) => (
+                      <button
+                        key={option.days}
+                        type="button"
+                        onClick={() => setLinkFormData({ ...linkFormData, subscriptionDays: option.days.toString() })}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                          parseInt(linkFormData.subscriptionDays) === option.days
+                            ? 'border-blue-500 bg-blue-100 text-blue-700'
+                            : 'border-blue-200 hover:border-blue-300 text-blue-600'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-blue-600 w-20">일수 입력:</span>
+                      <input
+                        type="number"
+                        value={linkFormData.subscriptionDays}
+                        onChange={(e) => setLinkFormData({ ...linkFormData, subscriptionDays: e.target.value })}
+                        className="w-24 px-3 py-1.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        min="1"
+                      />
+                      <span className="text-sm text-blue-600">일</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-blue-600 w-20">종료일:</span>
+                      <input
+                        type="date"
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            const endDate = new Date(e.target.value);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const diffDays = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays > 0) {
+                              setLinkFormData({ ...linkFormData, subscriptionDays: diffDays.toString() });
+                            }
+                          }
+                        }}
+                        className="w-40 px-3 py-1.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-500 mt-2">
+                    결제 완료 후 {linkFormData.subscriptionDays}일간 서비스 이용 후 자동 해지됩니다.
+                  </p>
                 </div>
               )}
 
-              {/* 일반 정책 시 새 가격 입력 */}
-              {policyFormData.pricePolicy === 'standard' && (
-                <div className="mt-4">
+              {/* 대상 회원 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  대상 회원 (선택)
+                </label>
+                {linkFormData.targetEmail ? (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <div className="flex-1 min-w-0">
+                      {linkFormData.targetUserName && (
+                        <p className="font-medium text-gray-900 truncate">{linkFormData.targetUserName}</p>
+                      )}
+                      <p className="text-sm text-gray-600 truncate">{linkFormData.targetEmail}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearTargetMember}
+                      className="p-1 hover:bg-blue-100 rounded"
+                    >
+                      <Xmark className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMemberSearch(!showMemberSearch)}
+                      className="w-full flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:border-gray-300 text-left"
+                    >
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">회원 검색...</span>
+                    </button>
+
+                    {showMemberSearch && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                        <div className="p-2 border-b">
+                          <input
+                            type="text"
+                            value={memberSearchQuery}
+                            onChange={(e) => {
+                              setMemberSearchQuery(e.target.value);
+                              searchMembers(e.target.value);
+                            }}
+                            placeholder="이름 또는 이메일로 검색"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {memberSearchLoading ? (
+                            <div className="p-4 text-center text-gray-500">
+                              <Spinner size="sm" />
+                            </div>
+                          ) : memberSearchResults.length > 0 ? (
+                            memberSearchResults.map((member) => (
+                              <button
+                                key={member.id}
+                                type="button"
+                                onClick={() => handleSelectMember(member)}
+                                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-left"
+                              >
+                                <User className="w-4 h-4 text-gray-400" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {member.displayName || member.name || '이름 없음'}
+                                  </p>
+                                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                                </div>
+                              </button>
+                            ))
+                          ) : memberSearchQuery ? (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              검색 결과가 없습니다
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              이름 또는 이메일을 입력하세요
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  비워두면 누구나 사용할 수 있습니다.
+                </p>
+              </div>
+
+              {/* 링크 유효기간 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    새 결제 금액 (원/월)
+                    링크 유효 시작일 <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="number"
-                    value={policyFormData.newPlanPrice}
-                    onChange={(e) => setPolicyFormData({ ...policyFormData, newPlanPrice: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    type="datetime-local"
+                    value={linkFormData.validFrom}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, validFrom: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    모든 활성 구독자의 다음 결제부터 이 금액으로 청구됩니다.
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    링크 유효 종료일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={linkFormData.validUntil}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, validUntil: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* 최대 사용 횟수 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  최대 사용 횟수
+                </label>
+                <input
+                  type="number"
+                  value={linkFormData.maxUses}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, maxUses: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0"
+                  min="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  0으로 설정하면 무제한 사용 가능합니다.
+                </p>
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  메모 (선택)
+                </label>
+                <textarea
+                  value={linkFormData.memo}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, memo: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="관리용 메모 (예: ABC 기업 특가)"
+                />
+              </div>
+
+              {/* 현재 사용 횟수 (수정 모드에서만) */}
+              {editingLink && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    현재 사용 횟수: <span className="font-medium">{editingLink.currentUses}회</span>
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    생성일: {formatDateTime(editingLink.createdAt)}
                   </p>
                 </div>
               )}
@@ -1131,22 +1708,23 @@ export default function PlansPage() {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={handleClosePricePolicyModal}
+                onClick={handleCloseLinkModal}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 취소
               </button>
               <button
-                onClick={handleSaveBulkPricePolicy}
-                disabled={savingPolicy || (pricePolicyStats?.totalSubscribers === 0)}
-                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSaveLink}
+                disabled={savingLink}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {savingPolicy ? '적용 중...' : `${pricePolicyStats?.totalSubscribers || 0}명에게 적용`}
+                {savingLink ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

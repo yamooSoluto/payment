@@ -49,8 +49,14 @@ function calculateProration(
   const nextDateOnly = new Date(nextBillingDate);
   nextDateOnly.setHours(0, 0, 0, 0);
 
-  // 총 기간 일수
+  // 현재 기간의 총 일수 (currentPeriodStart ~ nextBillingDate)
   const totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+  // 원래 결제 주기의 총 일수 (nextBillingDate 기준 한 달 전 ~ nextBillingDate)
+  // 예: nextBillingDate가 02-14이면, 원래 시작은 01-14이므로 총 31일
+  const originalBillingCycleStart = new Date(nextDateOnly);
+  originalBillingCycleStart.setMonth(originalBillingCycleStart.getMonth() - 1);
+  const billingCycleTotalDays = Math.round((nextDateOnly.getTime() - originalBillingCycleStart.getTime()) / (1000 * 60 * 60 * 24));
 
   // 사용 일수 (오늘 포함)
   const today = new Date();
@@ -60,16 +66,20 @@ function calculateProration(
   // 남은 일수
   const daysLeft = Math.max(0, totalDaysInPeriod - usedDays);
 
+  // 새 플랜의 이용 일수 (오늘부터 종료일까지)
+  const newPlanDays = daysLeft + 1;
+
   // 0 나누기 방지
-  if (totalDaysInPeriod <= 0) {
+  if (totalDaysInPeriod <= 0 || billingCycleTotalDays <= 0) {
     return { creditAmount: 0, proratedNewAmount: 0 };
   }
 
-  // 기존 플랜 환불 금액: 남은 일수 비율로 계산
+  // 기존 플랜 환불 금액: 현재 기간 기준으로 남은 일수만큼 환불
   const creditAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
 
-  // 새 플랜 결제 금액: (남은 일수 + 오늘) 비율로 계산
-  const proratedNewAmount = Math.round((newPlanPrice / totalDaysInPeriod) * (daysLeft + 1));
+  // 새 플랜 결제 금액: 원래 결제 주기 기준으로 이용할 일수만큼 결제
+  // 예: 원래 31일 주기에서 30일만 이용하면 99,000 * 30/31 = 95,806원
+  const proratedNewAmount = Math.round((newPlanPrice / billingCycleTotalDays) * newPlanDays);
 
   return { creditAmount, proratedNewAmount };
 }
@@ -407,7 +417,8 @@ export async function POST(request: NextRequest) {
       const subscriptionRef = db.collection('subscriptions').doc(tenantId);
       transaction.update(subscriptionRef, {
         plan: newPlan,
-        amount: newPlanPrice,
+        amount: proratedNewAmount, // 실제 결제한 금액 저장 (일할계산된 금액)
+        baseAmount: newPlanPrice,  // 플랜 기본가 (다음 결제 시 사용)
         previousPlan,
         previousAmount,
         planChangedAt: now,

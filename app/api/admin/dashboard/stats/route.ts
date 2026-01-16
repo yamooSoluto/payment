@@ -22,8 +22,20 @@ export async function GET(request: NextRequest) {
 
     // 이번 달 시작일과 끝일
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const monthKeys: string[] = [];
+    const monthLabels: string[] = [];
+    for (let i = 2; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthKeys.push(key);
+      monthLabels.push(`${date.getMonth() + 1}월`);
+    }
+    const monthIndex = new Map(monthKeys.map((key, idx) => [key, idx]));
+    const revenueTrend = Array(monthKeys.length).fill(0);
+    const signupTrend = Array(monthKeys.length).fill(0);
+
+    const getMonthKey = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
     // 병렬로 데이터 조회
     const [
@@ -50,8 +62,12 @@ export async function GET(request: NextRequest) {
     tenantsSnapshot.docs.forEach((doc) => {
       const data = doc.data();
       const createdAt = data.createdAt?.toDate?.();
-      if (createdAt && createdAt >= startOfMonth && createdAt <= endOfMonth) {
-        newSignups++;
+      if (createdAt) {
+        const key = getMonthKey(createdAt);
+        const idx = monthIndex.get(key);
+        if (idx !== undefined) {
+          signupTrend[idx] += 1;
+        }
       }
     });
 
@@ -73,14 +89,12 @@ export async function GET(request: NextRequest) {
       const status = data.status;
 
       // 이번 달 완료된 결제의 양수 금액 합산
-      if (
-        createdAt &&
-        createdAt >= startOfMonth &&
-        createdAt <= endOfMonth &&
-        (status === 'completed' || status === 'done') &&
-        amount > 0
-      ) {
-        monthlyRevenue += amount;
+      if (createdAt && (status === 'completed' || status === 'done') && amount > 0) {
+        const key = getMonthKey(createdAt);
+        const idx = monthIndex.get(key);
+        if (idx !== undefined) {
+          revenueTrend[idx] += amount;
+        }
       }
 
       // 최근 결제 5건 수집 (양수 금액만)
@@ -152,12 +166,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    monthlyRevenue = revenueTrend[revenueTrend.length - 1] || 0;
+    newSignups = signupTrend[signupTrend.length - 1] || 0;
+
     return NextResponse.json({
       stats: {
         totalMembers,
         activeSubscriptions,
         monthlyRevenue,
         newSignups,
+      },
+      trend: {
+        months: monthLabels,
+        revenue: revenueTrend,
+        signups: signupTrend,
       },
       recentPayments,
       recentSignups,

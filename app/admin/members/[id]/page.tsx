@@ -1549,177 +1549,192 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       </div>
 
       {/* 기본 정보 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <div className="flex items-center gap-2 mb-4">
           <User className="w-5 h-5 text-blue-600" />
           <h2 className="text-lg font-semibold">기본 정보</h2>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 이메일 */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">이메일</label>
-            {editMode ? (
-              <div>
+        <div className="space-y-0">
+          {/* Row 1: 이메일, 이름, 연락처, 비밀번호 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 pb-5 border-b border-gray-100">
+            {/* 이메일 */}
+            <div className="col-span-2 lg:col-span-1">
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">이메일</label>
+              {editMode ? (
+                <div>
+                  <input
+                    type="email"
+                    value={formData.newEmail}
+                    onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  {formData.newEmail.toLowerCase() !== member.email.toLowerCase() && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ 이메일 변경 시 재로그인 필요
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm font-medium break-all text-left">{member.email || '-'}</p>
+              )}
+            </div>
+
+            {/* 이름 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">이름</label>
+              {editMode ? (
                 <input
-                  type="email"
-                  value={formData.newEmail}
-                  onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                 />
-                {formData.newEmail.toLowerCase() !== member.email.toLowerCase() && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    ⚠️ 이메일 변경 시 재로그인 필요
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="font-medium break-all">{member.email || '-'}</p>
-            )}
-          </div>
+              ) : (
+                <p className="text-sm font-medium text-left">{member.name || '-'}</p>
+              )}
+            </div>
 
-          {/* 이름 */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">이름</label>
-            {editMode ? (
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            ) : (
-              <p className="font-medium break-all">{member.name || '-'}</p>
-            )}
-          </div>
+            {/* 연락처 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">연락처</label>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              ) : (
+                <p className="text-sm font-medium text-left">{member.phone || '-'}</p>
+              )}
+            </div>
 
-          {/* 연락처 */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">연락처</label>
-            {editMode ? (
-              <input
-                type="text"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            ) : (
-              <p className="font-medium">{member.phone || '-'}</p>
-            )}
-          </div>
-
-          {/* 비밀번호 */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">비밀번호</label>
-            <button
-              onClick={() => {
-                setPasswordForm({ newPassword: '', confirmPassword: '' });
-                setPasswordModal(true);
-              }}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              비밀번호 변경
-            </button>
-          </div>
-        </div>
-
-        {/* 가입일, 최종 로그인 정보, 이용금액 */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100">
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">가입일</label>
-            <p className="font-medium">
-              {member.createdAt
-                ? new Date(member.createdAt).toLocaleDateString('ko-KR')
-                : '-'}
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">최종 로그인</label>
-            <p className="font-medium">
-              {member.lastLoginAt
-                ? new Date(member.lastLoginAt).toLocaleString('ko-KR')
-                : '-'}
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">최종 로그인 IP</label>
-            <p className="font-medium text-sm">{member.lastLoginIP || '-'}</p>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">이용금액</label>
-            <p className="font-medium text-blue-600">
-              {(member.totalAmount ?? 0).toLocaleString()}원
-            </p>
-          </div>
-        </div>
-
-        {/* 그룹, 무료체험 여부 & 메모 - 별도 줄 (1:1:2 비율) */}
-        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">그룹</label>
-            {editMode ? (
-              <select
-                value={formData.group}
-                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            {/* 비밀번호 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">비밀번호</label>
+              <button
+                onClick={() => {
+                  setPasswordForm({ newPassword: '', confirmPassword: '' });
+                  setPasswordModal(true);
+                }}
+                className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs sm:text-sm rounded-lg hover:bg-gray-200 transition-colors"
               >
-                {MEMBER_GROUP_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            ) : (
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                member.group === 'internal'
-                  ? 'bg-purple-100 text-purple-800'
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {MEMBER_GROUPS[member.group as keyof typeof MEMBER_GROUPS] || member.group || '일반'}
-              </span>
-            )}
+                비밀번호 변경
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">무료체험</label>
-            {member.trialApplied ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  이용완료
-                </span>
-                <span className="text-xs text-gray-500">
-                  {member.trialAppliedAt && new Date(member.trialAppliedAt).toLocaleDateString('ko-KR')}
-                  {member.trialBrandName && ` · ${member.trialBrandName}`}
-                </span>
-              </div>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                미사용
-              </span>
-            )}
+
+          {/* Row 2: 가입일, 최종 로그인, 최종 로그인 IP, 이용금액 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 py-5 border-b border-gray-100">
+            {/* 가입일 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">가입일</label>
+              <p className="text-sm font-medium text-left">
+                {member.createdAt
+                  ? new Date(member.createdAt).toLocaleDateString('ko-KR')
+                  : '-'}
+              </p>
+            </div>
+
+            {/* 최종 로그인 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">최종 로그인</label>
+              <p className="text-sm font-medium text-left">
+                {member.lastLoginAt
+                  ? new Date(member.lastLoginAt).toLocaleString('ko-KR')
+                  : '-'}
+              </p>
+            </div>
+
+            {/* 최종 로그인 IP */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">최종 로그인 IP</label>
+              <p className="text-sm font-medium text-left">{member.lastLoginIP || '-'}</p>
+            </div>
+
+            {/* 이용금액 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">이용금액</label>
+              <p className="text-sm font-medium text-blue-600 text-left">
+                {(member.totalAmount ?? 0).toLocaleString()}원
+              </p>
+            </div>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-500 mb-1">메모</label>
-            {editMode ? (
-              <textarea
-                value={formData.memo}
-                onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="관리자 메모"
-              />
-            ) : (
-              <p className="text-gray-600">{member.memo || '-'}</p>
-            )}
+
+          {/* Row 3: 그룹, 무료체험, 메모 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 pt-5">
+            {/* 그룹 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">그룹</label>
+              {editMode ? (
+                <select
+                  value={formData.group}
+                  onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  {MEMBER_GROUP_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  member.group === 'internal'
+                    ? 'bg-purple-100 text-purple-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {MEMBER_GROUPS[member.group as keyof typeof MEMBER_GROUPS] || member.group || '일반'}
+                </span>
+              )}
+            </div>
+
+            {/* 무료체험 */}
+            <div>
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">무료체험</label>
+              {member.trialApplied ? (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 w-fit">
+                    이용완료
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {member.trialAppliedAt && new Date(member.trialAppliedAt).toLocaleDateString('ko-KR')}
+                    {member.trialBrandName && ` · ${member.trialBrandName}`}
+                  </span>
+                </div>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                  미사용
+                </span>
+              )}
+            </div>
+
+            {/* 메모 */}
+            <div className="col-span-2">
+              <label className="block text-xs sm:text-sm text-gray-500 mb-1">메모</label>
+              {editMode ? (
+                <textarea
+                  value={formData.memo}
+                  onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="관리자 메모"
+                />
+              ) : (
+                <p className="text-sm text-gray-600 text-left">{member.memo || '-'}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* 매장 목록 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 overflow-visible">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 overflow-visible">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Sofa className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold">매장 목록</h2>
             <span className="text-sm text-gray-400">({tenants.length})</span>
           </div>
-          <div className="flex items-center gap-3" ref={tenantFilterRef}>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap" ref={tenantFilterRef}>
             {/* 매장 필터 */}
             {tenants.length > 0 && (
               <>
@@ -1727,7 +1742,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <div className="relative">
                   <button
                     onClick={() => setTenantFilterOpen(tenantFilterOpen === 'industry' ? null : 'industry')}
-                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterIndustry.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border rounded-lg flex items-center gap-1 whitespace-nowrap ${tenantFilterIndustry.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                   >
                     업종 {tenantFilterIndustry.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterIndustry.length}</span>}
                   </button>
@@ -1751,7 +1766,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <div className="relative">
                   <button
                     onClick={() => setTenantFilterOpen(tenantFilterOpen === 'status' ? null : 'status')}
-                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterStatus.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border rounded-lg flex items-center gap-1 whitespace-nowrap ${tenantFilterStatus.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                   >
                     상태 {tenantFilterStatus.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterStatus.length}</span>}
                   </button>
@@ -1782,7 +1797,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                 <div className="relative">
                   <button
                     onClick={() => setTenantFilterOpen(tenantFilterOpen === 'plan' ? null : 'plan')}
-                    className={`px-3 py-1.5 text-sm border rounded-lg flex items-center gap-1 ${tenantFilterPlan.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border rounded-lg flex items-center gap-1 whitespace-nowrap ${tenantFilterPlan.length > 0 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                   >
                     플랜 {tenantFilterPlan.length > 0 && <span className="bg-blue-500 text-white text-xs px-1.5 rounded-full">{tenantFilterPlan.length}</span>}
                   </button>
@@ -1811,10 +1826,11 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             )}
             <button
               onClick={() => setAddTenantModal(true)}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors whitespace-nowrap"
             >
-              <Plus className="w-4 h-4" />
-              매장 추가
+              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">매장 추가</span>
+              <span className="sm:hidden">추가</span>
             </button>
           </div>
         </div>
@@ -1829,58 +1845,62 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             </button>
           </div>
         ) : (
-          <div className="overflow-visible">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-6 px-6">
+            <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">No.</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">tenantId</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">매장명</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">업종</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">상태</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">플랜</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">시작일</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">종료일</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">다음 결제일</th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-600">액션</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">No.</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">tenantId</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">매장명</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">업종</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">상태</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">플랜</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">시작일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">종료일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">다음 결제일</th>
+                  <th className="px-3 py-3 text-center font-medium text-gray-600 whitespace-nowrap">액션</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredTenants.map((tenant, index) => (
                   <tr key={tenant.tenantId} className={`hover:bg-gray-50 transition-colors ${deletingTenantId === tenant.tenantId ? 'opacity-50 pointer-events-none' : ''} ${tenant.deleted ? 'bg-red-50/50' : ''}`}>
-                    <td className="px-3 py-3 text-center text-gray-500">
-                      {deletingTenantId === tenant.tenantId ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        index + 1
-                      )}
+                    <td className="px-3 py-3 text-center text-gray-500 whitespace-nowrap">
+                      {index + 1}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className="text-xs font-mono text-gray-600">{tenant.tenantId}</span>
+                      <span className="text-xs text-gray-500 font-mono">
+                        {tenant.tenantId}
+                      </span>
                     </td>
-                    <td className="px-3 py-3 text-center font-medium text-gray-900">{tenant.brandName}</td>
-                    <td className="px-3 py-3 text-center text-gray-600">
+                    <td className="px-3 py-3 text-center font-medium text-gray-900 whitespace-nowrap">
+                      {tenant.brandName}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
                       {INDUSTRY_OPTIONS.find(opt => opt.value === tenant.industry)?.label || tenant.industry || '-'}
                     </td>
-                    <td className="px-3 py-3 text-center">
-                      {tenant.deleted
-                        ? getStatusBadge('deleted', 'sm')
-                        : getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)}
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {deletingTenantId === tenant.tenantId ? (
+                        <Spinner size="sm" />
+                      ) : tenant.deleted ? (
+                        getStatusBadge('deleted', 'sm')
+                      ) : (
+                        getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)
+                      )}
                     </td>
-                    <td className="px-3 py-3 text-center text-gray-600">
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
                       {tenant.deleted ? <span className="text-gray-400">-</span> : getPlanName(tenant.subscription?.plan)}
                     </td>
-                    <td className="px-3 py-3 text-center text-gray-600">
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
                       {tenant.subscription?.currentPeriodStart
                         ? new Date(tenant.subscription.currentPeriodStart).toLocaleDateString('ko-KR')
                         : '-'}
                     </td>
-                    <td className="px-3 py-3 text-center text-gray-600">
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
                       {tenant.subscription?.currentPeriodEnd
                         ? new Date(tenant.subscription.currentPeriodEnd).toLocaleDateString('ko-KR')
                         : '-'}
                     </td>
-                    <td className="px-3 py-3 text-center text-gray-600">
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
                       {tenant.subscription?.nextBillingDate &&
                        tenant.subscription?.status !== 'expired' &&
                        tenant.subscription?.status !== 'canceled'

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { issueBillingKey, payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncNewSubscription } from '@/lib/tenant-sync';
-import { getPlanById } from '@/lib/auth';
+import { getPlanById, incrementLinkUsage } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
   // 신규 매장 생성 파라미터
   const brandNameParam = searchParams.get('brandName');
   const industryParam = searchParams.get('industry');
+  // 커스텀 결제 링크 파라미터
+  const linkId = searchParams.get('linkId');
+  const billingType = searchParams.get('billingType') as 'recurring' | 'onetime' | null;
+  const subscriptionDaysParam = searchParams.get('subscriptionDays');
 
   // 인증 파라미터 생성 (리다이렉트 시 사용)
   // emailParam이 없으면 customerKey(이메일)를 폴백으로 사용
@@ -350,7 +354,18 @@ export async function GET(request: NextRequest) {
     // 구독 정보 저장 (tenantId를 document ID로 사용)
     const now = new Date();
     const nextBillingDate = new Date(now);
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+    // 1회성 결제인 경우 subscriptionDays 기반으로 기간 계산
+    const isOnetime = billingType === 'onetime';
+    const subscriptionDays = subscriptionDaysParam ? parseInt(subscriptionDaysParam) : 30;
+
+    if (isOnetime && subscriptionDays > 0) {
+      // 1회성: 지정된 일수 후 종료
+      nextBillingDate.setDate(nextBillingDate.getDate() + subscriptionDays);
+    } else {
+      // 정기: 1개월 후
+      nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+    }
 
     // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
     const currentPeriodEnd = new Date(nextBillingDate);
@@ -375,6 +390,9 @@ export async function GET(request: NextRequest) {
         currentPeriodStart: now,
         currentPeriodEnd,
         nextBillingDate,
+        // 1회성 결제인 경우 기간 종료 시 자동 해지
+        cancelAtPeriodEnd: isOnetime,
+        billingType: isOnetime ? 'onetime' : 'recurring',
         cardInfo: billingResponse.card || null,
         createdAt: now,
         updatedAt: now,
@@ -471,6 +489,17 @@ export async function GET(request: NextRequest) {
         });
       } catch {
         // 웹훅 실패 무시
+      }
+    }
+
+    // 커스텀 링크 사용 시 사용횟수 증가
+    if (linkId) {
+      try {
+        await incrementLinkUsage(linkId);
+        console.log('✅ Custom link usage incremented:', linkId);
+      } catch (linkError) {
+        console.error('Failed to increment link usage:', linkError);
+        // 사용횟수 증가 실패해도 결제는 완료됨
       }
     }
 

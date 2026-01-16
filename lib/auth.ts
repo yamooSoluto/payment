@@ -623,3 +623,164 @@ export async function getPlanSettings(): Promise<{ gridCols: number }> {
     return { gridCols: 4 };
   }
 }
+
+// ============================================
+// 커스텀 결제 링크 관련 함수
+// ============================================
+
+export interface CustomPaymentLink {
+  id: string;
+  planId: string;
+  planName: string;
+  customAmount?: number;
+  targetEmail?: string;
+  validFrom: Date;
+  validUntil: Date;
+  maxUses: number;
+  currentUses: number;
+  memo?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  status: 'active' | 'expired' | 'disabled';
+}
+
+export interface ValidateLinkResult {
+  valid: boolean;
+  planId?: string;
+  planName?: string;
+  amount?: number;
+  linkId?: string;
+  billingType?: 'recurring' | 'onetime';
+  subscriptionDays?: number;  // 1회성 결제 시 이용 기간 (일 단위)
+  error?: string;
+}
+
+// 커스텀 결제 링크 검증
+export async function validateCustomLink(
+  linkId: string,
+  email?: string
+): Promise<ValidateLinkResult> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) {
+    return { valid: false, error: 'database_unavailable' };
+  }
+
+  try {
+    const doc = await db.collection('customPaymentLinks').doc(linkId).get();
+
+    if (!doc.exists) {
+      return { valid: false, error: 'link_not_found' };
+    }
+
+    const data = doc.data();
+    if (!data) {
+      return { valid: false, error: 'link_not_found' };
+    }
+
+    // 상태 확인
+    if (data.status === 'disabled') {
+      return { valid: false, error: 'link_disabled' };
+    }
+
+    // 유효기간 확인
+    const now = new Date();
+    const validFrom = data.validFrom?.toDate?.() || new Date(data.validFrom);
+    const validUntil = data.validUntil?.toDate?.() || new Date(data.validUntil);
+
+    if (now < validFrom) {
+      return { valid: false, error: 'link_not_yet_valid' };
+    }
+
+    if (now > validUntil) {
+      return { valid: false, error: 'link_expired' };
+    }
+
+    // 사용횟수 확인 (0 = 무제한)
+    if (data.maxUses > 0 && data.currentUses >= data.maxUses) {
+      return { valid: false, error: 'link_max_uses_reached' };
+    }
+
+    // 대상 이메일 확인 (설정된 경우)
+    if (data.targetEmail && email) {
+      const normalizedTarget = data.targetEmail.toLowerCase().trim();
+      const normalizedEmail = email.toLowerCase().trim();
+      if (normalizedTarget !== normalizedEmail) {
+        return { valid: false, error: 'email_not_allowed' };
+      }
+    }
+
+    // 플랜 정보 조회
+    const planInfo = await getPlanById(data.planId);
+    if (!planInfo) {
+      return { valid: false, error: 'plan_not_found' };
+    }
+
+    return {
+      valid: true,
+      planId: data.planId,
+      planName: data.planName || planInfo.name,
+      amount: data.customAmount || planInfo.price,
+      linkId: doc.id,
+      billingType: data.billingType || 'recurring',
+      subscriptionDays: data.subscriptionDays || null,
+    };
+  } catch (error) {
+    console.error('Failed to validate custom link:', error);
+    return { valid: false, error: 'validation_failed' };
+  }
+}
+
+// 커스텀 링크 사용횟수 증가
+export async function incrementLinkUsage(linkId: string): Promise<boolean> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return false;
+
+  try {
+    const { FieldValue } = await import('firebase-admin/firestore');
+    await db.collection('customPaymentLinks').doc(linkId).update({
+      currentUses: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to increment link usage:', error);
+    return false;
+  }
+}
+
+// 모든 플랜 조회 (숨겨진 플랜 포함 - 어드민용)
+export async function getAllPlansIncludingHidden(): Promise<Array<{
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+  order: number;
+}>> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return [];
+
+  try {
+    const snapshot = await db.collection('plans').orderBy('order', 'asc').get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      name: doc.data().name || doc.id,
+      price: doc.data().price || 0,
+      isActive: doc.data().isActive ?? true,
+      order: doc.data().order || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to get all plans:', error);
+    return [];
+  }
+}
+
+// 링크 ID 생성 (짧은 랜덤 문자열)
+export function generateLinkId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}

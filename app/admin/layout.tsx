@@ -29,6 +29,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
   // 로그인 페이지는 레이아웃 적용하지 않음
   const isLoginPage = pathname === '/admin/login';
+  const isDashboardPage = pathname === '/admin';
 
   // 인증 확인
   useEffect(() => {
@@ -72,7 +73,13 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         <AdminHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* 컨텐츠 영역 */}
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-w-0 max-w-full">
+        <main
+          className={
+            isDashboardPage
+              ? 'flex-1 px-4 pb-4 pt-0 lg:px-6 lg:pb-6 lg:pt-0 overflow-y-auto min-w-0 max-w-full'
+              : 'flex-1 p-4 lg:p-6 overflow-y-auto min-w-0 max-w-full'
+          }
+        >
           {children}
         </main>
       </div>
