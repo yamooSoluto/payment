@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Mail, Plus, EditPencil, Trash, RefreshDouble, Xmark, Flash, Send, Clock, NavArrowLeft, NavArrowRight, Search } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
+import { MEMBER_GROUP_OPTIONS, MEMBER_GROUPS, MemberGroupCode } from '@/lib/constants';
 
 // ===== 인터페이스 =====
 interface Template {
@@ -16,10 +17,6 @@ interface Template {
   createdAt: string;
 }
 
-interface MemberGroup {
-  id: string;
-  name: string;
-}
 
 interface SmsHistory {
   id: string;
@@ -52,12 +49,20 @@ const TRIGGER_EVENTS = [
   { value: 'subscription_renewed', label: '구독 갱신' },
 ];
 
+// 구독 상태 옵션
+const SUBSCRIPTION_STATUS_OPTIONS = [
+  { id: 'active', name: '구독중' },
+  { id: 'trial', name: '체험중' },
+  { id: 'expired', name: '만료' },
+  { id: 'canceled', name: '해지' },
+  { id: 'none', name: '미구독' },
+];
+
 export default function NotificationsPage() {
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'sms' | 'alimtalk'>('sms');
 
   // ===== SMS 관련 상태 =====
-  const [groups, setGroups] = useState<MemberGroup[]>([]);
   const [smsHistory, setSmsHistory] = useState<SmsHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(1);
@@ -65,7 +70,8 @@ export default function NotificationsPage() {
   const [smsSending, setSmsSending] = useState(false);
   const [smsForm, setSmsForm] = useState({
     sendType: 'group' as 'group' | 'search' | 'direct',
-    selectedGroups: [] as string[],
+    selectedGroups: [] as string[],      // 회원 그룹 (일반, 내부 등)
+    selectedStatuses: [] as string[],    // 구독 상태 (active, trial 등)
     phones: '',
     subject: '',
     message: '',
@@ -78,6 +84,11 @@ export default function NotificationsPage() {
   const [memberSearchResults, setMemberSearchResults] = useState<SearchedMember[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<SearchedMember[]>([]);
   const [memberSearching, setMemberSearching] = useState(false);
+
+  // SMS 미리보기 모달 상태
+  const [showSmsPreview, setShowSmsPreview] = useState(false);
+  const [previewPhoneCount, setPreviewPhoneCount] = useState(0);
+  const [previewTargets, setPreviewTargets] = useState<{ email: string; name: string; phone: string }[]>([]);
 
   // ===== 알림톡 관련 상태 =====
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -95,18 +106,6 @@ export default function NotificationsPage() {
   });
 
   // ===== 데이터 페칭 =====
-  const fetchGroups = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/member-groups');
-      if (response.ok) {
-        const data = await response.json();
-        setGroups(data.groups || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch groups:', error);
-    }
-  }, []);
-
   const fetchSmsHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
@@ -140,12 +139,11 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (activeTab === 'sms') {
-      fetchGroups();
       fetchSmsHistory();
     } else {
       fetchTemplates();
     }
-  }, [activeTab, fetchGroups, fetchSmsHistory, fetchTemplates]);
+  }, [activeTab, fetchSmsHistory, fetchTemplates]);
 
   // ===== SMS 핸들러 =====
   const handleSearchMembers = async () => {
@@ -183,26 +181,83 @@ export default function NotificationsPage() {
     setSelectedMembers(prev => prev.filter(m => m.id !== memberId));
   };
 
-  const handleSendSms = async () => {
+  // 미리보기 열기 (발송 전 확인)
+  const handleOpenPreview = async () => {
     // 유효성 검사
     if (!smsForm.message.trim()) {
       alert('메시지 내용을 입력해주세요.');
       return;
     }
 
-    let phones: string[] = [];
+    let phoneCount = 0;
+    let targets: { email: string; name: string; phone: string }[] = [];
 
     if (smsForm.sendType === 'group') {
-      if (smsForm.selectedGroups.length === 0) {
-        alert('발송할 그룹을 선택해주세요.');
+      if (smsForm.selectedGroups.length === 0 && smsForm.selectedStatuses.length === 0) {
+        alert('회원 그룹 또는 구독 상태를 선택해주세요.');
         return;
       }
-      // 그룹의 회원 전화번호 조회
+      // 수신자 정보 조회
       try {
         const response = await fetch('/api/admin/members/by-groups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ groupIds: smsForm.selectedGroups }),
+          body: JSON.stringify({
+            groupIds: smsForm.selectedGroups,
+            statuses: smsForm.selectedStatuses,
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          phoneCount = data.count || 0;
+          targets = data.members || [];
+        }
+      } catch (error) {
+        console.error('Failed to fetch group members:', error);
+        alert('수신자 정보를 불러오는데 실패했습니다.');
+        return;
+      }
+    } else if (smsForm.sendType === 'search') {
+      if (selectedMembers.length === 0) {
+        alert('발송할 회원을 선택해주세요.');
+        return;
+      }
+      targets = selectedMembers.filter(m => m.phone).map(m => ({
+        email: m.email,
+        name: m.name,
+        phone: m.phone,
+      }));
+      phoneCount = targets.length;
+    } else {
+      const phones = smsForm.phones.split(/[,\n]/).map(p => p.trim()).filter(p => p);
+      targets = phones.map(phone => ({ email: '', name: '', phone }));
+      phoneCount = phones.length;
+    }
+
+    if (phoneCount === 0) {
+      alert('발송할 수신자가 없습니다.');
+      return;
+    }
+
+    setPreviewPhoneCount(phoneCount);
+    setPreviewTargets(targets);
+    setShowSmsPreview(true);
+  };
+
+  const handleSendSms = async () => {
+    setShowSmsPreview(false);
+    let phones: string[] = [];
+
+    if (smsForm.sendType === 'group') {
+      // 그룹/상태의 회원 전화번호 조회
+      try {
+        const response = await fetch('/api/admin/members/by-groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupIds: smsForm.selectedGroups,
+            statuses: smsForm.selectedStatuses,
+          }),
         });
         if (response.ok) {
           const data = await response.json();
@@ -250,6 +305,7 @@ export default function NotificationsPage() {
         setSmsForm({
           sendType: 'group',
           selectedGroups: [],
+          selectedStatuses: [],
           phones: '',
           subject: '',
           message: '',
@@ -278,6 +334,15 @@ export default function NotificationsPage() {
       selectedGroups: prev.selectedGroups.includes(groupId)
         ? prev.selectedGroups.filter(id => id !== groupId)
         : [...prev.selectedGroups, groupId],
+    }));
+  };
+
+  const handleStatusToggle = (statusId: string) => {
+    setSmsForm(prev => ({
+      ...prev,
+      selectedStatuses: prev.selectedStatuses.includes(statusId)
+        ? prev.selectedStatuses.filter(id => id !== statusId)
+        : [...prev.selectedStatuses, statusId],
     }));
   };
 
@@ -454,28 +519,60 @@ export default function NotificationsPage() {
               </div>
             </div>
 
-            {/* 그룹 선택 */}
+            {/* 그룹/상태 선택 */}
             {smsForm.sendType === 'group' && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">발송 그룹</label>
-                {groups.length === 0 ? (
-                  <p className="text-sm text-gray-500">등록된 그룹이 없습니다.</p>
-                ) : (
+              <div className="space-y-4 mb-4">
+                {/* 회원 그룹 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">회원 그룹</label>
                   <div className="flex flex-wrap gap-2">
-                    {groups.map(group => (
+                    {MEMBER_GROUP_OPTIONS.map(group => (
                       <button
-                        key={group.id}
-                        onClick={() => handleGroupToggle(group.id)}
+                        key={group.value}
+                        onClick={() => handleGroupToggle(group.value)}
                         className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                          smsForm.selectedGroups.includes(group.id)
-                            ? 'bg-blue-600 text-white border-blue-600'
+                          smsForm.selectedGroups.includes(group.value)
+                            ? group.value === 'internal'
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-blue-600 text-white border-blue-600'
                             : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
                         }`}
                       >
-                        {group.name}
+                        {group.label}
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* 구독 상태 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">구독 상태</label>
+                  <div className="flex flex-wrap gap-2">
+                    {SUBSCRIPTION_STATUS_OPTIONS.map(status => (
+                      <button
+                        key={status.id}
+                        onClick={() => handleStatusToggle(status.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                          smsForm.selectedStatuses.includes(status.id)
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-gray-700 border-gray-200 hover:border-green-300'
+                        }`}
+                      >
+                        {status.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 선택 안내 */}
+                {(smsForm.selectedGroups.length > 0 || smsForm.selectedStatuses.length > 0) && (
+                  <p className="text-xs text-gray-500">
+                    {smsForm.selectedGroups.length > 0 && smsForm.selectedStatuses.length > 0
+                      ? '선택한 그룹 중 선택한 상태에 해당하는 회원에게 발송됩니다.'
+                      : smsForm.selectedGroups.length > 0
+                        ? '선택한 그룹의 모든 회원에게 발송됩니다.'
+                        : '선택한 상태의 모든 회원에게 발송됩니다.'}
+                  </p>
                 )}
               </div>
             )}
@@ -624,12 +721,12 @@ export default function NotificationsPage() {
 
             {/* 발송 버튼 */}
             <button
-              onClick={handleSendSms}
+              onClick={handleOpenPreview}
               disabled={smsSending}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               {smsSending ? (
-                <RefreshDouble className="w-5 h-5 animate-spin" />
+                <Spinner size="sm" />
               ) : (
                 <>
                   <Send className="w-5 h-5" />
@@ -645,7 +742,7 @@ export default function NotificationsPage() {
 
             {historyLoading ? (
               <div className="flex items-center justify-center py-10">
-                <RefreshDouble className="w-6 h-6 text-blue-600 animate-spin" />
+                <Spinner size="md" />
               </div>
             ) : smsHistory.length === 0 ? (
               <div className="text-center py-10 text-gray-500">
@@ -675,12 +772,22 @@ export default function NotificationsPage() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-900 line-clamp-2 mb-2">{item.message}</p>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>수신자 {item.recipientCount}명</span>
-                        <span>
-                          성공 {item.sentCount}
-                          {item.failedCount > 0 && <span className="text-red-500"> / 실패 {item.failedCount}</span>}
-                        </span>
+                      <div className="flex flex-col gap-1 text-xs text-gray-500">
+                        <div className="flex items-center justify-between">
+                          <span>발신: {item.sentByName || item.sentBy || '시스템'}</span>
+                          <span>
+                            성공 {item.sentCount}
+                            {item.failedCount > 0 && <span className="text-red-500"> / 실패 {item.failedCount}</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>수신: {item.recipientCount}명</span>
+                          {item.recipients && item.recipients.length > 0 && (
+                            <span className="text-gray-400 truncate max-w-[150px]" title={item.recipients.join(', ')}>
+                              {item.recipients.slice(0, 2).join(', ')}{item.recipients.length > 2 && ` 외 ${item.recipients.length - 2}명`}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -938,7 +1045,109 @@ export default function NotificationsPage() {
                 disabled={templateSaving}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {templateSaving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
+                {templateSaving ? <Spinner size="sm" /> : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SMS 미리보기 모달 */}
+      {showSmsPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">발송 확인</h2>
+              <button
+                onClick={() => setShowSmsPreview(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 메시지 미리보기 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">메시지 내용</label>
+                <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-900 whitespace-pre-wrap">
+                  {smsForm.subject && <p className="font-medium mb-2">[{smsForm.subject}]</p>}
+                  {smsForm.message}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {smsForm.message.length}자 ({smsForm.message.length > 90 ? 'LMS' : 'SMS'})
+                </p>
+              </div>
+
+              {/* 수신자 목록 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">
+                  수신자 목록 ({previewPhoneCount}명)
+                </label>
+                <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
+                  {previewTargets.length > 0 ? (
+                    <div className="space-y-1">
+                      {previewTargets.map((target, index) => (
+                        <div key={index} className="flex items-center justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                          <span className="text-gray-900">
+                            {target.name || target.email || '이름 없음'}
+                          </span>
+                          <span className="text-gray-500 font-mono text-xs">
+                            {target.phone}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-2">수신자 정보 없음</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 발송 정보 */}
+              <div className="bg-blue-50 rounded-lg p-4 space-y-2">
+                {smsForm.isScheduled && smsForm.scheduledAt && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">예약 시간</span>
+                    <span className="font-medium text-orange-600">
+                      {new Date(smsForm.scheduledAt).toLocaleString('ko-KR')}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">발송 유형</span>
+                  <span className="font-medium text-blue-700">
+                    {smsForm.message.length > 90 ? 'LMS' : 'SMS'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 경고 문구 */}
+              <p className="text-xs text-gray-500 text-center">
+                발송 후에는 취소할 수 없습니다. 내용을 다시 한번 확인해주세요.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSmsPreview(false)}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSendSms}
+                disabled={smsSending}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {smsSending ? (
+                  <Spinner size="sm" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    발송하기
+                  </>
+                )}
               </button>
             </div>
           </div>

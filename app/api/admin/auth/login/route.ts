@@ -74,12 +74,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 세션 쿠키 설정
+    // 세션 쿠키 설정 (30일)
     response.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60, // 24시간
+      maxAge: 30 * 24 * 60 * 60, // 30일
       path: '/',
     });
 

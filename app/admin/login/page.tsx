@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, User, WarningCircle, Eye, EyeClosed } from 'iconoir-react';
 import Image from 'next/image';
@@ -13,7 +13,14 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { login } = useAdminAuth();
+  const { login, admin, loading: authLoading } = useAdminAuth();
+
+  // 이미 로그인되어 있으면 /admin으로 리다이렉트
+  useEffect(() => {
+    if (!authLoading && admin) {
+      router.replace('/admin');
+    }
+  }, [admin, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +41,15 @@ export default function AdminLoginPage() {
       setLoading(false);
     }
   };
+
+  // 로그인 체크 중이거나 이미 로그인된 상태면 로딩 표시
+  if (authLoading || admin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-yamoo-accent border-t-yamoo-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">

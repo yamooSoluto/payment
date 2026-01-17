@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Page, Check, Eye, Xmark, Clock, Calendar, Upload, Trash } from 'iconoir-react';
+import { Page, Check, Eye, Xmark, Clock, Calendar, Trash } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -11,21 +11,21 @@ import TextAlign from '@tiptap/extension-text-align';
 
 type TabType = 'terms' | 'privacy';
 
-interface TermsHistory {
-  id: string;
-  termsOfService: string;
-  privacyPolicy: string;
-  publishedAt: string;
-  publishedBy: string;
-  version: number;
-}
-
-interface PublishedTerms {
-  termsOfService: string;
-  privacyPolicy: string;
+interface PublishedInfo {
+  content: string;
   publishedAt: string | null;
   publishedBy: string | null;
   version: number;
+  effectiveDate: string | null;
+}
+
+interface HistoryItem {
+  id: string;
+  content: string;
+  publishedAt: string;
+  publishedBy: string;
+  version: number;
+  effectiveDate: string | null;
 }
 
 function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
@@ -133,15 +133,30 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
 function PreviewModal({
   type,
   content,
+  effectiveDate,
   title,
   onClose
 }: {
   type: 'terms' | 'privacy';
   content: string;
+  effectiveDate?: string | null;
   title?: string;
   onClose: () => void;
 }) {
   const defaultTitle = type === 'terms' ? 'YAMOO 서비스이용약관' : '개인정보처리방침';
+
+  // 시행일 포맷
+  const formatEffectiveDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const formattedDate = formatEffectiveDate(effectiveDate);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -150,7 +165,12 @@ function PreviewModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold">{title || defaultTitle}</h2>
+          <div>
+            <h2 className="text-xl font-bold">{title || defaultTitle}</h2>
+            {formattedDate && (
+              <p className="text-sm text-gray-500 mt-1">시행일: {formattedDate}</p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -177,6 +197,7 @@ function PreviewModal({
 }
 
 function HistoryModal({
+  type,
   history,
   currentVersion,
   onClose,
@@ -184,11 +205,12 @@ function HistoryModal({
   onDelete,
   deleting
 }: {
-  history: TermsHistory[];
+  type: TabType;
+  history: HistoryItem[];
   currentVersion: number | null;
   onClose: () => void;
-  onSelect: (item: TermsHistory, type: 'terms' | 'privacy') => void;
-  onDelete: (item: TermsHistory) => void;
+  onSelect: (item: HistoryItem) => void;
+  onDelete: (item: HistoryItem) => void;
   deleting: string | null;
 }) {
   const formatDate = (dateStr: string) => {
@@ -203,6 +225,8 @@ function HistoryModal({
     });
   };
 
+  const typeLabel = type === 'terms' ? '이용약관' : '개인정보처리방침';
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -212,7 +236,7 @@ function HistoryModal({
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-500" />
-            <h2 className="text-xl font-bold">배포 내역</h2>
+            <h2 className="text-xl font-bold">{typeLabel} 배포 내역</h2>
           </div>
           <button
             onClick={onClose}
@@ -260,20 +284,12 @@ function HistoryModal({
                       )}
                     </button>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onSelect(item, 'terms')}
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      이용약관 보기
-                    </button>
-                    <button
-                      onClick={() => onSelect(item, 'privacy')}
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      개인정보처리방침 보기
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => onSelect(item)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    내용 보기
+                  </button>
                 </div>
               ))}
             </div>
@@ -294,20 +310,21 @@ export default function TermsSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('terms');
   const [showPreview, setShowPreview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState<{
-    item: TermsHistory;
-    type: 'terms' | 'privacy';
-  } | null>(null);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [termsContent, setTermsContent] = useState('');
   const [privacyContent, setPrivacyContent] = useState('');
-  const [published, setPublished] = useState<PublishedTerms | null>(null);
-  const [history, setHistory] = useState<TermsHistory[]>([]);
+  const [termsPublished, setTermsPublished] = useState<PublishedInfo | null>(null);
+  const [privacyPublished, setPrivacyPublished] = useState<PublishedInfo | null>(null);
+  const [termsHistory, setTermsHistory] = useState<HistoryItem[]>([]);
+  const [privacyHistory, setPrivacyHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [publishingTerms, setPublishingTerms] = useState(false);
+  const [publishingPrivacy, setPublishingPrivacy] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState(false);
+  const [publishTermsSuccess, setPublishTermsSuccess] = useState(false);
+  const [publishPrivacySuccess, setPublishPrivacySuccess] = useState(false);
   const [error, setError] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -362,8 +379,10 @@ export default function TermsSettingsPage() {
         const data = await response.json();
         setTermsContent(data.draft?.termsOfService || '');
         setPrivacyContent(data.draft?.privacyPolicy || '');
-        setPublished(data.published);
-        setHistory(data.history || []);
+        setTermsPublished(data.termsPublished);
+        setPrivacyPublished(data.privacyPublished);
+        setTermsHistory(data.termsHistory || []);
+        setPrivacyHistory(data.privacyHistory || []);
         setHasUnsavedChanges(false);
 
         if (termsEditor) {
@@ -431,7 +450,7 @@ export default function TermsSettingsPage() {
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = async (type: 'terms' | 'privacy') => {
     if (hasUnsavedChanges) {
       if (!confirm('저장되지 않은 변경사항이 있습니다. 먼저 저장하시겠습니까?')) {
         return;
@@ -439,45 +458,59 @@ export default function TermsSettingsPage() {
       await handleSave();
     }
 
-    if (!confirm('약관을 배포하시겠습니까? 배포 후 즉시 사용자에게 공개됩니다.')) {
+    const typeLabel = type === 'terms' ? '이용약관' : '개인정보처리방침';
+    if (!confirm(`${typeLabel}을 배포하시겠습니까? 배포 후 즉시 사용자에게 공개됩니다.`)) {
       return;
     }
 
-    setPublishing(true);
-    setPublishSuccess(false);
+    if (type === 'terms') {
+      setPublishingTerms(true);
+      setPublishTermsSuccess(false);
+    } else {
+      setPublishingPrivacy(true);
+      setPublishPrivacySuccess(false);
+    }
     setError('');
 
     try {
-      const response = await fetch('/api/admin/settings/terms', {
+      const response = await fetch(`/api/admin/settings/terms?type=${type}`, {
         method: 'POST',
         credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
-        setPublishSuccess(true);
-        setTimeout(() => setPublishSuccess(false), 3000);
-        // 데이터 새로고침
+        if (type === 'terms') {
+          setPublishTermsSuccess(true);
+          setTimeout(() => setPublishTermsSuccess(false), 3000);
+        } else {
+          setPublishPrivacySuccess(true);
+          setTimeout(() => setPublishPrivacySuccess(false), 3000);
+        }
         fetchTerms();
-        alert(`v${data.version} 배포가 완료되었습니다.`);
+        alert(data.message);
       } else {
         const data = await response.json();
         setError(data.error || '배포에 실패했습니다.');
       }
     } catch (err) {
-      console.error('Failed to publish terms:', err);
+      console.error('Failed to publish:', err);
       setError('배포 중 오류가 발생했습니다.');
     } finally {
-      setPublishing(false);
+      if (type === 'terms') {
+        setPublishingTerms(false);
+      } else {
+        setPublishingPrivacy(false);
+      }
     }
   };
 
-  const handleHistorySelect = (item: TermsHistory, type: 'terms' | 'privacy') => {
-    setSelectedHistoryItem({ item, type });
+  const handleHistorySelect = (item: HistoryItem) => {
+    setSelectedHistoryItem(item);
     setShowHistory(false);
   };
 
-  const handleDeleteHistory = async (item: TermsHistory) => {
+  const handleDeleteHistory = async (item: HistoryItem) => {
     if (!confirm(`v${item.version} 배포 내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
       return;
     }
@@ -486,13 +519,17 @@ export default function TermsSettingsPage() {
     setError('');
 
     try {
-      const response = await fetch(`/api/admin/settings/terms?id=${item.id}`, {
+      const response = await fetch(`/api/admin/settings/terms?id=${item.id}&type=${activeTab}`, {
         method: 'DELETE',
         credentials: 'include',
       });
 
       if (response.ok) {
-        setHistory(prev => prev.filter(h => h.id !== item.id));
+        if (activeTab === 'terms') {
+          setTermsHistory(prev => prev.filter(h => h.id !== item.id));
+        } else {
+          setPrivacyHistory(prev => prev.filter(h => h.id !== item.id));
+        }
       } else {
         const data = await response.json();
         setError(data.error || '삭제에 실패했습니다.');
@@ -507,6 +544,8 @@ export default function TermsSettingsPage() {
 
   const currentEditor = activeTab === 'terms' ? termsEditor : privacyEditor;
   const currentContent = activeTab === 'terms' ? termsContent : privacyContent;
+  const currentPublished = activeTab === 'terms' ? termsPublished : privacyPublished;
+  const currentHistory = activeTab === 'terms' ? termsHistory : privacyHistory;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
@@ -524,24 +563,29 @@ export default function TermsSettingsPage() {
         <div className="flex items-center gap-3">
           <Page className="w-8 h-8 text-blue-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">약관 관리</h1>
-            {published && (
-              <p className="text-sm text-gray-500 mt-0.5">
-                현재 배포: v{published.version} ({formatDate(published.publishedAt)})
-              </p>
-            )}
+            <h1 className="text-2xl font-bold text-gray-900">약관 / 개인정보처리방침 관리</h1>
+            <div className="flex items-center gap-4 mt-1">
+              {termsPublished && (
+                <span className="text-xs text-gray-500">
+                  이용약관: v{termsPublished.version} ({formatDate(termsPublished.effectiveDate || termsPublished.publishedAt)})
+                </span>
+              )}
+              {privacyPublished && (
+                <span className="text-xs text-gray-500">
+                  개인정보: v{privacyPublished.version} ({formatDate(privacyPublished.effectiveDate || privacyPublished.publishedAt)})
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {(history.length > 0 || published) && (
-            <button
-              onClick={() => setShowHistory(true)}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Clock className="w-4 h-4" />
-              배포 내역
-            </button>
-          )}
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Clock className="w-4 h-4" />
+            배포 내역
+          </button>
           <button
             onClick={() => setShowPreview(true)}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -560,20 +604,6 @@ export default function TermsSettingsPage() {
               <Check className="w-4 h-4 text-green-600" />
             ) : null}
             {saving ? '저장 중...' : saveSuccess ? '저장됨' : '저장'}
-          </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {publishing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : publishSuccess ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Upload className="w-4 h-4" />
-            )}
-            {publishing ? '배포 중...' : publishSuccess ? '배포됨' : '배포'}
           </button>
         </div>
       </div>
@@ -595,23 +625,51 @@ export default function TermsSettingsPage() {
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('terms')}
-            className={`px-6 py-4 font-medium transition-colors ${
+            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-between ${
               activeTab === 'terms'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            이용약관
+            <span>이용약관</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePublish('terms');
+              }}
+              disabled={publishingTerms}
+              className={`ml-2 px-3 py-1 text-xs rounded-lg transition-colors ${
+                activeTab === 'terms'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              } disabled:opacity-50`}
+            >
+              {publishingTerms ? '배포 중...' : publishTermsSuccess ? '배포됨' : '배포'}
+            </button>
           </button>
           <button
             onClick={() => setActiveTab('privacy')}
-            className={`px-6 py-4 font-medium transition-colors ${
+            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-between ${
               activeTab === 'privacy'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            개인정보처리방침
+            <span>개인정보처리방침</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePublish('privacy');
+              }}
+              disabled={publishingPrivacy}
+              className={`ml-2 px-3 py-1 text-xs rounded-lg transition-colors ${
+                activeTab === 'privacy'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              } disabled:opacity-50`}
+            >
+              {publishingPrivacy ? '배포 중...' : publishPrivacySuccess ? '배포됨' : '배포'}
+            </button>
           </button>
         </div>
 
@@ -636,8 +694,13 @@ export default function TermsSettingsPage() {
         {/* 안내 메시지 */}
         <div className="p-4 bg-gray-50 border-t border-gray-100">
           <p className="text-sm text-gray-500">
-            저장 후 배포를 해야 홈페이지에 반영됩니다. 배포 전까지는 현재 버전이 유지됩니다.
+            이용약관과 개인정보처리방침은 개별적으로 배포됩니다. 저장 후 각 탭의 &quot;배포&quot; 버튼을 눌러 홈페이지에 반영하세요.
           </p>
+          {currentPublished && (
+            <p className="text-sm text-blue-600 mt-1">
+              현재 {activeTab === 'terms' ? '이용약관' : '개인정보처리방침'} 배포 버전: v{currentPublished.version} (시행일: {formatDate(currentPublished.effectiveDate || currentPublished.publishedAt)})
+            </p>
+          )}
         </div>
       </div>
 
@@ -646,6 +709,7 @@ export default function TermsSettingsPage() {
         <PreviewModal
           type={activeTab}
           content={currentContent}
+          effectiveDate={new Date().toISOString()}
           onClose={() => setShowPreview(false)}
         />
       )}
@@ -653,8 +717,9 @@ export default function TermsSettingsPage() {
       {/* 배포 내역 모달 */}
       {showHistory && (
         <HistoryModal
-          history={history}
-          currentVersion={published?.version || null}
+          type={activeTab}
+          history={currentHistory}
+          currentVersion={currentPublished?.version || null}
           onClose={() => setShowHistory(false)}
           onSelect={handleHistorySelect}
           onDelete={handleDeleteHistory}
@@ -665,15 +730,10 @@ export default function TermsSettingsPage() {
       {/* 히스토리 상세 보기 모달 */}
       {selectedHistoryItem && (
         <PreviewModal
-          type={selectedHistoryItem.type}
-          content={
-            selectedHistoryItem.type === 'terms'
-              ? selectedHistoryItem.item.termsOfService
-              : selectedHistoryItem.item.privacyPolicy
-          }
-          title={`v${selectedHistoryItem.item.version} - ${
-            selectedHistoryItem.type === 'terms' ? '이용약관' : '개인정보처리방침'
-          }`}
+          type={activeTab}
+          content={selectedHistoryItem.content}
+          effectiveDate={selectedHistoryItem.effectiveDate || selectedHistoryItem.publishedAt}
+          title={`v${selectedHistoryItem.version} - ${activeTab === 'terms' ? '이용약관' : '개인정보처리방침'}`}
           onClose={() => setSelectedHistoryItem(null)}
         />
       )}

@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 
 const SALT_ROUNDS = 12;
-const SESSION_EXPIRY_HOURS = 24;
+const SESSION_EXPIRY_DAYS = 30; // 1개월
 const SESSION_COOKIE_NAME = 'admin_session';
 
 export interface Admin {
@@ -159,7 +159,7 @@ export async function createAdminSession(
 
   const sessionToken = uuidv4();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + SESSION_EXPIRY_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
   await db.collection('admin_sessions').doc(sessionToken).set({
     adminId,

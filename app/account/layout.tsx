@@ -217,7 +217,7 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-yamoo-accent border-t-yamoo-primary mx-auto mb-2"></div>
           <p className="text-sm text-gray-500">자동 로그인 중...</p>
         </div>
       </div>
@@ -233,7 +233,7 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   if (loading || (hasEmail && !authChecked && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-yamoo-accent border-t-yamoo-primary"></div>
       </div>
     );
   }
@@ -260,7 +260,7 @@ export default function AccountLayout({
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-yamoo-accent border-t-yamoo-primary"></div>
         </div>
       }
     >

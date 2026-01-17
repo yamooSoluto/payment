@@ -5,13 +5,13 @@ import { Page, Settings } from 'iconoir-react';
 
 const settingsMenus = [
   {
-    name: '일반',
-    description: '기본 설정을 관리합니다.',
+    name: '홈페이지 설정',
+    description: '로고, 파비콘, 메뉴, 링크 미리보기(OG) 설정을 관리합니다.',
     href: '/admin/settings/general',
     icon: Settings,
   },
   {
-    name: '약관',
+    name: '약관 / 개인정보처리방침',
     description: '이용약관 및 개인정보처리방침을 관리합니다.',
     href: '/admin/settings/terms',
     icon: Page,

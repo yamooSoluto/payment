@@ -6,10 +6,13 @@ import { Loader2 } from 'lucide-react';
 
 interface HistoryItem {
   id: string;
-  termsOfService: string;
-  privacyPolicy: string;
+  content: string;
   publishedAt: string;
+  effectiveDate: string | null;
   version: number;
+  // 하위 호환
+  termsOfService?: string;
+  privacyPolicy?: string;
 }
 
 interface DynamicTermsModalProps {
@@ -19,6 +22,7 @@ interface DynamicTermsModalProps {
 
 export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalProps) {
   const [currentContent, setCurrentContent] = useState<string>('');
+  const [currentEffectiveDate, setCurrentEffectiveDate] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingHistory, setViewingHistory] = useState<HistoryItem | null>(null);
@@ -32,7 +36,10 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
         if (response.ok) {
           const data = await response.json();
           setCurrentContent(type === 'terms' ? data.termsOfService : data.privacyPolicy);
-          setHistory(data.history || []);
+          setCurrentEffectiveDate(type === 'terms' ? data.termsEffectiveDate : data.privacyEffectiveDate);
+          // 새 구조의 히스토리 사용
+          const historyData = type === 'terms' ? data.termsHistory : data.privacyHistory;
+          setHistory(historyData || []);
         }
       } catch (error) {
         console.error('Failed to load terms:', error);
@@ -52,12 +59,22 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
   };
 
   const displayContent = viewingHistory
-    ? (type === 'terms' ? viewingHistory.termsOfService : viewingHistory.privacyPolicy)
+    ? (viewingHistory.content || viewingHistory.termsOfService || viewingHistory.privacyPolicy || '')
     : currentContent;
 
-  const title = viewingHistory
-    ? `${baseTitle} (${formatDate(viewingHistory.publishedAt)} 시행)`
-    : baseTitle;
+  // 히스토리 항목의 시행일 포맷
+  const getHistoryEffectiveDate = (item: HistoryItem) => {
+    if (item.effectiveDate) {
+      // effectiveDate가 이미 포맷된 문자열인 경우
+      if (typeof item.effectiveDate === 'string' && item.effectiveDate.includes('년')) {
+        return item.effectiveDate;
+      }
+      return formatDate(item.effectiveDate);
+    }
+    return formatDate(item.publishedAt);
+  };
+
+  const title = baseTitle;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -109,7 +126,7 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
                           onClick={() => setViewingHistory(item)}
                           className="text-sm text-yamoo-dark hover:underline"
                         >
-                          {formatDate(item.publishedAt)} 시행 약관
+                          v{item.version} - {getHistoryEffectiveDate(item)} 시행
                         </button>
                       </li>
                     ))}
