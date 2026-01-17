@@ -97,131 +97,131 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   if (db) {
     try {
-      // users 컬렉션에서 사용자 정보 조회 (우선)
-      const userDoc = await db.collection('users').doc(email).get();
+      // 1단계: 사용자 정보 + 매장 목록 병렬 조회
+      const [userDoc, tenantsSnapshot] = await Promise.all([
+        db.collection('users').doc(email).get(),
+        db.collection('tenants').where('email', '==', email).get(),
+      ]);
+
+      // 사용자 정보 처리
       if (userDoc.exists) {
         const userData = userDoc.data();
         userInfo = {
           name: userData?.name || '',
           phone: userData?.phone || '',
         };
-        // users에서 trialApplied 확인
         if (userData?.trialApplied === true) {
           hasTrialHistory = true;
         }
-
-        // 프로필 미완성 시 (이름 또는 연락처 없음) 로그인 페이지로 리다이렉트
         if (!userData?.name || !userData?.phone) {
           redirect(`/login?incomplete=true&email=${encodeURIComponent(email)}`);
         }
       } else {
-        // Firestore에 사용자 정보 없음 - 프로필 완성 필요
         redirect(`/login?incomplete=true&email=${encodeURIComponent(email)}`);
       }
 
-      // phone 기준으로 무료체험 이력 추가 확인 (users 컬렉션에서)
-      // 1. 현재 phone으로 조회
-      // 2. previousPhones에 포함된 경우도 조회 (연락처 변경 이력)
-      if (!hasTrialHistory && userInfo.phone) {
-        const [usersByCurrentPhone, usersByPreviousPhone] = await Promise.all([
-          db.collection('users')
-            .where('phone', '==', userInfo.phone)
-            .where('trialApplied', '==', true)
-            .limit(1)
-            .get(),
-          db.collection('users')
-            .where('previousPhones', 'array-contains', userInfo.phone)
-            .where('trialApplied', '==', true)
-            .limit(1)
-            .get(),
-        ]);
+      // 매장 데이터 준비 (삭제된 매장 제외)
+      const tenantDataList = tenantsSnapshot.docs
+        .filter((doc) => !doc.data().deleted)
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            tenantId: data.tenantId || doc.id,
+            brandName: data.brandName || '이름 없음',
+            email: data.email,
+            industry: data.industry || null,
+            createdAt: serializeTimestamp(data.createdAt),
+          };
+        });
 
+      // 2단계: 무료체험 이력 + 구독 정보 병렬 조회
+      const parallelQueries: Promise<unknown>[] = [];
+
+      // 무료체험 이력 조회 (phone이 있고 아직 이력이 없는 경우)
+      if (!hasTrialHistory && userInfo.phone) {
+        parallelQueries.push(
+          Promise.all([
+            db.collection('users')
+              .where('phone', '==', userInfo.phone)
+              .where('trialApplied', '==', true)
+              .limit(1)
+              .get(),
+            db.collection('users')
+              .where('previousPhones', 'array-contains', userInfo.phone)
+              .where('trialApplied', '==', true)
+              .limit(1)
+              .get(),
+          ])
+        );
+      } else {
+        parallelQueries.push(Promise.resolve(null));
+      }
+
+      // 구독 정보 조회 (매장이 있는 경우)
+      if (tenantDataList.length > 0) {
+        const subscriptionRefs = tenantDataList.map((t) =>
+          db.collection('subscriptions').doc(t.tenantId)
+        );
+        parallelQueries.push(db.getAll(...subscriptionRefs));
+      } else {
+        parallelQueries.push(Promise.resolve([]));
+      }
+
+      const [trialResult, subscriptionDocs] = await Promise.all(parallelQueries) as [
+        [FirebaseFirestore.QuerySnapshot, FirebaseFirestore.QuerySnapshot] | null,
+        FirebaseFirestore.DocumentSnapshot[]
+      ];
+
+      // 무료체험 이력 결과 처리
+      if (trialResult) {
+        const [usersByCurrentPhone, usersByPreviousPhone] = trialResult;
         if (!usersByCurrentPhone.empty || !usersByPreviousPhone.empty) {
           hasTrialHistory = true;
         }
       }
 
-      // tenants 컬렉션에서 email로 매장 목록 조회
-      const tenantsSnapshot = await db
-        .collection('tenants')
-        .where('email', '==', email)
-        .get();
+      // 구독 정보 Map으로 변환
+      const subscriptionMap = new Map<string, {
+        plan: string;
+        status: string;
+        amount: number;
+        baseAmount?: number;
+        nextBillingDate: string | null;
+        currentPeriodEnd: string | null;
+        canceledAt: string | null;
+        cancelMode?: 'scheduled' | 'immediate';
+      }>();
 
-      if (!tenantsSnapshot.empty) {
-        // users에서 정보가 없으면 첫 번째 tenant에서 가져오기
-        if (!userInfo.name || !userInfo.phone) {
-          const firstTenantData = tenantsSnapshot.docs[0].data();
-          userInfo = {
-            name: userInfo.name || firstTenantData.name || firstTenantData.ownerName || '',
-            phone: userInfo.phone || firstTenantData.phone || '',
-          };
-        }
-
-        // 모든 tenant 데이터 수집 (삭제된 매장 제외)
-        const tenantDataList = tenantsSnapshot.docs
-          .filter((doc) => !doc.data().deleted)
-          .map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              tenantId: data.tenantId || doc.id,
-              brandName: data.brandName || '이름 없음',
-              email: data.email,
-              industry: data.industry || null,
-              createdAt: serializeTimestamp(data.createdAt),
-            };
+      (subscriptionDocs || []).forEach((doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          subscriptionMap.set(doc.id, {
+            plan: data?.plan,
+            status: data?.status,
+            amount: data?.amount,
+            baseAmount: data?.baseAmount,
+            nextBillingDate: serializeTimestamp(data?.nextBillingDate),
+            currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
+            canceledAt: serializeTimestamp(data?.canceledAt),
+            cancelMode: data?.cancelMode,
           });
+        }
+      });
 
-        // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
-        const subscriptionRefs = tenantDataList.map((t) =>
-          db.collection('subscriptions').doc(t.tenantId)
-        );
-        const subscriptionDocs = await db.getAll(...subscriptionRefs);
-
-        // 구독 정보를 Map으로 변환
-        const subscriptionMap = new Map<string, {
-          plan: string;
-          status: string;
-          amount: number;
-          baseAmount?: number;
-          nextBillingDate: string | null;
-          currentPeriodEnd: string | null;
-          canceledAt: string | null;
-          cancelMode?: 'scheduled' | 'immediate';
-        }>();
-
-        subscriptionDocs.forEach((doc) => {
-          if (doc.exists) {
-            const data = doc.data();
-            subscriptionMap.set(doc.id, {
-              plan: data?.plan,
-              status: data?.status,
-              amount: data?.amount,
-              baseAmount: data?.baseAmount,  // 플랜 기본 가격
-              nextBillingDate: serializeTimestamp(data?.nextBillingDate),
-              currentPeriodEnd: serializeTimestamp(data?.currentPeriodEnd),
-              canceledAt: serializeTimestamp(data?.canceledAt),
-              cancelMode: data?.cancelMode,
-            });
-          }
-        });
-
-        // 최종 결과 조합 (subscriptions 컬렉션에서만 가져옴)
-        tenants = tenantDataList.map((tenant) => {
-          const subscription = subscriptionMap.get(tenant.tenantId);
-
-          // plan이 있는 경우에만 구독 정보 사용, 없으면 null (미구독)
-          return {
-            id: tenant.id,
-            tenantId: tenant.tenantId,
-            brandName: tenant.brandName,
-            email: tenant.email,
-            industry: tenant.industry,
-            createdAt: tenant.createdAt,
-            subscription: subscription?.plan ? subscription : null,
-          };
-        });
-      }
+      // 최종 결과 조합
+      tenants = tenantDataList.map((tenant) => {
+        const subscription = subscriptionMap.get(tenant.tenantId);
+        return {
+          id: tenant.id,
+          tenantId: tenant.tenantId,
+          brandName: tenant.brandName,
+          email: tenant.email,
+          industry: tenant.industry,
+          createdAt: tenant.createdAt,
+          subscription: subscription?.plan ? subscription : null,
+        };
+      });
     } catch (error) {
       console.error('Failed to fetch tenants:', error);
     }
