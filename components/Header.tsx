@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
 import { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 
 interface MenuItem {
@@ -22,11 +22,9 @@ interface SiteSettings {
 }
 
 export default function Header() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, hasTenants, signOut } = useAuth();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [hasTenants, setHasTenants] = useState(false);
-  const pathname = usePathname();
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
 
   // 사이트 설정 불러오기
@@ -44,34 +42,6 @@ export default function Header() {
     };
     fetchSettings();
   }, []);
-
-  // 사용자의 매장 수 확인 (페이지 이동 시마다 재확인)
-  useEffect(() => {
-    const fetchTenants = async () => {
-      if (!user?.email) {
-        setHasTenants(false);
-        return;
-      }
-
-      try {
-        const idToken = await user.getIdToken();
-        const res = await fetch(`/api/tenants?email=${encodeURIComponent(user.email)}`, {
-          headers: {
-            'Authorization': `Bearer ${idToken}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setHasTenants(data.tenants && data.tenants.length > 0);
-        }
-      } catch (error) {
-        console.error('Failed to fetch tenants:', error);
-        setHasTenants(false);
-      }
-    };
-
-    fetchTenants();
-  }, [user?.email, pathname]);
 
   const handleSignOut = async () => {
     try {

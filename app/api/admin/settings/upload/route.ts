@@ -50,15 +50,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 파일명 생성
-    const timestamp = Date.now();
-    const fileName = `site/${type}_${timestamp}.${extension}`;
+    // 고정 파일명 사용 (덮어쓰기)
+    const fileName = `site-assets/${type}.${extension}`;
 
     // 파일 버퍼로 변환
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // Firebase Storage에 업로드
     const bucket = storage.bucket();
+
+    // 기존 파일 삭제 (확장자가 다를 수 있으므로 같은 type의 모든 파일 삭제)
+    try {
+      const [files] = await bucket.getFiles({ prefix: `site-assets/${type}.` });
+      for (const oldFile of files) {
+        await oldFile.delete();
+      }
+    } catch {
+      // 기존 파일이 없어도 무시
+    }
+
     const fileRef = bucket.file(fileName);
 
     await fileRef.save(buffer, {

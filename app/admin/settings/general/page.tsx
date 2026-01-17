@@ -395,7 +395,7 @@ export default function GeneralSettingsPage() {
                   />
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className="relative inline-flex items-center cursor-pointer gap-2">
                   <input
                     type="checkbox"
                     checked={item.visible}
@@ -403,6 +403,9 @@ export default function GeneralSettingsPage() {
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className={`text-xs font-medium min-w-[28px] ${item.visible ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {item.visible ? '표시' : '숨김'}
+                  </span>
                 </label>
               </div>
             ))}
