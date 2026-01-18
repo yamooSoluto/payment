@@ -33,7 +33,7 @@ import {
 } from 'iconoir-react';
 
 // 아코디언 NodeView 컴포넌트 (에디터에서는 div로 렌더링)
-const AccordionComponent = ({ deleteNode }: { editor: ReturnType<typeof useEditor>; getPos: () => number; deleteNode: () => void }) => {
+const AccordionComponent = ({ deleteNode }: { editor: ReturnType<typeof useEditor>; getPos: () => number | undefined; deleteNode: () => void }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const handleDelete = (e: React.MouseEvent) => {
