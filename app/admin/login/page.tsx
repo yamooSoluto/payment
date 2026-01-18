@@ -141,7 +141,7 @@ export default function AdminLoginPage() {
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-sm mt-6">
-          &copy; 2025 Soluto Inc. All rights reserved.
+          &copy; 2026 Soluto Inc. All rights reserved.
         </p>
       </div>
     </div>

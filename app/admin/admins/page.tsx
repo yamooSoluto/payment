@@ -17,7 +17,7 @@ interface Admin {
 const PERMISSION_GROUPS = {
   dashboard: { label: '대시보드', permissions: ['dashboard:read'] },
   members: { label: '회원 관리', permissions: ['members:read', 'members:write', 'members:delete'] },
-  admins: { label: '운영진 관리', permissions: ['admins:read', 'admins:write', 'admins:delete'] },
+  admins: { label: '관리자 관리', permissions: ['admins:read', 'admins:write', 'admins:delete'] },
   plans: { label: '상품 관리', permissions: ['plans:read', 'plans:write', 'plans:delete'] },
   orders: { label: '주문 내역', permissions: ['orders:read', 'orders:write', 'orders:export'] },
   subscriptions: { label: '구독 관리', permissions: ['subscriptions:read', 'subscriptions:write'] },
@@ -233,7 +233,7 @@ export default function AdminsPage() {
   };
 
   const handleDelete = async (admin: Admin) => {
-    if (!confirm(`정말 "${admin.name}" 운영진을 삭제하시겠습니까?`)) {
+    if (!confirm(`정말 "${admin.name}" 관리자를 삭제하시겠습니까?`)) {
       return;
     }
 
@@ -274,7 +274,7 @@ export default function AdminsPage() {
       <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
           <UserCrown className="w-8 h-8 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">운영진 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900">관리자</h1>
         </div>
         {activeTab === 'list' && (
           <button
@@ -282,7 +282,7 @@ export default function AdminsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shrink-0"
           >
             <Plus className="w-4 h-4" />
-            운영진 추가
+            관리자 추가
           </button>
         )}
         {activeTab === 'permissions' && (
@@ -312,7 +312,7 @@ export default function AdminsPage() {
           }`}
         >
           <Group className="w-4 h-4" />
-          운영진 목록
+          관리자 목록
         </button>
         <button
           onClick={() => setActiveTab('permissions')}
@@ -327,7 +327,7 @@ export default function AdminsPage() {
         </button>
       </div>
 
-      {/* 운영진 목록 탭 */}
+      {/* 관리자 목록 탭 */}
       {activeTab === 'list' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
@@ -336,7 +336,7 @@ export default function AdminsPage() {
           </div>
         ) : admins.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
-            등록된 운영진이 없습니다.
+            등록된 관리자가 없습니다.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -489,7 +489,7 @@ export default function AdminsPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">
-                {editingAdmin ? '운영진 수정' : '운영진 추가'}
+                {editingAdmin ? '관리자 수정' : '관리자 추가'}
               </h2>
               <button
                 onClick={handleCloseModal}
@@ -554,7 +554,7 @@ export default function AdminsPage() {
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="super">슈퍼관리자 (모든 권한)</option>
-                    <option value="admin">관리자 (운영진 관리 제외)</option>
+                    <option value="admin">관리자 (관리자 관리 제외)</option>
                     <option value="viewer">뷰어 (읽기 전용)</option>
                   </select>
                 )}

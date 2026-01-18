@@ -12,6 +12,7 @@ import {
   RefreshDouble,
   StatsUpSquare,
   Mail,
+  DocMagnifyingGlassIn,
   Settings,
   Xmark,
   NavArrowLeft,
@@ -40,7 +41,7 @@ const menuItems = [
     permission: 'members:read',
   },
   {
-    name: '운영진',
+    name: '관리자',
     href: '/admin/admins',
     icon: UserCrown,
     permission: 'admins:read',
@@ -75,6 +76,12 @@ const menuItems = [
     href: '/admin/notifications',
     icon: Mail,
     permission: 'notifications:read',
+  },
+  {
+    name: 'FAQ',
+    href: '/admin/faq',
+    icon: DocMagnifyingGlassIn,
+    permission: 'settings:read',
   },
   {
     name: '설정',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Upload, NavArrowUp, NavArrowDown, Check, Xmark, Link as LinkIcon, MediaImage, Menu } from 'iconoir-react';
+import { Settings, Upload, NavArrowUp, NavArrowDown, Check, Xmark, Link as LinkIcon, MediaImage, Menu, Label, Building, Phone, Mail } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 
 interface MenuItem {
@@ -10,6 +10,37 @@ interface MenuItem {
   path: string;
   visible: boolean;
   order: number;
+}
+
+interface FooterCompanyInfo {
+  companyName: string;
+  ceo: string;
+  address: string;
+  businessNumber: string;
+  ecommerceNumber: string;
+  privacyOfficer: string;
+}
+
+interface FooterCustomerService {
+  phone: string;
+  channelTalkName: string;
+  operatingHours: string;
+  closedDays: string;
+  email: string;
+}
+
+interface FooterSettings {
+  // 레이아웃 설정
+  showCompanyInfo: boolean;
+  showCustomerService: boolean;
+  showTermsLinks: boolean;
+  showCopyright: boolean;
+  // 회사 정보
+  companyInfo: FooterCompanyInfo;
+  // 고객센터
+  customerService: FooterCustomerService;
+  // 저작권
+  copyrightText: string;
 }
 
 interface SiteSettings {
@@ -24,15 +55,41 @@ interface SiteSettings {
   ogTitle: string;
   ogDescription: string;
   ogImageUrl: string;
+  // 푸터 설정
+  footer: FooterSettings;
 }
 
 const defaultMenuItems: MenuItem[] = [
   { id: 'about', name: '소개', path: '/about', visible: true, order: 0 },
   { id: 'trial', name: '무료체험', path: '/trial', visible: true, order: 1 },
   { id: 'plan', name: '요금제', path: '/plan', visible: true, order: 2 },
-  { id: 'portal', name: '포탈', path: 'https://app.yamoo.ai.kr', visible: true, order: 3 },
-  { id: 'account', name: '마이페이지', path: '/account', visible: true, order: 4 },
+  { id: 'faq', name: 'FAQ', path: '/faq', visible: true, order: 3 },
+  { id: 'portal', name: '포탈', path: 'https://app.yamoo.ai.kr', visible: true, order: 4 },
+  { id: 'account', name: '마이페이지', path: '/account', visible: true, order: 5 },
 ];
+
+const defaultFooterSettings: FooterSettings = {
+  showCompanyInfo: true,
+  showCustomerService: true,
+  showTermsLinks: true,
+  showCopyright: true,
+  companyInfo: {
+    companyName: '주식회사 솔루투',
+    ceo: '김채윤',
+    address: '경기도 화성시 메타폴리스로 42, 902호',
+    businessNumber: '610-86-36594',
+    ecommerceNumber: '2025-화성동탄-3518',
+    privacyOfficer: '김채윤',
+  },
+  customerService: {
+    phone: '1544-1288',
+    channelTalkName: '야무 YAMOO',
+    operatingHours: '평일 10:00~17:00 (점심 12:00~13:00)',
+    closedDays: '토, 일, 공휴일 휴무',
+    email: 'yamoo@soluto.co.kr',
+  },
+  copyrightText: 'YAMOO All rights reserved.',
+};
 
 export default function GeneralSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -45,6 +102,7 @@ export default function GeneralSettingsPage() {
     ogTitle: '',
     ogDescription: '',
     ogImageUrl: '',
+    footer: defaultFooterSettings,
   });
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -59,16 +117,31 @@ export default function GeneralSettingsPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.settings) {
+            // 저장된 메뉴와 기본 메뉴 병합 (새로운 기본 메뉴 항목 자동 추가)
+            let menuItems = data.settings.menuItems || [];
+            if (menuItems.length > 0) {
+              const savedIds = new Set(menuItems.map((item: MenuItem) => item.id));
+              const newItems = defaultMenuItems.filter(item => !savedIds.has(item.id));
+              if (newItems.length > 0) {
+                const maxOrder = Math.max(...menuItems.map((item: MenuItem) => item.order), -1);
+                menuItems = [
+                  ...menuItems,
+                  ...newItems.map((item, idx) => ({ ...item, order: maxOrder + 1 + idx }))
+                ];
+              }
+            } else {
+              menuItems = defaultMenuItems;
+            }
+
             setSettings({
               siteName: data.settings.siteName || 'YAMOO',
               logoUrl: data.settings.logoUrl || '',
               faviconUrl: data.settings.faviconUrl || '',
-              menuItems: data.settings.menuItems?.length > 0
-                ? data.settings.menuItems
-                : defaultMenuItems,
+              menuItems,
               ogTitle: data.settings.ogTitle || '',
               ogDescription: data.settings.ogDescription || '',
               ogImageUrl: data.settings.ogImageUrl || '',
+              footer: data.settings.footer || defaultFooterSettings,
             });
           }
         }
@@ -222,17 +295,14 @@ export default function GeneralSettingsPage() {
         </button>
       </div>
 
-      {/* 사이트 기본 정보 */}
+      {/* 사이트명 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Settings className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold text-gray-900">사이트 기본 정보</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <Label className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">사이트명</h2>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            사이트명
-          </label>
           <input
             type="text"
             value={settings.siteName}
@@ -518,6 +588,263 @@ export default function GeneralSettingsPage() {
                 <p className="text-xs text-gray-400 mt-2">yamoo.ai.kr</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 푸터 설정 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Building className="w-5 h-5 text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">하단 푸터</h2>
+        </div>
+
+        {/* 표시 설정 */}
+        <div className="mb-6 pb-6 border-b border-gray-100">
+          <p className="text-sm font-medium text-gray-700 mb-3">섹션 표시 설정</p>
+          <div className="flex flex-wrap gap-4">
+            {[
+              { key: 'showCompanyInfo', label: '회사 정보' },
+              { key: 'showCustomerService', label: '고객센터' },
+              { key: 'showTermsLinks', label: '약관 링크' },
+              { key: 'showCopyright', label: '저작권' },
+            ].map(({ key, label }) => (
+              <label key={key} className="relative inline-flex items-center cursor-pointer gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.footer[key as keyof FooterSettings] as boolean}
+                  onChange={() => setSettings(prev => ({
+                    ...prev,
+                    footer: { ...prev.footer, [key]: !prev.footer[key as keyof FooterSettings] }
+                  }))}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                <span className="text-sm text-gray-700">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 회사 정보 */}
+          <div className={`space-y-4 ${!settings.footer.showCompanyInfo ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-2">
+              <Building className="w-4 h-4 text-gray-500" />
+              <p className="text-sm font-medium text-gray-700">회사 정보</p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">회사명</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.companyName}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, companyName: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">대표자</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.ceo}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, ceo: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">주소</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.address}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, address: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">사업자등록번호</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.businessNumber}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, businessNumber: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">통신판매신고번호</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.ecommerceNumber}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, ecommerceNumber: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">개인정보관리책임자</label>
+                <input
+                  type="text"
+                  value={settings.footer.companyInfo.privacyOfficer}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      companyInfo: { ...prev.footer.companyInfo, privacyOfficer: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCompanyInfo}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 고객센터 정보 */}
+          <div className={`space-y-4 ${!settings.footer.showCustomerService ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-2">
+              <Phone className="w-4 h-4 text-gray-500" />
+              <p className="text-sm font-medium text-gray-700">고객센터</p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">전화번호</label>
+                <input
+                  type="text"
+                  value={settings.footer.customerService.phone}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      customerService: { ...prev.footer.customerService, phone: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCustomerService}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">채널톡 이름</label>
+                <input
+                  type="text"
+                  value={settings.footer.customerService.channelTalkName}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      customerService: { ...prev.footer.customerService, channelTalkName: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCustomerService}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">운영시간</label>
+                <input
+                  type="text"
+                  value={settings.footer.customerService.operatingHours}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      customerService: { ...prev.footer.customerService, operatingHours: e.target.value }
+                    }
+                  }))}
+                  placeholder="평일 10:00~17:00 (점심 12:00~13:00)"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCustomerService}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">휴무일</label>
+                <input
+                  type="text"
+                  value={settings.footer.customerService.closedDays}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      customerService: { ...prev.footer.customerService, closedDays: e.target.value }
+                    }
+                  }))}
+                  placeholder="토, 일, 공휴일 휴무"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCustomerService}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">이메일</label>
+                <input
+                  type="email"
+                  value={settings.footer.customerService.email}
+                  onChange={(e) => setSettings(prev => ({
+                    ...prev,
+                    footer: {
+                      ...prev.footer,
+                      customerService: { ...prev.footer.customerService, email: e.target.value }
+                    }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={!settings.footer.showCustomerService}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 저작권 텍스트 */}
+        <div className={`mt-6 pt-6 border-t border-gray-100 ${!settings.footer.showCopyright ? 'opacity-50' : ''}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Mail className="w-4 h-4 text-gray-500" />
+            <p className="text-sm font-medium text-gray-700">저작권 표시</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Copyright {new Date().getFullYear()}.</span>
+            <input
+              type="text"
+              value={settings.footer.copyrightText}
+              onChange={(e) => setSettings(prev => ({
+                ...prev,
+                footer: { ...prev.footer, copyrightText: e.target.value }
+              }))}
+              placeholder="YAMOO All rights reserved."
+              className="flex-1 max-w-md px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={!settings.footer.showCopyright}
+            />
           </div>
         </div>
       </div>

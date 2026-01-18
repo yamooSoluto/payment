@@ -181,6 +181,23 @@ export default function SubscriptionsPage() {
     return new Date(dateString).toLocaleDateString('ko-KR');
   };
 
+  // 결제일 표시 (만료/해지 상태이거나 체험 중이면서 결제 예정이 없으면 - 표시)
+  const formatBillingDate = (subscription: Subscription) => {
+    const { status, nextBillingDate } = subscription;
+
+    // 만료 또는 해지 상태면 결제일 없음
+    if (status === 'expired' || status === 'canceled') {
+      return '-';
+    }
+
+    // 체험 중이고 다음 결제일이 없으면 - 표시
+    if ((status === 'trial' || status === 'trialing') && !nextBillingDate) {
+      return '-';
+    }
+
+    return formatDate(nextBillingDate);
+  };
+
   const formatDateForInput = (dateString: string | null) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -550,7 +567,7 @@ export default function SubscriptionsPage() {
                           {formatDate(subscription.currentPeriodEnd)}
                         </td>
                         <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                          {formatDate(subscription.nextBillingDate)}
+                          {formatBillingDate(subscription)}
                         </td>
                         <td className="px-2 py-3 text-center">
                           <button

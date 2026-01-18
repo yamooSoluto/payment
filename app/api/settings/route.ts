@@ -1,6 +1,29 @@
 import { NextResponse } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 
+const defaultFooterSettings = {
+  showCompanyInfo: true,
+  showCustomerService: true,
+  showTermsLinks: true,
+  showCopyright: true,
+  companyInfo: {
+    companyName: '주식회사 솔루투',
+    ceo: '김채윤',
+    address: '경기도 화성시 메타폴리스로 42, 902호',
+    businessNumber: '610-86-36594',
+    ecommerceNumber: '2025-화성동탄-3518',
+    privacyOfficer: '김채윤',
+  },
+  customerService: {
+    phone: '1544-1288',
+    channelTalkName: '야무 YAMOO',
+    operatingHours: '평일 10:00~17:00 (점심 12:00~13:00)',
+    closedDays: '토, 일, 공휴일 휴무',
+    email: 'yamoo@soluto.co.kr',
+  },
+  copyrightText: 'YAMOO All rights reserved.',
+};
+
 // GET: 공개 사이트 설정 조회 (인증 불필요)
 export async function GET() {
   try {
@@ -28,6 +51,7 @@ export async function GET() {
           ogTitle: '',
           ogDescription: '',
           ogImageUrl: '',
+          footer: defaultFooterSettings,
         },
       });
     }
@@ -43,6 +67,7 @@ export async function GET() {
         ogTitle: data?.ogTitle || '',
         ogDescription: data?.ogDescription || '',
         ogImageUrl: data?.ogImageUrl || '',
+        footer: data?.footer || defaultFooterSettings,
       },
     });
   } catch (error) {

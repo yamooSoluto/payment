@@ -10,6 +10,8 @@ interface DashboardStats {
   activeSubscriptions: number;
   monthlyRevenue: number;
   newSignups: number;
+  newTenants?: number;
+  totalTenants?: number;
 }
 
 interface RecentPayment {
@@ -222,7 +224,9 @@ export default function AdminDashboard() {
   const activeSubscriptions = stats?.activeSubscriptions || 0;
   const monthlyRevenue = stats?.monthlyRevenue || 0;
   const newSignups = stats?.newSignups || 0;
-  const activeRate = totalMembers > 0 ? Math.round((activeSubscriptions / totalMembers) * 100) : 0;
+  const newTenants = stats?.newTenants || 0; // 추가
+  const totalTenants = stats?.totalTenants || 0; // 추가
+  const activeRate = totalTenants > 0 ? Math.round((activeSubscriptions / totalTenants) * 100) : 0;
   const trendMonths = trend?.months?.length === 3 ? trend.months : getRecentMonthLabels();
   const revenueTrend = trend?.revenue?.length === 3 ? trend.revenue : [monthlyRevenue, monthlyRevenue, monthlyRevenue];
   const memberTrend = trend?.signups?.length === 3 ? trend.signups : [newSignups, newSignups, newSignups];
@@ -236,8 +240,7 @@ export default function AdminDashboard() {
         <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm xl:order-2 xl:row-span-2 xl:h-full">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">활동 흐름</h2>
-              <p className="text-sm text-slate-500">결제와 신규 가입 흐름을 실시간으로 추적합니다.</p>
+              <h2 className="text-lg font-semibold text-slate-900">최근 현황</h2>
             </div>
             <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
               {activityFeed.length}건
@@ -260,9 +263,8 @@ export default function AdminDashboard() {
                 return (
                   <li key={`${item.id}-${item.type}`} className="relative px-6 py-4">
                     <span
-                      className={`absolute left-0 top-0 h-full w-1 ${
-                        isPayment ? 'bg-yamoo-primary' : 'bg-[#2fadff]'
-                      }`}
+                      className={`absolute left-0 top-0 h-full w-1 ${isPayment ? 'bg-yamoo-primary' : 'bg-[#2fadff]'
+                        }`}
                     />
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
@@ -286,7 +288,7 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <section className="relative overflow-hidden rounded-[28px] border border-black bg-[#0b0b0b] text-white shadow-[0_18px_40px_rgba(0,0,0,0.25)] xl:order-1 xl:row-span-2 xl:h-full">
+        <section className="relative overflow-hidden rounded-[28px] border border-black bg-[#0b0b0b] text-white shadow-[0_18px_40px_rgba(0,0,0,0.25)] order-first xl:order-1 xl:row-span-2 xl:h-full">
           <div
             className="absolute inset-0 opacity-50"
             style={{
@@ -320,7 +322,7 @@ export default function AdminDashboard() {
               />
               <TrendCard
                 label="회원"
-                value={`${formatNumber(newSignups)}건`}
+                value={`${formatNumber(newSignups)}명`}
                 description="이번 달 신규"
                 months={trendMonths}
                 values={memberTrend}
@@ -349,8 +351,8 @@ export default function AdminDashboard() {
           <div className="mt-6 space-y-5">
             <div>
               <div className="flex items-center justify-between text-sm text-slate-700">
-                <span>활성 구독</span>
-                <span className="text-base font-semibold text-slate-900">{formatNumber(activeSubscriptions)}건</span>
+                <span>구독중 매장수</span>
+                <span className="text-base font-semibold text-slate-900">{formatNumber(activeSubscriptions)}개</span>
               </div>
               <div className="mt-3 h-2 rounded-full bg-slate-100">
                 <div
@@ -358,16 +360,24 @@ export default function AdminDashboard() {
                   style={{ width: `${Math.min(activeRate, 100)}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs text-slate-500">전체 {formatNumber(totalMembers)}곳 중 활성 유지</p>
+              <p className="mt-2 text-xs text-slate-500">전체 매장 중 구독중인 매장수</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="rounded-2xl border border-slate-100 bg-[#fff9e5] px-4 py-3">
                 <p className="text-slate-500">신규 가입</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(newSignups)}건</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(newSignups)}명</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <p className="text-slate-500">파트너 규모</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(totalMembers)}곳</p>
+                <p className="text-slate-500">전체 회원수</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(totalMembers)}명</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-[#e5f0ff] px-4 py-3">
+                <p className="text-slate-500">신규 매장</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(newTenants)}개</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <p className="text-slate-500">전체 매장수</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(totalTenants)}개</p>
               </div>
             </div>
           </div>
@@ -375,7 +385,6 @@ export default function AdminDashboard() {
 
         <section className="rounded-[28px] border border-black bg-[#0b0b0b] px-6 py-6 text-white shadow-[0_18px_40px_rgba(0,0,0,0.25)] xl:order-4 xl:h-full">
           <h2 className="text-lg font-semibold">운영 바로가기</h2>
-          <p className="mt-1 text-sm text-white/70">핵심 운영 액션을 빠르게 실행하세요.</p>
           <div className="mt-5 space-y-4 text-sm">
             <Link
               href="/admin/members/new"

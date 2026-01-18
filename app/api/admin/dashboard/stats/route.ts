@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     }
 
     const db = initializeFirebaseAdmin();
+    // ... (중략) ...
+
     if (!db) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
@@ -38,28 +40,41 @@ export async function GET(request: NextRequest) {
       `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
     // 병렬로 데이터 조회
+
     const [
+      usersSnapshot,
       tenantsSnapshot,
       subscriptionsSnapshot,
       paymentsSnapshot,
     ] = await Promise.all([
+      db.collection('users').get(),
       db.collection('tenants').get(),
       db.collection('subscriptions').where('status', '==', 'active').get(),
       db.collection('payments').orderBy('createdAt', 'desc').get(),
     ]);
 
-    // 전체 회원 수
-    const totalMembers = tenantsSnapshot.size;
+    console.log('--- DEBUG: Users Collection ---');
+    console.log(`Total documents found: ${usersSnapshot.size}`);
+    usersSnapshot.docs.forEach((doc) => {
+      console.log(`- ID: ${doc.id}, Email: ${doc.data().email}, Name: ${doc.data().name}`);
+    });
+    console.log('-------------------------------');
+
+    // 전체 회원 수 (users 기준)
+    const totalMembers = usersSnapshot.size;
+    // 전체 매장 수 (tenants 기준)
+    const totalTenants = tenantsSnapshot.size;
 
     // 활성 구독 수
     const activeSubscriptions = subscriptionsSnapshot.size;
 
     // 이번 달 매출 계산 (completed/done 상태, 양수 금액만)
     let monthlyRevenue = 0;
-    let newSignups = 0;
+    let newSignups = 0; // 신규 가입 (User)
+    let newTenants = 0; // 신규 매장 (Tenant)
 
-    // 이번 달 신규 가입 수 계산
-    tenantsSnapshot.docs.forEach((doc) => {
+    // 이번 달 신규 가입 수 계산 (users 기준)
+    usersSnapshot.docs.forEach((doc) => {
       const data = doc.data();
       const createdAt = data.createdAt?.toDate?.();
       if (createdAt) {
@@ -67,6 +82,19 @@ export async function GET(request: NextRequest) {
         const idx = monthIndex.get(key);
         if (idx !== undefined) {
           signupTrend[idx] += 1;
+        }
+      }
+    });
+
+    // 이번 달 신규 매장 수 계산 (tenants 기준)
+    tenantsSnapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      const createdAt = data.createdAt?.toDate?.();
+      if (createdAt) {
+        const key = getMonthKey(createdAt);
+        // 이번 달(마지막 인덱스)인지 확인
+        if (key === monthKeys[monthKeys.length - 1]) {
+          newTenants += 1;
         }
       }
     });
@@ -115,27 +143,22 @@ export async function GET(request: NextRequest) {
     const tenantInfoCache = new Map<string, { businessName: string; ownerName: string }>();
     for (const payment of recentPayments) {
       if (payment.email && !tenantInfoCache.has(payment.email)) {
-        try {
-          const tenantSnapshot = await db.collection('tenants')
-            .where('email', '==', payment.email)
-            .limit(1)
-            .get();
-
-          if (!tenantSnapshot.empty) {
-            const tenantData = tenantSnapshot.docs[0].data();
-            tenantInfoCache.set(payment.email, {
-              businessName: tenantData?.brandName || tenantData?.businessName || '',
-              ownerName: tenantData?.ownerName || tenantData?.name || '',
-            });
-          }
-        } catch {
-          // 조회 실패 시 무시
+        // 이미 tenantsSnapshot을 가져왔으므로 거기서 찾을 수도 있지만, 
+        // 쿼리 효율을 위해 기존 캐시 로직 유지 (또는 tenantsSnapshot.docs.find로 최적화 가능)
+        // 여기서는 간단히 tenantsSnapshot을 활용하여 최적화
+        const foundTenant = tenantsSnapshot.docs.find(t => t.data().email === payment.email);
+        if (foundTenant) {
+          const tenantData = foundTenant.data();
+          tenantInfoCache.set(payment.email, {
+            businessName: tenantData.brandName || tenantData.businessName || '',
+            ownerName: tenantData.ownerName || tenantData.name || '',
+          });
         }
       }
       payment.memberInfo = tenantInfoCache.get(payment.email) || null;
     }
 
-    // 최근 가입 5건
+    // 최근 가입 5건 (users 기준)
     const recentSignups: Array<{
       id: string;
       email: string;
@@ -144,25 +167,25 @@ export async function GET(request: NextRequest) {
       createdAt: string | null;
     }> = [];
 
-    const sortedTenants = tenantsSnapshot.docs
+    const sortedUsers = usersSnapshot.docs
       .map((doc) => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate?.() || null,
       }))
-      .filter((t) => t.createdAt)
+      .filter((u) => u.createdAt)
       .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
       .slice(0, 5);
 
-    for (const tenant of sortedTenants) {
+    for (const user of sortedUsers) {
+      // User 데이터 타입 안전 처리
+      const userData = user as { email?: string; name?: string; businessName?: string };
       recentSignups.push({
-        id: tenant.id,
-        email: (tenant as { email?: string }).email || '',
-        businessName: (tenant as { brandName?: string; businessName?: string }).brandName ||
-                      (tenant as { brandName?: string; businessName?: string }).businessName || '',
-        ownerName: (tenant as { ownerName?: string; name?: string }).ownerName ||
-                   (tenant as { ownerName?: string; name?: string }).name || '',
-        createdAt: tenant.createdAt?.toISOString() || null,
+        id: user.id,
+        email: userData.email || '',
+        businessName: userData.businessName || userData.name || '신규 회원',
+        ownerName: userData.name || '',
+        createdAt: user.createdAt?.toISOString() || null,
       });
     }
 
@@ -172,9 +195,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       stats: {
         totalMembers,
+        totalTenants,
         activeSubscriptions,
         monthlyRevenue,
         newSignups,
+        newTenants,
       },
       trend: {
         months: monthLabels,

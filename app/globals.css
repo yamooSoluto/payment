@@ -106,3 +106,43 @@ body {
 .ProseMirror section {
   @apply mb-6;
 }
+
+/* FAQ Accordion Editor Styles */
+.faq-accordion-editor .faq-accordion-content {
+  display: none;
+}
+.faq-accordion-editor.is-open .faq-accordion-content {
+  display: block;
+}
+
+/* FAQ Accordion Summary Prefix Override */
+summary.faq-accordion-summary {
+  list-style: none;
+}
+summary.faq-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+/* Force arrow and remove any other text like 'Question' */
+summary.faq-accordion-summary::before {
+  content: '▶' !important;
+  display: inline-block;
+  margin-right: 0.5rem;
+  transition: transform 0.2s;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+details[open] > summary.faq-accordion-summary::before,
+.faq-accordion-editor.is-open .faq-accordion-toggle .faq-accordion-arrow {
+  transform: rotate(90deg);
+}
+
+/* Editor specific arrow */
+.faq-accordion-editor .faq-accordion-toggle {
+  cursor: pointer;
+  padding: 0.25rem;
+  user-select: none;
+}
+.faq-accordion-editor .faq-accordion-arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+}
