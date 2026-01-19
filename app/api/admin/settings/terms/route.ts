@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!hasPermission(admin, 'settings:read')) {
+    if (!hasPermission(admin, 'terms:read')) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -207,7 +207,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'terms:write')) {
       return NextResponse.json(
         { error: '약관을 수정할 권한이 없습니다.' },
         { status: 403 }
@@ -258,7 +258,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'terms:write')) {
       return NextResponse.json(
         { error: '약관 히스토리를 삭제할 권한이 없습니다.' },
         { status: 403 }
@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'terms:write')) {
       return NextResponse.json(
         { error: '약관을 배포할 권한이 없습니다.' },
         { status: 403 }

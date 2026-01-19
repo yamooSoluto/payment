@@ -1,6 +1,235 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
+
+// Firestore Timestamp를 ISO 문자열로 변환하는 헬퍼 함수
+function convertTimestamps(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined) {
+      result[key] = value;
+    } else if (typeof value === 'object' && value !== null) {
+      // Firestore Timestamp 체크
+      if ('toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+        result[key] = (value as { toDate: () => Date }).toDate().toISOString();
+      } else if (Array.isArray(value)) {
+        result[key] = value.map(item =>
+          typeof item === 'object' && item !== null ? convertTimestamps(item as Record<string, unknown>) : item
+        );
+      } else {
+        result[key] = convertTimestamps(value as Record<string, unknown>);
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+// GET: 매장 상세 조회 (모든 필드 반환)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
+  try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(admin, 'tenants:read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+    }
+
+    const { tenantId } = await params;
+
+    // 테넌트 문서 조회
+    const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+
+    if (!tenantDoc.exists) {
+      return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const tenantData = tenantDoc.data() || {};
+
+    // Firestore Timestamp를 ISO 문자열로 변환
+    const tenant = convertTimestamps(tenantData);
+
+    // 구독 정보 조회
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    let subscription = null;
+    if (subscriptionDoc.exists) {
+      const subData = subscriptionDoc.data() || {};
+      subscription = convertTimestamps(subData);
+    }
+
+    // 결제 내역 조회 (전체) - 인덱스 없이 조회 후 정렬
+    let payments: Array<{ id: string; [key: string]: unknown }> = [];
+    try {
+      // 인덱스 없이 tenantId로만 필터링
+      const paymentsSnapshot = await db.collection('payments')
+        .where('tenantId', '==', tenantId)
+        .get();
+
+      payments = paymentsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...convertTimestamps(data),
+        };
+      });
+
+      // 클라이언트 사이드에서 createdAt 내림차순 정렬
+      payments.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+        return dateB - dateA;
+      });
+    } catch (paymentError) {
+      console.error('Failed to fetch payments:', paymentError);
+    }
+
+    // 구독 히스토리 조회 - 인덱스 없이 조회 후 정렬
+    let subscriptionHistory: Array<{ recordId: string; [key: string]: unknown }> = [];
+    try {
+      const historySnapshot = await db.collection('subscription_history')
+        .doc(tenantId)
+        .collection('records')
+        .get();
+
+      subscriptionHistory = historySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          recordId: doc.id,
+          ...convertTimestamps(data),
+        };
+      });
+
+      // 클라이언트 사이드에서 changedAt 내림차순 정렬
+      subscriptionHistory.sort((a, b) => {
+        const dateA = a.changedAt ? new Date(a.changedAt as string).getTime() : 0;
+        const dateB = b.changedAt ? new Date(b.changedAt as string).getTime() : 0;
+        return dateB - dateA;
+      });
+    } catch (historyError) {
+      console.error('Failed to fetch subscription history:', historyError);
+    }
+
+    return NextResponse.json({
+      tenant: {
+        id: tenantDoc.id,
+        tenantId: tenantData.tenantId || tenantDoc.id,
+        ...tenant,
+      },
+      subscription,
+      payments,
+      subscriptionHistory,
+    });
+  } catch (error) {
+    console.error('Get tenant detail error:', error);
+    return NextResponse.json(
+      { error: '매장 정보를 불러오는 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT: 매장 정보 수정 (동적 필드 지원)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
+  try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(admin, 'tenants:write')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+    }
+
+    const { tenantId } = await params;
+    const body = await request.json();
+
+    // 매장 존재 여부 확인
+    const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+    if (!tenantDoc.exists) {
+      return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    // 읽기 전용 필드 목록 (수정 불가)
+    const READ_ONLY_FIELDS = [
+      'tenantId', 'email', 'userId',
+      'deleted', 'deletedAt', 'deletedBy', 'permanentDeleteAt',
+      'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
+      'isManualRegistration', 'onboardingCompletedAt',
+      'widgetUrl', 'naverInboundUrl', 'webhook',
+      // 구독 관련 (구독 페이지에서 관리)
+      'plan', 'planId', 'subscription', 'subscriptionStatus', 'orderNo', 'totalPrice'
+    ];
+
+    // 업데이트할 데이터 필터링
+    const updateData: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(body)) {
+      // 읽기 전용 필드 제외
+      if (READ_ONLY_FIELDS.includes(key)) {
+        continue;
+      }
+
+      // 날짜 문자열을 Date로 변환
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)) {
+        updateData[key] = new Date(value);
+      } else {
+        updateData[key] = value;
+      }
+    }
+
+    // 업데이트 메타데이터 추가
+    updateData.updatedAt = FieldValue.serverTimestamp();
+    updateData.updatedBy = admin.adminId;
+
+    await db.collection('tenants').doc(tenantId).update(updateData);
+
+    // brandName이 변경되면 subscriptions 컬렉션에도 업데이트
+    if (body.brandName) {
+      const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+      if (subscriptionDoc.exists) {
+        await db.collection('subscriptions').doc(tenantId).update({
+          brandName: body.brandName,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '매장 정보가 수정되었습니다.',
+    });
+  } catch (error) {
+    console.error('Update tenant error:', error);
+    return NextResponse.json(
+      { error: '매장 정보를 수정하는 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
 
 // 관리자: 매장 수정
 export async function PATCH(

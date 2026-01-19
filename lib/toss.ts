@@ -118,33 +118,36 @@ export function getEffectiveAmount(
   subscription: {
     plan: string;
     amount?: number;
+    baseAmount?: number;
     pricePolicy?: PricePolicy;
     priceProtectedUntil?: Date | string;
   }
 ): number {
   const currentPlanPrice = PLAN_PRICES[subscription.plan] ?? 0;
-  const subscriberAmount = subscription.amount ?? currentPlanPrice;
+  // baseAmount가 있으면 사용, 없으면 PLAN_PRICES 사용
+  const baseBillingAmount = subscription.baseAmount ?? currentPlanPrice;
+  const subscriberAmount = subscription.amount ?? baseBillingAmount;
 
   // 가격 정책에 따른 결제 금액 결정
   switch (subscription.pricePolicy) {
     case 'grandfathered':
-      // 영구 가격 보호: 항상 구독 시점 금액
+      // 영구 가격 보호: 항상 구독 시점 금액 (할인 금액 유지)
       return subscriberAmount;
 
     case 'protected_until':
-      // 기간 한정 보호: 보호 기간 내면 구독 시점 금액, 이후 최신 가격
+      // 기간 한정 보호: 보호 기간 내면 구독 시점 금액, 이후 기본 가격
       if (subscription.priceProtectedUntil) {
         const protectedUntil = new Date(subscription.priceProtectedUntil);
         if (new Date() < protectedUntil) {
           return subscriberAmount;
         }
       }
-      return currentPlanPrice;
+      return baseBillingAmount;
 
     case 'standard':
     default:
-      // 일반: 최신 플랜 가격
-      return currentPlanPrice;
+      // 일반: baseAmount (정기결제 금액)
+      return baseBillingAmount;
   }
 }
 

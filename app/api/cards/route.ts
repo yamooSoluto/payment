@@ -355,6 +355,7 @@ export async function POST(request: NextRequest) {
           const effectiveAmount = getEffectiveAmount({
             plan: subscription.plan,
             amount: subscription.amount,
+            baseAmount: subscription.baseAmount,
             pricePolicy: subscription.pricePolicy,
             priceProtectedUntil: subscription.priceProtectedUntil?.toDate?.() || subscription.priceProtectedUntil,
           });

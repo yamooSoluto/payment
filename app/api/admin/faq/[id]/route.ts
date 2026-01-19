@@ -14,7 +14,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'faq:write')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -66,7 +66,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'faq:delete')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

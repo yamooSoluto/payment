@@ -40,7 +40,7 @@ export const PERMISSIONS: Record<string, AdminRole[]> = {
   'members:write': ['owner', 'super', 'admin'],
   'members:delete': ['owner', 'super', 'admin'],
 
-  // 운영진 관리
+  // 관리자 관리
   'admins:read': ['owner', 'super'],
   'admins:write': ['owner', 'super'],
   'admins:delete': ['owner', 'super'],
@@ -50,26 +50,44 @@ export const PERMISSIONS: Record<string, AdminRole[]> = {
   'plans:write': ['owner', 'super', 'admin'],
   'plans:delete': ['owner', 'super', 'admin'],
 
-  // 주문 내역
-  'orders:read': ['owner', 'super', 'admin', 'viewer'],
-  'orders:write': ['owner', 'super', 'admin'],
-  'orders:export': ['owner', 'super', 'admin'],
+  // 결제 내역
+  'payments:read': ['owner', 'super', 'admin', 'viewer'],
+  'payments:write': ['owner', 'super', 'admin'],
+  'payments:export': ['owner', 'super', 'admin'],
 
   // 구독 관리
   'subscriptions:read': ['owner', 'super', 'admin', 'viewer'],
   'subscriptions:write': ['owner', 'super', 'admin'],
 
+  // 매장 관리
+  'tenants:read': ['owner', 'super', 'admin', 'viewer'],
+  'tenants:write': ['owner', 'super', 'admin'],
+  'tenants:delete': ['owner', 'super', 'admin'],
+
   // 통계
   'stats:read': ['owner', 'super', 'admin', 'viewer'],
 
-  // 알림톡
-  'notifications:read': ['owner', 'super', 'admin', 'viewer'],
-  'notifications:write': ['owner', 'super', 'admin'],
-  'notifications:send': ['owner', 'super', 'admin'],
+  // SMS
+  'sms:read': ['owner', 'super', 'admin', 'viewer'],
+  'sms:send': ['owner', 'super', 'admin'],
 
-  // 설정
-  'settings:read': ['owner', 'super', 'admin'],
-  'settings:write': ['owner', 'super'],
+  // 알림톡
+  'alimtalk:read': ['owner', 'super', 'admin', 'viewer'],
+  'alimtalk:write': ['owner', 'super', 'admin'],
+  'alimtalk:delete': ['owner', 'super', 'admin'],
+
+  // FAQ 관리
+  'faq:read': ['owner', 'super', 'admin', 'viewer'],
+  'faq:write': ['owner', 'super', 'admin'],
+  'faq:delete': ['owner', 'super', 'admin'],
+
+  // 홈페이지 설정
+  'siteSettings:read': ['owner', 'super', 'admin'],
+  'siteSettings:write': ['owner', 'super'],
+
+  // 약관/개인정보처리방침
+  'terms:read': ['owner', 'super', 'admin'],
+  'terms:write': ['owner', 'super'],
 };
 
 export type Permission = keyof typeof PERMISSIONS;

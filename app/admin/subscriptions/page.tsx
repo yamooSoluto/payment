@@ -23,6 +23,7 @@ interface Subscription {
   nextBillingDate: string | null;
   createdAt: string | null;
   pricePolicy: string | null;
+  hasBillingKey: boolean;
 }
 
 // 구독 내역 인터페이스
@@ -972,6 +973,25 @@ export default function SubscriptionsPage() {
               <div>
                 <span className="text-gray-500">연락처: </span>
                 <span className="font-medium">{editingSubscription.phone || '-'}</span>
+              </div>
+              <div className="pt-1 border-t border-gray-200 mt-1">
+                <span className="text-gray-500">빌링키: </span>
+                {editingSubscription.hasBillingKey ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                    <Check className="w-3 h-3" />
+                    등록됨
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 text-gray-600 text-xs font-medium rounded-full">
+                    <Xmark className="w-3 h-3" />
+                    없음
+                  </span>
+                )}
+                {!editingSubscription.hasBillingKey && editForm.status === 'active' && (
+                  <span className="block text-xs text-amber-600 mt-1">
+                    ⚠️ 빌링키 없이 구독중 상태로 변경해도 자동 결제는 되지 않습니다.
+                  </span>
+                )}
               </div>
             </div>
 

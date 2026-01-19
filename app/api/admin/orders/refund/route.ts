@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'orders:write')) {
+    if (!hasPermission(admin, 'payments:write')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

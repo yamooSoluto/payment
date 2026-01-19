@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'notifications:read')) {
+    if (!hasPermission(admin, 'sms:read')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

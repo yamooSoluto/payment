@@ -224,12 +224,11 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // 구독 상태를 expired로 변경 (즉시 종료)
+        // 구독 상태를 canceled로 변경 (즉시 해지)
         const subscriptionRef = db.collection('subscriptions').doc(tenantId);
         transaction.update(subscriptionRef, {
-          status: 'expired',
+          status: 'canceled',
           canceledAt: now,
-          expiredAt: now,
           currentPeriodEnd: now,  // 실제 종료일을 현재로 설정
           cancelReason: reason || 'User requested',
           cancelMode: 'immediate',
@@ -251,9 +250,9 @@ export async function POST(request: NextRequest) {
         await syncSubscriptionCancellation(tenantId);
       }
 
-      // subscription_history 상태 업데이트 (즉시 해지: expired)
+      // subscription_history 상태 업데이트 (즉시 해지: canceled)
       try {
-        await updateCurrentHistoryStatus(db, tenantId, 'expired', {
+        await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
           periodEnd: now,
           note: reason || 'User requested immediate cancellation',
         });
@@ -290,9 +289,9 @@ export async function POST(request: NextRequest) {
         refundProcessed: !!refundResult,
       });
     } else {
-      // 예약 취소: 기간 종료 후 취소
+      // 예약 취소: 기간 종료 후 취소 (pending_cancel 상태로 설정)
       await db.collection('subscriptions').doc(tenantId).update({
-        status: 'canceled',
+        status: 'pending_cancel',
         canceledAt: now,
         cancelReason: reason || 'User requested',
         cancelMode: 'scheduled',
@@ -307,9 +306,9 @@ export async function POST(request: NextRequest) {
       // tenants 컬렉션에 취소 상태 동기화
       await syncSubscriptionCancellation(tenantId);
 
-      // subscription_history 상태 업데이트 (예약 해지: canceled)
+      // subscription_history 상태 업데이트 (예약 해지: pending_cancel)
       try {
-        await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
+        await updateCurrentHistoryStatus(db, tenantId, 'pending_cancel', {
           note: reason || 'User requested scheduled cancellation',
         });
         console.log('✅ Subscription history updated for scheduled cancellation');

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'faq:write')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -97,7 +97,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!hasPermission(admin, 'settings:write')) {
+    if (!hasPermission(admin, 'faq:write')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

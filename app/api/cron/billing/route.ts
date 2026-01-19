@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { payWithBillingKey, getPlanName, getEffectiveAmount } from '@/lib/toss';
-import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange } from '@/lib/tenant-sync';
+import { syncPaymentSuccess, syncPaymentFailure, syncTrialExpired, syncPlanChange, syncSubscriptionCancellation } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment, generateIdempotencyKey } from '@/lib/idempotency';
 import { getPlanById } from '@/lib/auth';
@@ -353,6 +353,45 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ========== 3.5. 예약 해지 만료 처리 ==========
+    const expiredScheduledCancels: { tenantId: string; email: string }[] = [];
+
+    // 예약 해지 상태(pending_cancel)이고 기간이 만료된 구독 찾기
+    const scheduledCancelSubscriptions = await db
+      .collection('subscriptions')
+      .where('status', '==', 'pending_cancel')
+      .get();
+
+    for (const doc of scheduledCancelSubscriptions.docs) {
+      const subscription = doc.data();
+      const tenantId = doc.id;
+      const currentPeriodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
+
+      if (currentPeriodEnd && new Date(currentPeriodEnd) <= today) {
+        // 구독 상태를 canceled로 변경 (예약 해지 완료)
+        await db.collection('subscriptions').doc(tenantId).update({
+          status: 'canceled',
+          updatedAt: new Date(),
+        });
+
+        // tenants 컬렉션 동기화
+        await syncSubscriptionCancellation(tenantId);
+
+        // subscription_history 상태를 pending_cancel에서 canceled로 변경
+        try {
+          await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
+            periodEnd: new Date(),
+            note: 'Scheduled cancellation period ended',
+          });
+        } catch (historyError) {
+          console.error('Failed to update subscription history:', historyError);
+        }
+
+        expiredScheduledCancels.push({ tenantId, email: subscription.email });
+        console.log(`⏹️ Scheduled cancellation completed: ${tenantId}`);
+      }
+    }
+
     // ========== 4. 유예 기간 만료 처리 ==========
     const expiredGracePeriods: { tenantId: string; email: string }[] = [];
 
@@ -495,6 +534,7 @@ export async function GET(request: NextRequest) {
         const effectiveAmount = getEffectiveAmount({
           plan: subscription.plan,
           amount: subscription.amount,
+          baseAmount: subscription.baseAmount,
           pricePolicy: subscription.pricePolicy,
           priceProtectedUntil: subscription.priceProtectedUntil?.toDate?.() || subscription.priceProtectedUntil,
         });
@@ -700,6 +740,7 @@ export async function GET(request: NextRequest) {
       trialExpired: expiredTrials.length,
       cardExpiringAlerts: cardExpiringAlerts.length,
       pendingPlansApplied: appliedPendingPlans.length,
+      scheduledCancelsExpired: expiredScheduledCancels.length,
       gracePeriodExpired: expiredGracePeriods.length,
       paymentsProcessed: results.length,
       details: {
@@ -707,6 +748,7 @@ export async function GET(request: NextRequest) {
         expiredTrials,
         cardExpiringAlerts,
         appliedPendingPlans,
+        expiredScheduledCancels,
         expiredGracePeriods,
         billingResults: results,
       },

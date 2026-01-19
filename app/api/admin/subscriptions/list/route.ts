@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
       name: string;
       phone: string;
       brandName: string;
+      hasBillingKey: boolean;
     }>();
 
     subscriptionsSnapshot.docs.forEach(doc => {
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
         name: data.name || '',
         phone: data.phone || '',
         brandName: data.brandName || '',
+        hasBillingKey: !!data.billingKey,
       });
     });
 
@@ -85,6 +87,7 @@ export async function GET(request: NextRequest) {
       nextBillingDate: string | null;
       createdAt: string | null;
       pricePolicy: string | null;
+      hasBillingKey: boolean;
     }
 
     // 삭제 상태 필터 여부 확인
@@ -124,6 +127,7 @@ export async function GET(request: NextRequest) {
             nextBillingDate: subscription.nextBillingDate,
             createdAt: subscription.createdAt || tenantData.createdAt?.toDate?.()?.toISOString() || null,
             pricePolicy: subscription.pricePolicy,
+            hasBillingKey: subscription.hasBillingKey,
           };
         } else {
           // 미구독 매장
@@ -142,6 +146,7 @@ export async function GET(request: NextRequest) {
             nextBillingDate: null,
             createdAt: tenantData.createdAt?.toDate?.()?.toISOString() || null,
             pricePolicy: null,
+            hasBillingKey: false,
           };
         }
       });

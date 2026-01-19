@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
             changeType: firstPayment.type === 'trial_convert' || firstPayment.type === 'conversion' ? 'new' : 'new',
             changedAt: paidAt,
             changedBy,
-            previousPlan: firstPayment.previousPlan || 'trial',
+            previousPlan: firstPayment.previousPlan || null,
             paymentId: firstPayment.id,
             orderId: firstPayment.orderId || null,
           });

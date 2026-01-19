@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
-  HomeAltSlim,
+  Component,
   Group,
   UserCrown,
   Package,
+  HomeSimpleDoor,
   CreditCards,
   RefreshDouble,
   StatsUpSquare,
@@ -31,7 +32,7 @@ const menuItems = [
   {
     name: '대시보드',
     href: '/admin',
-    icon: HomeAltSlim,
+    icon: Component,
     permission: null,
   },
   {
@@ -52,6 +53,12 @@ const menuItems = [
     href: '/admin/plans',
     icon: Package,
     permission: 'plans:read',
+  },
+  {
+    name: '매장',
+    href: '/admin/tenants',
+    icon: HomeSimpleDoor,
+    permission: 'tenants:read',
   },
   {
     name: '결제',

@@ -1,0 +1,664 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Eye, Settings, Plus, Trash, Notes } from 'iconoir-react';
+import Link from 'next/link';
+import Spinner from '@/components/admin/Spinner';
+import { INDUSTRIES, IndustryCode } from '@/lib/constants';
+
+interface Tenant {
+  id: string;
+  tenantId: string;
+  email: string;
+  name: string;
+  brandName: string;
+  brandCode: string;
+  phone: string;
+  industry: string;
+  plan: string;
+  subscriptionStatus: string;
+  status: string;
+  deleted: boolean;
+  createdAt: string | null;
+  hasBillingKey: boolean;
+}
+
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+interface MetaFieldSchema {
+  name: string;
+  label: string;
+  type: 'text' | 'number' | 'boolean' | 'select';
+  options?: string[];
+  order: number;
+}
+
+export default function TenantsPage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [industryFilter, setIndustryFilter] = useState<string[]>([]);
+  const [planFilter, setPlanFilter] = useState<string[]>([]);
+  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState<string[]>([]);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterPosition, setFilterPosition] = useState<{ top: number; right: number } | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+  });
+
+  // 관리자 메타 필드 스키마 상태
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
+  const [metaSchema, setMetaSchema] = useState<MetaFieldSchema[]>([]);
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldType, setNewFieldType] = useState<'text' | 'number' | 'boolean' | 'select'>('text');
+  const [savingSchema, setSavingSchema] = useState(false);
+
+  const fetchTenants = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...(search && { search }),
+        ...(industryFilter.length > 0 && { industry: industryFilter.join(',') }),
+        ...(planFilter.length > 0 && { plan: planFilter.join(',') }),
+        ...(subscriptionStatusFilter.length > 0 && { subscriptionStatus: subscriptionStatusFilter.join(',') }),
+        ...(includeDeleted && { includeDeleted: 'true' }),
+      });
+
+      const response = await fetch(`/api/admin/tenants?${params}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTenants(data.tenants);
+        setPagination(data.pagination);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tenants:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.page, pagination.limit, search, industryFilter, planFilter, subscriptionStatusFilter, includeDeleted]);
+
+  useEffect(() => {
+    fetchTenants();
+  }, [fetchTenants]);
+
+  const handleFilter = () => {
+    setPagination(prev => ({ ...prev, page: 1 }));
+    fetchTenants();
+  };
+
+  // 관리자 메타 필드 스키마 fetch
+  const fetchMetaSchema = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/tenant-meta-schema');
+      if (response.ok) {
+        const data = await response.json();
+        setMetaSchema(data.fields || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch meta schema:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMetaSchema();
+  }, [fetchMetaSchema]);
+
+  // 새 필드 추가
+  const handleAddField = async () => {
+    if (!newFieldName.trim() || !newFieldLabel.trim()) {
+      alert('필드명과 라벨을 입력해주세요.');
+      return;
+    }
+
+    setSavingSchema(true);
+    try {
+      const response = await fetch('/api/admin/tenant-meta-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newFieldName.trim(),
+          label: newFieldLabel.trim(),
+          type: newFieldType,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchMetaSchema();
+        setNewFieldName('');
+        setNewFieldLabel('');
+        setNewFieldType('text');
+      } else {
+        const data = await response.json();
+        alert(data.error || '필드 추가에 실패했습니다.');
+      }
+    } catch {
+      alert('오류가 발생했습니다.');
+    } finally {
+      setSavingSchema(false);
+    }
+  };
+
+  // 필드 삭제
+  const handleDeleteField = async (fieldName: string) => {
+    if (!confirm(`"${fieldName}" 필드를 삭제하시겠습니까?\n모든 매장의 해당 필드 데이터는 유지되지만 더 이상 표시되지 않습니다.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/tenant-meta-schema?name=${encodeURIComponent(fieldName)}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchMetaSchema();
+      } else {
+        const data = await response.json();
+        alert(data.error || '필드 삭제에 실패했습니다.');
+      }
+    } catch {
+      alert('오류가 발생했습니다.');
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('ko-KR');
+  };
+
+  const getIndustryLabel = (code: string) => {
+    return INDUSTRIES[code as IndustryCode] || code || '-';
+  };
+
+  const getPlanName = (plan: string) => {
+    switch (plan) {
+      case 'trial': return 'Trial';
+      case 'basic': return 'Basic';
+      case 'business': return 'Business';
+      case 'enterprise': return 'Enterprise';
+      default: return plan || '-';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const baseClass = "px-2 py-1 text-xs font-medium rounded-full";
+    switch (status) {
+      case 'active':
+        return <span className={`${baseClass} bg-green-100 text-green-700`}>활성</span>;
+      case 'deleted':
+        return <span className={`${baseClass} bg-red-50 text-red-400`}>삭제</span>;
+      default:
+        return <span className={`${baseClass} bg-gray-100 text-gray-600`}>{status || '-'}</span>;
+    }
+  };
+
+  const getSubscriptionStatusBadge = (status: string, deleted?: boolean) => {
+    const baseClass = "px-2 py-1 text-xs font-medium rounded-full";
+    // 삭제된 매장은 '삭제'로 표시
+    if (deleted) {
+      return <span className={`${baseClass} bg-red-50 text-red-400`}>삭제</span>;
+    }
+    switch (status) {
+      case 'active':
+        return <span className={`${baseClass} bg-green-100 text-green-700`}>구독중</span>;
+      case 'trial':
+      case 'trialing':
+        return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험</span>;
+      case 'canceled':
+        return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
+      case 'expired':
+        return <span className={`${baseClass} bg-gray-100 text-gray-600`}>만료</span>;
+      case 'none':
+        return <span className={`${baseClass} bg-gray-100 text-gray-500`}>미구독</span>;
+      default:
+        return <span className={`${baseClass} bg-gray-100 text-gray-600`}>{status || '-'}</span>;
+    }
+  };
+
+  // 외부 클릭 감지 (필터 팝업 닫기)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilter(false);
+        setFilterPosition(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const hasActiveFilters = industryFilter.length > 0 || planFilter.length > 0 || subscriptionStatusFilter.length > 0 || includeDeleted;
+
+  return (
+    <div className="space-y-6 overflow-x-hidden">
+      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
+        <div className="flex items-center gap-3">
+          <HomeSimpleDoor className="w-8 h-8 text-blue-600" />
+          <h1 className="text-2xl font-bold text-gray-900">매장 관리</h1>
+        </div>
+        <button
+          onClick={() => setShowSchemaModal(true)}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+          title="관리자 필드 설정"
+        >
+          <Notes className="w-4 h-4" />
+          <span>관리자 필드</span>
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPagination(prev => ({ ...prev, page: 1 }));
+                    }}
+                    placeholder="검색"
+                    className="w-48 sm:w-64 pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  {search && (
+                    <button
+                      onClick={() => { setSearch(''); setPagination(prev => ({ ...prev, page: 1 })); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                    >
+                      <Xmark className="w-3 h-3 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+                <div className="relative" ref={filterRef}>
+                  <button
+                    onClick={(e) => {
+                      if (showFilter) {
+                        setShowFilter(false);
+                        setFilterPosition(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setFilterPosition({
+                          top: rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                        });
+                        setShowFilter(true);
+                      }
+                    }}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      hasActiveFilters
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title="필터"
+                  >
+                    <Filter className="w-4 h-4" />
+                  </button>
+                  {showFilter && filterPosition && (
+                    <div
+                      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[280px] max-h-[70vh] overflow-y-auto"
+                      style={{ top: filterPosition.top, right: filterPosition.right, zIndex: 9999 }}
+                    >
+                      <div className="space-y-4">
+                        {/* 업종 필터 */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">업종</label>
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            {Object.entries(INDUSTRIES).map(([code, label]) => (
+                              <label key={code} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={industryFilter.includes(code)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setIndustryFilter(prev => [...prev, code]);
+                                    } else {
+                                      setIndustryFilter(prev => prev.filter(v => v !== code));
+                                    }
+                                    setPagination(prev => ({ ...prev, page: 1 }));
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 플랜 필터 */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">플랜</label>
+                          <div className="space-y-1.5">
+                            {[
+                              { value: 'none', label: '미지정' },
+                              { value: 'trial', label: 'Trial' },
+                              { value: 'basic', label: 'Basic' },
+                              { value: 'business', label: 'Business' },
+                            ].map(option => (
+                              <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={planFilter.includes(option.value)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setPlanFilter(prev => [...prev, option.value]);
+                                    } else {
+                                      setPlanFilter(prev => prev.filter(v => v !== option.value));
+                                    }
+                                    setPagination(prev => ({ ...prev, page: 1 }));
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{option.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 구독상태 필터 */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">구독상태</label>
+                          <div className="space-y-1.5">
+                            {[
+                              { value: 'none', label: '미구독' },
+                              { value: 'trialing', label: '체험' },
+                              { value: 'active', label: '구독중' },
+                              { value: 'canceled', label: '해지' },
+                              { value: 'expired', label: '만료' },
+                            ].map(option => (
+                              <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={subscriptionStatusFilter.includes(option.value)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSubscriptionStatusFilter(prev => [...prev, option.value]);
+                                    } else {
+                                      setSubscriptionStatusFilter(prev => prev.filter(v => v !== option.value));
+                                    }
+                                    setPagination(prev => ({ ...prev, page: 1 }));
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{option.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 삭제된 매장 포함 */}
+                        <div className="pt-2 border-t border-gray-100">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={includeDeleted}
+                              onChange={(e) => {
+                                setIncludeDeleted(e.target.checked);
+                                setPagination(prev => ({ ...prev, page: 1 }));
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">삭제된 매장 포함</span>
+                          </label>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setIndustryFilter([]);
+                            setPlanFilter([]);
+                            setSubscriptionStatusFilter([]);
+                            setIncludeDeleted(false);
+                            setPagination(prev => ({ ...prev, page: 1 }));
+                          }}
+                          className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
+                        >
+                          필터 초기화
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleFilter}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  조회
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Spinner size="md" />
+          </div>
+        ) : tenants.length === 0 ? (
+          <div className="text-center py-20 text-gray-500">
+            매장이 없습니다.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-max">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">매장명</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">회원</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">연락처</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">이메일</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">업종</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">플랜</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">구독상태</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">생성일</th>
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">상세</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tenants.map((tenant, index) => (
+                  <tr key={tenant.id} className={`hover:bg-gray-50 transition-colors ${tenant.deleted ? 'bg-red-50/50' : ''}`}>
+                    <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                      {(pagination.page - 1) * pagination.limit + index + 1}
+                    </td>
+                    <td className="px-2 py-3 text-sm font-medium text-gray-900 text-center">
+                      {tenant.brandName}
+                      {tenant.deleted && (
+                        <span className="ml-1 text-xs text-red-400">(삭제됨)</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                      {tenant.name || '-'}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                      {tenant.phone || '-'}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                      {tenant.email || '-'}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                      {getIndustryLabel(tenant.industry)}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                      {getPlanName(tenant.plan)}
+                    </td>
+                    <td className="px-2 py-3 text-center">
+                      {getSubscriptionStatusBadge(tenant.subscriptionStatus, tenant.deleted)}
+                    </td>
+                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                      {formatDate(tenant.createdAt)}
+                    </td>
+                    <td className="px-2 py-3 text-center">
+                      <Link
+                        href={`/admin/tenants/${tenant.tenantId}`}
+                        className="inline-flex p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="상세보기"
+                      >
+                        <Eye className="w-4 h-4 text-gray-600" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 페이지네이션 */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 sticky left-0">
+            <p className="text-sm text-gray-500">
+              {pagination.total}개 중 {(pagination.page - 1) * pagination.limit + 1}-
+              {Math.min(pagination.page * pagination.limit, pagination.total)}개 표시
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                disabled={pagination.page === 1}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <NavArrowLeft className="w-5 h-5" />
+              </button>
+              <span className="text-sm text-gray-600">
+                {pagination.page} / {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                disabled={pagination.page === pagination.totalPages}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <NavArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 관리자 필드 스키마 관리 모달 */}
+      {showSchemaModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">관리자 필드 설정</h2>
+              <button
+                onClick={() => setShowSchemaModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Xmark className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-500 mb-4">
+                여기서 정의한 필드는 모든 매장의 상세 페이지에서 관리자 메모 탭에 표시됩니다.
+              </p>
+
+              {/* 기존 필드 목록 */}
+              {metaSchema.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">등록된 필드</h3>
+                  <div className="space-y-2">
+                    {metaSchema.map((field) => (
+                      <div
+                        key={field.name}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div>
+                          <span className="font-medium text-gray-900">{field.label}</span>
+                          <span className="ml-2 text-xs text-gray-500">({field.name})</span>
+                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
+                            {field.type}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteField(field.name)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="삭제"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 새 필드 추가 */}
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">새 필드 추가</h3>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">필드명 (영문)</label>
+                      <input
+                        type="text"
+                        value={newFieldName}
+                        onChange={(e) => setNewFieldName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                        placeholder="예: manager_name"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">표시 라벨</label>
+                      <input
+                        type="text"
+                        value={newFieldLabel}
+                        onChange={(e) => setNewFieldLabel(e.target.value)}
+                        placeholder="예: 담당자명"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">필드 타입</label>
+                    <select
+                      value={newFieldType}
+                      onChange={(e) => setNewFieldType(e.target.value as 'text' | 'number' | 'boolean' | 'select')}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="text">텍스트</option>
+                      <option value="number">숫자</option>
+                      <option value="boolean">예/아니오</option>
+                      <option value="select">선택</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleAddField}
+                    disabled={savingSchema || !newFieldName.trim() || !newFieldLabel.trim()}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {savingSchema ? '추가 중...' : '필드 추가'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100">
+              <button
+                onClick={() => setShowSchemaModal(false)}
+                className="w-full px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
