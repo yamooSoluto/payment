@@ -9,12 +9,15 @@ import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicField
 
 type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription';
 
+// 삭제 관련 필드 (삭제된 매장에서만 표시)
+const DELETION_FIELDS = ['deleted', 'deletedAt', 'deletedBy', 'permanentDeleteAt'];
+
 // 탭별 필드 그룹핑
 const FIELD_GROUPS: Record<string, string[]> = {
   basic: [
     'tenantId', 'branchNo', 'brandName', 'brandCode', 'address', 'industry',
-    'email', 'phone', 'name', 'userId', 'deleted', 'deletedAt', 'deletedBy',
-    'permanentDeleteAt', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
+    'email', 'phone', 'name', 'userId',
+    'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
     'isManualRegistration', 'onboardingCompleted', 'onboardingCompletedAt',
     'locale', 'timezone', 'opsTimeStart', 'opsTimeEnd', 'storeInfo', 'storeInfoCompleted'
   ],
@@ -32,6 +35,7 @@ const ALL_GROUPED_FIELDS = [
   ...FIELD_GROUPS.ai,
   ...FIELD_GROUPS.integrations,
   ...FIELD_GROUPS.subscription,
+  ...DELETION_FIELDS,
 ];
 
 interface Payment {
@@ -464,15 +468,20 @@ export default function TenantDetailPage() {
   // 변경사항 있는지 확인
   const hasAnyChanges = hasChanges || Object.keys(editedAdminFields).length > 0;
 
-  // 탭별 필드 필터링
+  // 탭별 필드 필터링 (정의된 필드는 값이 없어도 항상 표시)
   const getFieldsForTab = (tab: TabType): Record<string, unknown> => {
-    const groupFields = FIELD_GROUPS[tab];
+    let groupFields = [...FIELD_GROUPS[tab]];
+
+    // basic 탭에서 삭제된 매장인 경우에만 삭제 관련 필드 추가
+    if (tab === 'basic' && tenant.deleted) {
+      groupFields = [...groupFields, ...DELETION_FIELDS];
+    }
+
     const result: Record<string, unknown> = {};
 
     for (const field of groupFields) {
-      if (field in tenant) {
-        result[field] = getCurrentValue(field);
-      }
+      // tenant에 있든 없든 항상 포함 (값이 없으면 null)
+      result[field] = getCurrentValue(field) ?? null;
     }
 
     return result;

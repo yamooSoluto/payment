@@ -140,11 +140,12 @@ export async function POST(request: NextRequest) {
       tenantUpdateData['subscription.plan'] = updates.plan;
       tenantUpdateData['plan'] = updates.plan;
     }
-    if (updates?.currentPeriodEnd) {
-      tenantUpdateData['subscription.renewsAt'] = new Date(updates.currentPeriodEnd);
-    }
     if (updates?.currentPeriodStart) {
       tenantUpdateData['subscription.startedAt'] = new Date(updates.currentPeriodStart);
+    }
+    // renewsAt은 nextBillingDate와 매핑됨 (currentPeriodEnd 아님)
+    if (updates?.nextBillingDate) {
+      tenantUpdateData['subscription.renewsAt'] = new Date(updates.nextBillingDate);
     }
 
     if (Object.keys(tenantUpdateData).length > 0) {

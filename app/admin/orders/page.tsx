@@ -115,9 +115,9 @@ export default function OrdersPage() {
     availableAmount: number;
   }>({ isOpen: false, payment: null, availableAmount: 0 });
   const [refundForm, setRefundForm] = useState({
-    type: 'full' as 'full' | 'partial',
+    reason: '' as '' | '불만' | '실수' | '변심' | '버그' | '관리' | '기타',
+    customReason: '',
     amount: 0,
-    reason: '',
     cancelSubscription: false,
   });
   const [processingRefund, setProcessingRefund] = useState(false);
@@ -337,9 +337,9 @@ export default function OrdersPage() {
       availableAmount,
     });
     setRefundForm({
-      type: 'full',
-      amount: availableAmount,
       reason: '',
+      customReason: '',
+      amount: availableAmount,
       cancelSubscription: false,
     });
     setActionDropdown(null);
@@ -349,15 +349,18 @@ export default function OrdersPage() {
   const handleRefund = async () => {
     if (!refundModal.payment) return;
 
-    const refundAmount = refundForm.type === 'full' ? refundModal.availableAmount : refundForm.amount;
-
-    if (refundAmount <= 0) {
+    if (refundForm.amount <= 0) {
       alert('환불 금액을 입력해주세요.');
       return;
     }
 
-    if (refundAmount > refundModal.availableAmount) {
+    if (refundForm.amount > refundModal.availableAmount) {
       alert(`환불 가능 금액(${refundModal.availableAmount.toLocaleString()}원)을 초과했습니다.`);
+      return;
+    }
+
+    if (!refundForm.reason) {
+      alert('환불 사유를 선택해주세요.');
       return;
     }
 
@@ -369,14 +372,18 @@ export default function OrdersPage() {
     setProcessingRefund(true);
 
     try {
+      const reasonText = refundForm.reason === '기타' && refundForm.customReason
+        ? `기타: ${refundForm.customReason}`
+        : refundForm.reason;
+
       const response = await fetch('/api/admin/payments/refund', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentId: refundModal.payment.id,
           paymentKey: refundModal.payment.paymentKey,
-          refundAmount,
-          refundReason: refundForm.reason.trim() || '관리자 환불 처리',
+          refundAmount: refundForm.amount,
+          refundReason: reasonText,
           cancelSubscription: refundForm.cancelSubscription,
           tenantId: refundModal.payment.tenantId,
         }),
@@ -1097,66 +1104,59 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            {/* 환불 유형 선택 */}
+            {/* 환불 사유 */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">환불 유형</label>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="refundType"
-                    checked={refundForm.type === 'full'}
-                    onChange={() => {
-                      setRefundForm({ ...refundForm, type: 'full', amount: refundModal.availableAmount });
-                    }}
-                    className="text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm">전액 환불</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="refundType"
-                    checked={refundForm.type === 'partial'}
-                    onChange={() => {
-                      setRefundForm({ ...refundForm, type: 'partial', amount: 0 });
-                    }}
-                    className="text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm">부분 환불</span>
-                </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                환불사유 <span className="text-red-500">*</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(['불만', '실수', '변심', '버그', '관리', '기타'] as const).map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setRefundForm({ ...refundForm, reason })}
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      refundForm.reason === reason
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
               </div>
+              {/* 기타 사유 입력 */}
+              {refundForm.reason === '기타' && (
+                <input
+                  type="text"
+                  value={refundForm.customReason}
+                  onChange={(e) => setRefundForm({ ...refundForm, customReason: e.target.value })}
+                  placeholder="기타 사유를 입력하세요"
+                  className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              )}
             </div>
 
-            {/* 부분 환불 금액 입력 */}
-            {refundForm.type === 'partial' && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">환불 금액</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={refundForm.amount || ''}
-                    onChange={(e) => setRefundForm({ ...refundForm, amount: parseInt(e.target.value) || 0 })}
-                    max={refundModal.availableAmount}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
-                    placeholder="환불 금액 입력"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">최대 {refundModal.availableAmount.toLocaleString()}원</p>
-              </div>
-            )}
-
-            {/* 환불 사유 (선택) */}
+            {/* 환불 금액 */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">환불 사유 <span className="text-gray-400 font-normal">(선택)</span></label>
-              <textarea
-                value={refundForm.reason}
-                onChange={(e) => setRefundForm({ ...refundForm, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={2}
-                placeholder="환불 사유를 입력하세요 (미입력 시 '관리자 환불 처리'로 저장)"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                금액 <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={refundForm.amount || ''}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    setRefundForm({ ...refundForm, amount: Math.min(value, refundModal.availableAmount) });
+                  }}
+                  max={refundModal.availableAmount}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                  placeholder="환불 금액 입력"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">최대 환불 가능: {refundModal.availableAmount.toLocaleString()}원</p>
             </div>
 
             {/* 구독 처리 옵션 */}
@@ -1197,7 +1197,7 @@ export default function OrdersPage() {
               </button>
               <button
                 onClick={handleRefund}
-                disabled={processingRefund || (refundForm.type === 'partial' && refundForm.amount <= 0)}
+                disabled={processingRefund || !refundForm.reason || refundForm.amount <= 0}
                 className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingRefund ? '처리 중...' : '환불 처리'}

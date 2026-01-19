@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       name: string;
       brandName: string;
       brandCode: string;
-      branchNo: number | null;
+      branchNo: string | null;
       phone: string;
       industry: string;
       plan: string;
@@ -70,6 +70,9 @@ export async function GET(request: NextRequest) {
       deleted: boolean;
       createdAt: string | null;
       hasBillingKey: boolean;
+      csTone: string;
+      botName: string;
+      reviewCode: string;
     }
 
     let tenants: TenantData[] = tenantsSnapshot.docs
@@ -86,6 +89,7 @@ export async function GET(request: NextRequest) {
         const tenantId = data.tenantId || doc.id;
         const subscription = subscriptionMap.get(tenantId);
 
+        const tenantItem = data.tenantItem || {};
         return {
           id: doc.id,
           tenantId,
@@ -93,7 +97,7 @@ export async function GET(request: NextRequest) {
           name: data.name || data.ownerName || '',
           brandName: data.brandName || data.businessName || '이름 없음',
           brandCode: data.brandCode || '',
-          branchNo: typeof data.branchNo === 'number' ? data.branchNo : null,
+          branchNo: data.branchNo != null ? String(data.branchNo) : null,
           phone: data.phone || '',
           industry: data.industry || '',
           plan: subscription?.plan || '',
@@ -102,6 +106,9 @@ export async function GET(request: NextRequest) {
           deleted: data.deleted || false,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
           hasBillingKey: subscription?.hasBillingKey || false,
+          csTone: data.csTone || '',
+          botName: tenantItem.BotName || tenantItem.botName || '',
+          reviewCode: tenantItem.reviewCode || '',
         };
       });
 
@@ -166,8 +173,8 @@ export async function GET(request: NextRequest) {
 
     // 지점 번호 오름차순 정렬 (branchNo가 없으면 맨 뒤로)
     tenants.sort((a, b) => {
-      const aNo = a.branchNo ?? Infinity;
-      const bNo = b.branchNo ?? Infinity;
+      const aNo = a.branchNo ? parseInt(a.branchNo, 10) : Infinity;
+      const bNo = b.branchNo ? parseInt(b.branchNo, 10) : Infinity;
       return aNo - bNo;
     });
 

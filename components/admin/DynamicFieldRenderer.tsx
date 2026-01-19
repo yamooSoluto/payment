@@ -4,6 +4,17 @@ import { useState } from 'react';
 import { NavArrowDown, NavArrowRight, Copy, Check, Code, List } from 'iconoir-react';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
 
+// csTone 필드 매핑 (asst_* ID → 친숙한 라벨)
+const CS_TONE_OPTIONS: Record<string, string> = {
+  'asst_7fV8slbPgcscXGoiyzLCrOqG': 'cute',
+  'asst_1Dz4DylCNTNnaVQbrW3WlmCH': 'basic',
+  'asst_hKaWohoAZehPvV50iRyPGuRo': 'GPT',
+  'asst_5pHyGmGCRrRQDtQeWh2LYRGq': 'sweet',
+  'asst_HJHT1weZPZO1UZAuDryCBjhA': 'ajae',
+  'asst_o0yi4J6uAJG8G9ZQhDF34rQu': 'brother',
+  'asst_dRBKDqplI86xxUyExv6HnY4V': 'duck',
+};
+
 // 읽기 전용 필드 목록
 const READ_ONLY_FIELDS = [
   'id', 'tenantId', 'email', 'userId',
@@ -42,10 +53,84 @@ function isISODateString(value: string): boolean {
   return !isNaN(date.getTime());
 }
 
+// 항상 JSON 타입으로 처리해야 하는 필드 목록
+// 주의: webhook, widgetUrl, naverInboundUrl, taskBoard 등 URL 문자열 필드는 제외
+const JSON_TYPE_FIELDS = [
+  'slack', 'channeltalk', 'naverAuthorization',
+  'meta', 'storeInfo', 'addons', 'policy', 'qa',
+  'criteria', 'items', 'library', 'trial', 'subscription'
+];
+
+// JSON 필드의 기본 스키마 (null이거나 빈 객체일 때 표시할 필드 구조)
+const DEFAULT_JSON_SCHEMAS: Record<string, Record<string, unknown>> = {
+  channeltalk: {
+    secretKey: null,
+    accessKey: null,
+    botName: null,
+    webhookToken: null,
+    channelId: null,
+    subChannels: null,
+  },
+  slack: {
+    allowedUserIds: [],
+    routeTable: null,
+    signingSecretRef: null,
+    teamId: null,
+    defaultChannelId: null,
+    opsChannelId: null,
+    defaultTeam: null,
+    botTokenSecretRef: null,
+    routing: null,
+    defaultMentions: null,
+  },
+  naverAuthorization: {
+    accessToken: null,
+    refreshToken: null,
+    expiresAt: null,
+  },
+};
+
+// JSON 필드 값에 기본 스키마 적용
+function applyDefaultSchema(fieldName: string, value: unknown): unknown {
+  const defaultSchema = DEFAULT_JSON_SCHEMAS[fieldName];
+  if (!defaultSchema) return value;
+
+  // 값이 null이거나 빈 객체면 기본 스키마 사용
+  if (value === null || value === undefined) {
+    return { ...defaultSchema };
+  }
+
+  // 값이 객체면 기본 스키마와 병합 (기존 값 우선)
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return { ...defaultSchema, ...(value as Record<string, unknown>) };
+  }
+
+  return value;
+}
+
 // 필드 타입 추론
 type FieldType = 'text' | 'textarea' | 'json' | 'boolean' | 'date' | 'number' | 'url';
 
+// 특수 필드에서 URL 추출 (예: taskBoard.viewUrl)
+function extractUrlFromField(fieldName: string, value: unknown): string | null {
+  if (fieldName === 'taskBoard' && typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.viewUrl === 'string' && obj.viewUrl.startsWith('http')) {
+      return obj.viewUrl;
+    }
+  }
+  return null;
+}
+
 function inferFieldType(value: unknown, fieldName: string): FieldType {
+  // JSON 타입 필드는 값이 null이어도 json으로 처리
+  if (JSON_TYPE_FIELDS.includes(fieldName)) return 'json';
+
+  // taskBoard는 viewUrl이 있으면 URL로 처리
+  if (fieldName === 'taskBoard' && extractUrlFromField(fieldName, value)) {
+    return 'url';
+  }
+
   if (value === null || value === undefined) return 'text';
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number') return 'number';
@@ -78,10 +163,18 @@ function getIndustryLabel(value: string): string {
   return value;
 }
 
+// csTone 코드를 라벨로 변환
+function getCsToneLabel(value: string): string {
+  return CS_TONE_OPTIONS[value] || value;
+}
+
 // 특수 필드 값 포맷팅
 function formatFieldValue(fieldName: string, value: unknown): unknown {
   if (fieldName === 'industry' && typeof value === 'string') {
     return getIndustryLabel(value);
+  }
+  if (fieldName === 'csTone' && typeof value === 'string') {
+    return getCsToneLabel(value);
   }
   return value;
 }
@@ -166,6 +259,9 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
   const fieldType = inferFieldType(value, fieldName);
   const label = formatFieldLabel(fieldName);
 
+  // JSON 타입 필드는 기본 스키마 적용 (null이어도 필드 구조 표시)
+  const processedValue = fieldType === 'json' ? applyDefaultSchema(fieldName, value) : value;
+
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -210,26 +306,30 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
       return <span className="text-gray-900">{formatDate(value)}</span>;
     }
 
-    if (fieldType === 'url' && typeof value === 'string') {
-      return (
-        <div className="flex items-start gap-2">
-          <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
-            {value}
-          </a>
-          <button
-            onClick={() => handleCopy(value)}
-            className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
-            title="복사"
-          >
-            {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3 text-gray-400" />}
-          </button>
-        </div>
-      );
+    if (fieldType === 'url') {
+      // taskBoard 등 특수 필드에서 URL 추출, 또는 문자열 값 직접 사용
+      const urlValue = extractUrlFromField(fieldName, value) || (typeof value === 'string' ? value : null);
+      if (urlValue) {
+        return (
+          <div className="flex items-start gap-2">
+            <a href={urlValue} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+              {urlValue}
+            </a>
+            <button
+              onClick={() => handleCopy(urlValue)}
+              className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
+              title="복사"
+            >
+              {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3 text-gray-400" />}
+            </button>
+          </div>
+        );
+      }
     }
 
     if (fieldType === 'json') {
-      const jsonObj = typeof value === 'object' && value !== null ? value : {};
-      const isArray = Array.isArray(value);
+      const jsonObj = typeof processedValue === 'object' && processedValue !== null ? processedValue : {};
+      const isArray = Array.isArray(processedValue);
 
       // 필드 뷰로 펼쳐서 보여줌
       return (
@@ -237,8 +337,8 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
           <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
             {isArray ? (
               // 배열인 경우
-              (value as unknown[]).length > 0 ? (
-                (value as unknown[]).map((item, index) => (
+              (processedValue as unknown[]).length > 0 ? (
+                (processedValue as unknown[]).map((item, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-8">[{index}]</span>
                     <span className="flex-1 text-sm text-gray-900">{String(item ?? '-')}</span>
@@ -279,7 +379,7 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
                   );
                 })
               ) : (
-                <p className="text-xs text-gray-400 text-center py-2">빈 객체입니다</p>
+                <p className="text-xs text-gray-400 text-center py-2">값이 없습니다</p>
               )
             )}
           </div>
@@ -342,19 +442,19 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
     }
 
     if (fieldType === 'json') {
-      const jsonObj = typeof value === 'object' && value !== null ? value : {};
-      const jsonString = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-      const isArray = Array.isArray(value);
+      const jsonObj = typeof processedValue === 'object' && processedValue !== null ? processedValue : {};
+      const jsonString = typeof processedValue === 'string' ? processedValue : JSON.stringify(processedValue, null, 2);
+      const isArray = Array.isArray(processedValue);
 
       // 필드별 값 변경 핸들러
       const handleFieldValueChange = (key: string, newValue: string) => {
         if (isArray) {
-          const newArray = [...(value as unknown[])];
+          const newArray = [...(processedValue as unknown[])];
           const index = parseInt(key);
           newArray[index] = newValue;
           onChange?.(fieldName, newArray);
         } else {
-          const currentObj = value as Record<string, unknown>;
+          const currentObj = processedValue as Record<string, unknown>;
           // 원래 값의 타입에 맞게 변환 시도
           const originalValue = currentObj[key];
           let parsedValue: unknown = newValue;
@@ -454,7 +554,16 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
                 })
               )}
               {Object.keys(jsonObj).length === 0 && !isArray && (
-                <p className="text-xs text-gray-400 text-center py-2">빈 객체입니다</p>
+                <div className="text-center py-3">
+                  <p className="text-xs text-gray-400 mb-2">값이 없습니다</p>
+                  <button
+                    type="button"
+                    onClick={() => setJsonEditMode('json')}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    JSON 모드에서 값 추가하기
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -502,6 +611,38 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
       );
     }
 
+    // csTone 필드는 select로 표시 (asst_* 값으로 저장)
+    if (fieldName === 'csTone') {
+      const currentValue = String(value ?? '');
+
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => onChange?.(fieldName, e.target.value)}
+          className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full max-w-md"
+        >
+          <option value="">선택...</option>
+          {Object.entries(CS_TONE_OPTIONS).map(([code, label]) => (
+            <option key={code} value={code}>{label}</option>
+          ))}
+        </select>
+      );
+    }
+
+    // taskBoard 등 특수 필드에서 URL 추출해서 편집
+    if (fieldType === 'url' && fieldName === 'taskBoard') {
+      const urlValue = extractUrlFromField(fieldName, value) || '';
+      return (
+        <input
+          type="url"
+          value={urlValue}
+          onChange={(e) => onChange?.(fieldName, { viewUrl: e.target.value })}
+          placeholder="https://airtable.com/..."
+          className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full max-w-md"
+        />
+      );
+    }
+
     return (
       <input
         type={fieldType === 'url' ? 'url' : 'text'}
@@ -516,8 +657,8 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
 
   return (
     <div className="py-3 border-b border-gray-100 last:border-0">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-2">
-        <label className="text-sm font-medium text-gray-600 w-40 flex-shrink-0 pt-2 flex items-center gap-1.5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <label className="text-sm font-medium text-gray-600 w-40 flex-shrink-0 flex items-center gap-1.5">
           {iconSrc && (
             <img src={iconSrc} alt="" className="w-4 h-4 object-contain" />
           )}

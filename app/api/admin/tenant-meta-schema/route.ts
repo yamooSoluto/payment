@@ -110,7 +110,13 @@ export async function PUT(request: NextRequest) {
 // POST: 새 필드 추가
 export async function POST(request: NextRequest) {
   try {
-    const admin = await getAdminFromRequest(request);
+    let admin;
+    try {
+      admin = await getAdminFromRequest(request);
+    } catch (authError) {
+      console.error('Auth error:', authError);
+      return NextResponse.json({ error: `인증 오류: ${authError instanceof Error ? authError.message : '알 수 없음'}` }, { status: 500 });
+    }
 
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -120,12 +126,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const db = adminDb || initializeFirebaseAdmin();
+    let db;
+    try {
+      db = adminDb || initializeFirebaseAdmin();
+    } catch (dbError) {
+      console.error('DB init error:', dbError);
+      return NextResponse.json({ error: `DB 초기화 오류: ${dbError instanceof Error ? dbError.message : '알 수 없음'}` }, { status: 500 });
+    }
+
     if (!db) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      return NextResponse.json({ error: '요청 데이터 파싱 오류' }, { status: 400 });
+    }
+
     const { name, label, type, options, tab, saveToFirestore } = body as CustomFieldSchema;
 
     if (!name || !label || !type || !tab) {
@@ -133,7 +153,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 기존 스키마 조회
-    const schemaDoc = await db.collection('admin_settings').doc('admin_field_schema').get();
+    let schemaDoc;
+    try {
+      schemaDoc = await db.collection('admin_settings').doc('admin_field_schema').get();
+    } catch (fetchError) {
+      console.error('Schema fetch error:', fetchError);
+      return NextResponse.json({ error: `스키마 조회 오류: ${fetchError instanceof Error ? fetchError.message : '알 수 없음'}` }, { status: 500 });
+    }
+
     const existingFields: CustomFieldSchema[] = schemaDoc.exists ? (schemaDoc.data()?.fields || []) : [];
 
     // 중복 체크
@@ -145,24 +172,33 @@ export async function POST(request: NextRequest) {
     const sameTabFields = existingFields.filter(f => f.tab === tab);
     const newOrder = sameTabFields.length > 0 ? Math.max(...sameTabFields.map(f => f.order)) + 1 : 0;
 
-    // 새 필드 추가
+    // 새 필드 추가 (undefined 값은 Firestore에서 허용되지 않으므로 조건부 포함)
     const newField: CustomFieldSchema = {
       name,
       label,
       type,
-      options: type === 'select' ? options : undefined,
       tab,
       saveToFirestore: saveToFirestore ?? false,
       order: newOrder,
     };
 
+    // select 타입일 때만 options 추가
+    if (type === 'select' && options) {
+      newField.options = options;
+    }
+
     const updatedFields = [...existingFields, newField];
 
-    await db.collection('admin_settings').doc('admin_field_schema').set({
-      fields: updatedFields,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: admin.adminId,
-    });
+    try {
+      await db.collection('admin_settings').doc('admin_field_schema').set({
+        fields: updatedFields,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: admin.adminId,
+      });
+    } catch (saveError) {
+      console.error('Schema save error:', saveError);
+      return NextResponse.json({ error: `스키마 저장 오류: ${saveError instanceof Error ? saveError.message : '알 수 없음'}` }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -171,8 +207,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Add tenant meta field error:', error);
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
     return NextResponse.json(
-      { error: '필드를 추가하는 중 오류가 발생했습니다.' },
+      { error: `필드를 추가하는 중 오류가 발생했습니다: ${errorMessage}` },
       { status: 500 }
     );
   }

@@ -1,10 +1,46 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Eye, Settings, Plus, Trash } from 'iconoir-react';
+import { useRouter } from 'next/navigation';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Settings, Plus, Trash, ViewColumns3 } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
+
+// 컬럼 정의 (고정 컬럼 제외)
+interface ColumnDef {
+  key: string;
+  label: string;
+  defaultVisible: boolean;
+}
+
+const AVAILABLE_COLUMNS: ColumnDef[] = [
+  { key: 'branchNo', label: '지점번호', defaultVisible: true },
+  { key: 'name', label: '회원', defaultVisible: true },
+  { key: 'phone', label: '연락처', defaultVisible: true },
+  { key: 'email', label: '이메일', defaultVisible: false },
+  { key: 'industry', label: '업종', defaultVisible: true },
+  { key: 'plan', label: '플랜', defaultVisible: true },
+  { key: 'subscriptionStatus', label: '구독상태', defaultVisible: true },
+  { key: 'createdAt', label: '생성일', defaultVisible: false },
+  { key: 'brandCode', label: '매장코드', defaultVisible: false },
+  { key: 'csTone', label: 'AI톤', defaultVisible: false },
+  { key: 'botName', label: '봇이름', defaultVisible: false },
+  { key: 'reviewCode', label: '리뷰코드', defaultVisible: false },
+];
+
+// csTone 필드 매핑 (asst_* ID → 친숙한 라벨)
+const CS_TONE_OPTIONS: Record<string, string> = {
+  'asst_7fV8slbPgcscXGoiyzLCrOqG': 'cute',
+  'asst_1Dz4DylCNTNnaVQbrW3WlmCH': 'basic',
+  'asst_hKaWohoAZehPvV50iRyPGuRo': 'GPT',
+  'asst_5pHyGmGCRrRQDtQeWh2LYRGq': 'sweet',
+  'asst_HJHT1weZPZO1UZAuDryCBjhA': 'ajae',
+  'asst_o0yi4J6uAJG8G9ZQhDF34rQu': 'brother',
+  'asst_dRBKDqplI86xxUyExv6HnY4V': 'duck',
+};
+
+const COLUMN_STORAGE_KEY = 'admin_tenants_visible_columns';
 
 interface Tenant {
   id: string;
@@ -13,6 +49,7 @@ interface Tenant {
   name: string;
   brandName: string;
   brandCode: string;
+  branchNo: string | null;
   phone: string;
   industry: string;
   plan: string;
@@ -20,7 +57,9 @@ interface Tenant {
   status: string;
   deleted: boolean;
   createdAt: string | null;
-  hasBillingKey: boolean;
+  csTone: string;
+  botName: string;
+  reviewCode: string;
 }
 
 interface Pagination {
@@ -44,6 +83,7 @@ interface CustomFieldSchema {
 }
 
 export default function TenantsPage() {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -70,6 +110,15 @@ export default function TenantsPage() {
   const [newFieldTab, setNewFieldTab] = useState<CustomFieldTab>('basic');
   const [newFieldSaveToFirestore, setNewFieldSaveToFirestore] = useState(false);
   const [savingSchema, setSavingSchema] = useState(false);
+
+  // 컬럼 선택 상태
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    // 기본값 설정 (localStorage는 클라이언트에서만 접근)
+    return AVAILABLE_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
+  });
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [columnSettingsPosition, setColumnSettingsPosition] = useState<{ top: number; right: number } | null>(null);
+  const columnSettingsRef = useRef<HTMLDivElement>(null);
 
   const fetchTenants = useCallback(async () => {
     setLoading(true);
@@ -123,6 +172,47 @@ export default function TenantsPage() {
     fetchCustomFieldSchema();
   }, [fetchCustomFieldSchema]);
 
+  // localStorage에서 컬럼 설정 불러오기
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setVisibleColumns(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load column settings:', e);
+    }
+  }, []);
+
+  // 컬럼 설정 변경 시 localStorage에 저장
+  const handleColumnToggle = (columnKey: string) => {
+    setVisibleColumns(prev => {
+      const newColumns = prev.includes(columnKey)
+        ? prev.filter(k => k !== columnKey)
+        : [...prev, columnKey];
+      try {
+        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(newColumns));
+      } catch (e) {
+        console.error('Failed to save column settings:', e);
+      }
+      return newColumns;
+    });
+  };
+
+  // 컬럼 설정 전체 선택/해제
+  const handleSelectAllColumns = (selectAll: boolean) => {
+    const newColumns = selectAll ? AVAILABLE_COLUMNS.map(c => c.key) : [];
+    setVisibleColumns(newColumns);
+    try {
+      localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(newColumns));
+    } catch (e) {
+      console.error('Failed to save column settings:', e);
+    }
+  };
+
   // 새 필드 추가
   const handleAddField = async () => {
     if (!newFieldName.trim() || !newFieldLabel.trim()) {
@@ -155,8 +245,9 @@ export default function TenantsPage() {
         const data = await response.json();
         alert(data.error || '필드 추가에 실패했습니다.');
       }
-    } catch {
-      alert('오류가 발생했습니다.');
+    } catch (error) {
+      console.error('Add field error:', error);
+      alert(`오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setSavingSchema(false);
     }
@@ -238,12 +329,20 @@ export default function TenantsPage() {
     }
   };
 
+  const getCsToneLabel = (tone: string) => {
+    return CS_TONE_OPTIONS[tone] || tone || '-';
+  };
+
   // 외부 클릭 감지 (필터 팝업 닫기)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
         setShowFilter(false);
         setFilterPosition(null);
+      }
+      if (columnSettingsRef.current && !columnSettingsRef.current.contains(event.target as Node)) {
+        setShowColumnSettings(false);
+        setColumnSettingsPosition(null);
       }
     };
 
@@ -444,6 +543,75 @@ export default function TenantsPage() {
                     </div>
                   )}
                 </div>
+                {/* 컬럼 설정 버튼 */}
+                <div className="relative" ref={columnSettingsRef}>
+                  <button
+                    onClick={(e) => {
+                      if (showColumnSettings) {
+                        setShowColumnSettings(false);
+                        setColumnSettingsPosition(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setColumnSettingsPosition({
+                          top: rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                        });
+                        setShowColumnSettings(true);
+                      }
+                    }}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      visibleColumns.length < AVAILABLE_COLUMNS.length
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title="컬럼 설정"
+                  >
+                    <ViewColumns3 className="w-4 h-4" />
+                  </button>
+                  {showColumnSettings && columnSettingsPosition && (
+                    <div
+                      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[200px] max-h-[50vh] overflow-y-auto"
+                      style={{ top: columnSettingsPosition.top, right: columnSettingsPosition.right, zIndex: 9999 }}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                          <span className="text-sm font-medium text-gray-700">표시 컬럼</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleSelectAllColumns(true)}
+                              className="text-xs text-blue-600 hover:text-blue-700 px-1"
+                            >
+                              전체
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => handleSelectAllColumns(false)}
+                              className="text-xs text-gray-500 hover:text-gray-700 px-1"
+                            >
+                              해제
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          {AVAILABLE_COLUMNS.map((col) => (
+                            <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.includes(col.key)}
+                                onChange={() => handleColumnToggle(col.key)}
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700">{col.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">
+                          No., 매장명, 상세는 항상 표시됩니다
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleFilter}
                   className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
@@ -465,63 +633,131 @@ export default function TenantsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-max">
+            <table className="w-full min-w-max border-collapse">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">매장명</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">회원</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">연락처</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">이메일</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">업종</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">플랜</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">구독상태</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">생성일</th>
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">상세</th>
+                  {/* 고정 컬럼: No. */}
+                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-12 sticky left-0 bg-gray-50 z-10">No.</th>
+                  {/* 고정 컬럼: 매장명 */}
+                  <th className="text-center px-3 py-3 text-sm font-medium text-gray-500 min-w-[120px] sticky left-12 bg-gray-50 z-10 border-r border-gray-200">매장명</th>
+                  {/* 동적 컬럼 */}
+                  {visibleColumns.includes('branchNo') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">지점번호</th>
+                  )}
+                  {visibleColumns.includes('name') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">회원</th>
+                  )}
+                  {visibleColumns.includes('phone') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">연락처</th>
+                  )}
+                  {visibleColumns.includes('email') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">이메일</th>
+                  )}
+                  {visibleColumns.includes('industry') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">업종</th>
+                  )}
+                  {visibleColumns.includes('plan') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">플랜</th>
+                  )}
+                  {visibleColumns.includes('subscriptionStatus') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">구독상태</th>
+                  )}
+                  {visibleColumns.includes('createdAt') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">생성일</th>
+                  )}
+                  {visibleColumns.includes('brandCode') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">매장코드</th>
+                  )}
+                  {visibleColumns.includes('csTone') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">AI톤</th>
+                  )}
+                  {visibleColumns.includes('botName') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">봇이름</th>
+                  )}
+                  {visibleColumns.includes('reviewCode') && (
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">리뷰코드</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {tenants.map((tenant, index) => (
-                  <tr key={tenant.id} className={`hover:bg-gray-50 transition-colors ${tenant.deleted ? 'bg-red-50/50' : ''}`}>
-                    <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                  <tr
+                    key={tenant.id}
+                    onClick={() => router.push(`/admin/tenants/${tenant.tenantId}`)}
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${tenant.deleted ? 'bg-red-50/50' : ''}`}
+                  >
+                    {/* 고정 컬럼: No. */}
+                    <td className={`px-2 py-3 text-sm text-gray-400 text-center sticky left-0 z-10 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
                       {(pagination.page - 1) * pagination.limit + index + 1}
                     </td>
-                    <td className="px-2 py-3 text-sm font-medium text-gray-900 text-center">
-                      {tenant.brandName}
+                    {/* 고정 컬럼: 매장명 */}
+                    <td className={`px-3 py-3 text-sm font-medium text-gray-900 text-center sticky left-12 z-10 border-r border-gray-200 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
+                      <span className="whitespace-nowrap">{tenant.brandName}</span>
                       {tenant.deleted && (
                         <span className="ml-1 text-xs text-red-400">(삭제됨)</span>
                       )}
                     </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                      {tenant.name || '-'}
-                    </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                      {tenant.phone || '-'}
-                    </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                      {tenant.email || '-'}
-                    </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                      {getIndustryLabel(tenant.industry)}
-                    </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                      {getPlanName(tenant.plan)}
-                    </td>
-                    <td className="px-2 py-3 text-center">
-                      {getSubscriptionStatusBadge(tenant.subscriptionStatus, tenant.deleted)}
-                    </td>
-                    <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                      {formatDate(tenant.createdAt)}
-                    </td>
-                    <td className="px-2 py-3 text-center">
-                      <Link
-                        href={`/admin/tenants/${tenant.tenantId}`}
-                        className="inline-flex p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="상세보기"
-                      >
-                        <Eye className="w-4 h-4 text-gray-600" />
-                      </Link>
-                    </td>
+                    {/* 동적 컬럼 */}
+                    {visibleColumns.includes('branchNo') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {tenant.branchNo ?? '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('name') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {tenant.name || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('phone') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {tenant.phone || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('email') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {tenant.email || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('industry') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {getIndustryLabel(tenant.industry)}
+                      </td>
+                    )}
+                    {visibleColumns.includes('plan') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {getPlanName(tenant.plan)}
+                      </td>
+                    )}
+                    {visibleColumns.includes('subscriptionStatus') && (
+                      <td className="px-2 py-3 text-center whitespace-nowrap">
+                        {getSubscriptionStatusBadge(tenant.subscriptionStatus, tenant.deleted)}
+                      </td>
+                    )}
+                    {visibleColumns.includes('createdAt') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {formatDate(tenant.createdAt)}
+                      </td>
+                    )}
+                    {visibleColumns.includes('brandCode') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap font-mono text-xs">
+                        {tenant.brandCode || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('csTone') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {getCsToneLabel(tenant.csTone)}
+                      </td>
+                    )}
+                    {visibleColumns.includes('botName') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {tenant.botName || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.includes('reviewCode') && (
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap font-mono text-xs">
+                        {tenant.reviewCode || '-'}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -654,10 +890,12 @@ export default function TenantsPage() {
                         onChange={(e) => setNewFieldType(e.target.value as CustomFieldType)}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="string">텍스트</option>
-                        <option value="number">숫자</option>
-                        <option value="boolean">예/아니오</option>
-                        <option value="select">선택</option>
+                        <option value="string">string</option>
+                        <option value="number">number</option>
+                        <option value="boolean">boolean</option>
+                        <option value="timestamp">timestamp</option>
+                        <option value="map">map</option>
+                        <option value="array">array</option>
                       </select>
                     </div>
                     <div>

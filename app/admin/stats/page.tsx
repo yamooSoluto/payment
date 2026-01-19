@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { StatsUpSquare, Calendar, CreditCards, RefreshDouble, Group, HomeSimpleDoor, ChatBubble } from 'iconoir-react';
+import { StatsUpSquare, Calendar, CreditCards, Timer, Group, HomeSimpleDoor, ChatBubble } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import {
   LineChart,
@@ -100,7 +100,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 const tabs = [
   { id: 'revenue' as TabType, name: '매출', icon: CreditCards },
-  { id: 'subscription' as TabType, name: '구독', icon: RefreshDouble },
+  { id: 'subscription' as TabType, name: '구독', icon: Timer },
   { id: 'member' as TabType, name: '회원', icon: Group },
   { id: 'tenant' as TabType, name: '매장', icon: HomeSimpleDoor },
   { id: 'cs' as TabType, name: 'CS', icon: ChatBubble },

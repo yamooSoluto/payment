@@ -123,14 +123,15 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           fixed top-0 left-0 z-50 h-screen bg-gray-900 transform transition-all duration-200 ease-in-out
           lg:translate-x-0 lg:sticky lg:z-auto lg:top-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          ${collapsed ? 'w-16' : 'w-56'}
+          w-56 ${collapsed ? 'lg:w-16' : 'lg:w-56'}
         `}
       >
         {/* 로고 */}
-        <div className={`flex items-center h-16 border-b border-gray-800 ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
-          <Link href="/admin" className={`flex items-center overflow-hidden ${collapsed ? 'justify-center' : 'gap-2'}`}>
-            {collapsed ? (
-              <div className="bg-gray-700/50 rounded-lg p-1">
+        <div className={`flex items-center h-16 border-b border-gray-800 justify-between px-4 ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
+          <Link href="/admin" className={`flex items-center overflow-hidden gap-2 ${collapsed ? 'lg:justify-center lg:gap-0' : ''}`}>
+            {/* 축소 모드 로고 - 데스크톱에서만 표시 */}
+            {collapsed && (
+              <div className="hidden lg:block bg-gray-700/50 rounded-lg p-1">
                 <Image
                   src="/yamoo_favi2.png"
                   alt="YAMOO"
@@ -138,17 +139,17 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                   height={34}
                 />
               </div>
-            ) : (
-              <>
-                <Image
-                  src="/yamoo_white_cut.png"
-                  alt="YAMOO"
-                  width={100}
-                  height={32}
-                />
-                <span className="text-xs text-blue-400 font-medium">Admin</span>
-              </>
             )}
+            {/* 전체 로고 - 모바일에서 항상 표시, 데스크톱에서는 펼침 모드일 때만 */}
+            <div className={`flex items-center gap-2 ${collapsed ? 'lg:hidden' : ''}`}>
+              <Image
+                src="/yamoo_white_cut.png"
+                alt="YAMOO"
+                width={100}
+                height={32}
+              />
+              <span className="text-xs text-blue-400 font-medium">Admin</span>
+            </div>
           </Link>
           {!collapsed && (
             <button
@@ -161,7 +162,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         </div>
 
         {/* 메뉴 */}
-        <nav className={`p-2 space-y-1 ${collapsed ? 'px-2' : 'px-4'}`}>
+        <nav className={`p-2 space-y-1 px-4 ${collapsed ? 'lg:px-2' : ''}`}>
           {filteredMenuItems.map((item) => {
             const isActive = pathname === item.href ||
               (item.href !== '/admin' && pathname.startsWith(item.href));
@@ -174,8 +175,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                 onClick={onClose}
                 title={collapsed ? item.name : undefined}
                 className={`
-                  flex items-center gap-3 py-3 rounded-lg transition-colors
-                  ${collapsed ? 'justify-center px-2' : 'px-4'}
+                  flex items-center gap-3 py-3 rounded-lg transition-colors px-4
+                  ${collapsed ? 'lg:justify-center lg:px-2' : ''}
                   ${isActive
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-400 hover:bg-gray-800 hover:text-white'
@@ -183,7 +184,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                 `}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!collapsed && <span className="font-medium">{item.name}</span>}
+                {/* 메뉴 텍스트 - 모바일에서 항상 표시, 데스크톱에서는 펼침 모드일 때만 */}
+                <span className={`font-medium ${collapsed ? 'lg:hidden' : ''}`}>{item.name}</span>
               </Link>
             );
           })}
@@ -203,17 +205,16 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
 
         {/* 하단 정보 */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
-          {!collapsed && (
-            <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
-              <span>Powered by</span>
-              <Image
-                src="/soluto_white_cut.png"
-                alt="SOLUTO"
-                width={50}
-                height={16}
-              />
-            </div>
-          )}
+          {/* 모바일에서 항상 표시, 데스크톱에서는 펼침 모드일 때만 */}
+          <div className={`flex items-center justify-center gap-1.5 text-xs text-gray-500 ${collapsed ? 'lg:hidden' : ''}`}>
+            <span>Powered by</span>
+            <Image
+              src="/soluto_white_cut.png"
+              alt="SOLUTO"
+              width={50}
+              height={16}
+            />
+          </div>
         </div>
       </aside>
     </>
