@@ -99,6 +99,7 @@ export default function OrdersPage() {
   const [paymentDetailModal, setPaymentDetailModal] = useState<Payment | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
+  const [filterPosition, setFilterPosition] = useState<{ top: number; right: number } | null>(null);
 
   // 필터 상태
   const [typeFilter, setTypeFilter] = useState<'all' | 'charge' | 'refund'>('all');
@@ -177,6 +178,7 @@ export default function OrdersPage() {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
         setShowFilter(false);
+        setFilterPosition(null);
       }
       if (actionRef.current && !actionRef.current.contains(event.target as Node)) {
         setActionDropdown(null);
@@ -285,8 +287,8 @@ export default function OrdersPage() {
         '날짜': payment.paidAt
           ? new Date(payment.paidAt).toLocaleString('ko-KR')
           : payment.createdAt
-          ? new Date(payment.createdAt).toLocaleString('ko-KR')
-          : '-',
+            ? new Date(payment.createdAt).toLocaleString('ko-KR')
+            : '-',
         '회원': payment.memberInfo?.ownerName || '-',
         '이메일': payment.memberInfo?.email || payment.email || '-',
         '매장': payment.memberInfo?.businessName || '-',
@@ -559,7 +561,7 @@ export default function OrdersPage() {
       </div>
 
       {/* 결제 내역 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 overflow-visible">
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
             {/* 기간 필터 + 검색 (PC) */}
@@ -591,21 +593,19 @@ export default function OrdersPage() {
               </div>
               <button
                 onClick={handleThisMonthFilter}
-                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                  filterType === 'thisMonth'
+                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${filterType === 'thisMonth'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 이번달
               </button>
               <button
                 onClick={handleOpenDatePicker}
-                className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${
-                  filterType === 'custom' && dateRange.start
+                className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${filterType === 'custom' && dateRange.start
                     ? 'px-3 py-1.5 bg-blue-600 text-white'
                     : 'p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
                 title="기간 선택"
               >
                 <Calendar className="w-4 h-4" />
@@ -616,19 +616,42 @@ export default function OrdersPage() {
               {/* 상세 필터 버튼 */}
               <div className="relative" ref={filterRef}>
                 <button
-                  onClick={() => setShowFilter(!showFilter)}
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    typeFilter !== 'all' || planFilter !== 'all'
+                  onClick={(e) => {
+                    if (showFilter) {
+                      setShowFilter(false);
+                      setFilterPosition(null);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      // 모바일 화면에서 필터가 왼쪽 화면 밖으로 나가는 것을 방지
+                      const dropdownWidth = 256; // w-64
+                      const margin = 16;
+                      const calculatedRight = window.innerWidth - rect.right;
+                      // 왼쪽 여백(margin)을 확보하기 위한 right 값의 최댓값 계산
+                      // Left = window.innerWidth - right - dropdownWidth >= margin
+                      // right <= window.innerWidth - dropdownWidth - margin
+                      const maxRight = window.innerWidth - dropdownWidth - margin;
+
+                      setFilterPosition({
+                        top: rect.bottom + 8,
+                        right: Math.min(calculatedRight, maxRight),
+                      });
+                      setShowFilter(true);
+                    }
+                  }}
+                  className={`p-1.5 rounded-lg transition-colors ${typeFilter !== 'all' || planFilter !== 'all'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                    }`}
                   title="필터"
                 >
                   <Filter className="w-4 h-4" />
                 </button>
                 {/* 필터 드롭다운 */}
-                {showFilter && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 z-50 p-4">
+                {showFilter && filterPosition && (
+                  <div
+                    className="fixed w-64 bg-white rounded-xl shadow-lg border border-gray-200 z-[9999] p-4"
+                    style={{ top: filterPosition.top, right: filterPosition.right }}
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-gray-900">필터</span>
                       {(typeFilter !== 'all' || planFilter !== 'all') && (
@@ -659,11 +682,10 @@ export default function OrdersPage() {
                               setTypeFilter(option.value as 'all' | 'charge' | 'refund');
                               setPage(1);
                             }}
-                            className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-colors ${
-                              typeFilter === option.value
+                            className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-colors ${typeFilter === option.value
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
+                              }`}
                           >
                             {option.label}
                           </button>
@@ -743,18 +765,18 @@ export default function OrdersPage() {
         ) : (
           <>
             <div className="overflow-x-auto overflow-y-visible">
-              <table className="w-full min-w-max">
+              <table className="w-full min-w-[900px]">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-32">orderId</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-24">날짜</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">회원</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-40">이메일</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-28">매장</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">플랜</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-20">금액</th>
-                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-14">처리자</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">No.</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">날짜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">회원</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">이메일</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">매장</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">플랜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">금액</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">처리자</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">orderId</th>
                     <th className="w-12 px-1 py-3"></th>
                   </tr>
                 </thead>
@@ -777,32 +799,32 @@ export default function OrdersPage() {
 
                     return (
                       <tr key={payment.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                        <td className="px-2 py-3 text-sm text-gray-400 text-center whitespace-nowrap">
                           {(page - 1) * PAYMENTS_PER_PAGE + index + 1}
-                        </td>
-                        <td className="px-2 py-3 text-xs text-gray-600 font-mono text-center truncate max-w-32" title={payment.orderId || payment.id}>
-                          {payment.orderId || payment.id}
                         </td>
                         <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center truncate max-w-20" title={payment.memberInfo?.ownerName || '-'}>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {payment.memberInfo?.ownerName || '-'}
                         </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center truncate max-w-40" title={payment.memberInfo?.email || payment.email || '-'}>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {payment.memberInfo?.email || payment.email || '-'}
                         </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center truncate max-w-28" title={payment.memberInfo?.businessName || '-'}>
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {payment.memberInfo?.businessName || '-'}
                         </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {getPlanName(payment.plan)}
                         </td>
                         <td className={`px-2 py-3 text-sm font-medium text-center whitespace-nowrap ${isRefund ? 'text-red-500' : 'text-gray-900'}`}>
                           {displayAmount}원
                         </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {payment.initiatedBy ? INITIATED_BY_LABELS[payment.initiatedBy] || payment.initiatedBy : '-'}
+                        </td>
+                        <td className="px-2 py-3 text-xs text-gray-600 font-mono text-center whitespace-nowrap">
+                          {payment.orderId || payment.id}
                         </td>
                         <td className="px-1 py-3 text-center">
                           <div className="relative" ref={actionDropdown === payment.id ? actionRef : undefined}>
@@ -921,8 +943,8 @@ export default function OrdersPage() {
                   {paymentDetailModal.paidAt
                     ? new Date(paymentDetailModal.paidAt).toLocaleString('ko-KR')
                     : paymentDetailModal.createdAt
-                    ? new Date(paymentDetailModal.createdAt).toLocaleString('ko-KR')
-                    : '-'}
+                      ? new Date(paymentDetailModal.createdAt).toLocaleString('ko-KR')
+                      : '-'}
                 </span>
               </div>
               <div className="flex py-3">
@@ -1431,13 +1453,12 @@ export default function OrdersPage() {
                     type="button"
                     onClick={() => newRefundSelectedPayment && setNewRefundForm({ ...newRefundForm, reason })}
                     disabled={!newRefundSelectedPayment}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      !newRefundSelectedPayment
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${!newRefundSelectedPayment
                         ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
                         : newRefundForm.reason === reason
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                    }`}
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                      }`}
                   >
                     {reason}
                   </button>
@@ -1472,9 +1493,8 @@ export default function OrdersPage() {
                   }}
                   max={newRefundSelectedPayment ? (newRefundSelectedPayment.remainingAmount ?? newRefundSelectedPayment.amount ?? 0) : 0}
                   disabled={!newRefundSelectedPayment}
-                  className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10 ${
-                    !newRefundSelectedPayment ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
-                  }`}
+                  className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10 ${!newRefundSelectedPayment ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
+                    }`}
                   placeholder={newRefundSelectedPayment ? '환불 금액 입력' : '결제내역을 먼저 선택해주세요'}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>

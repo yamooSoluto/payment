@@ -197,9 +197,15 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         {/* 하단 정보 */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
           {!collapsed && (
-            <p className="text-xs text-gray-500 text-center">
-              YAMOO Admin v1.0
-            </p>
+            <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
+              <span>Powered by</span>
+              <Image
+                src="/soluto_white_cut.png"
+                alt="SOLUTO"
+                width={50}
+                height={16}
+              />
+            </div>
           )}
         </div>
       </aside>

@@ -293,6 +293,9 @@ export default function PlansPage() {
     memo: '',
   });
 
+  // 비활성 링크 표시 여부
+  const [showDisabledLinks, setShowDisabledLinks] = useState(false);
+
   // 회원 검색 관련 상태
   const [showMemberSearch, setShowMemberSearch] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -559,10 +562,13 @@ export default function PlansPage() {
   };
 
   // 커스텀 링크 함수들
-  const fetchCustomLinks = async () => {
+  const fetchCustomLinks = async (includeDisabled = false) => {
     setLinksLoading(true);
     try {
-      const response = await fetch('/api/admin/custom-links');
+      const url = includeDisabled
+        ? '/api/admin/custom-links?includeDisabled=true'
+        : '/api/admin/custom-links';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setCustomLinks(data.links);
@@ -698,7 +704,7 @@ export default function PlansPage() {
 
       if (response.ok) {
         handleCloseLinkModal();
-        fetchCustomLinks();
+        fetchCustomLinks(showDisabledLinks);
       } else {
         const data = await response.json();
         alert(data.error || '저장에 실패했습니다.');
@@ -720,7 +726,7 @@ export default function PlansPage() {
         method: 'DELETE',
       });
       if (response.ok) {
-        fetchCustomLinks();
+        fetchCustomLinks(showDisabledLinks);
       } else {
         const data = await response.json();
         alert(data.error || '비활성화에 실패했습니다.');
@@ -828,13 +834,35 @@ export default function PlansPage() {
             </>
           )}
           {activeTab === 'links' && (
-            <button
-              onClick={() => handleOpenLinkModal()}
-              className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">새 링크 만들기</span>
-            </button>
+            <>
+              <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg">
+                <span className="text-sm text-gray-600 hidden sm:inline">비활성 포함</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newValue = !showDisabledLinks;
+                    setShowDisabledLinks(newValue);
+                    fetchCustomLinks(newValue);
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    showDisabledLinks ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      showDisabledLinks ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <button
+                onClick={() => handleOpenLinkModal()}
+                className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">새 링크 만들기</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -859,7 +887,7 @@ export default function PlansPage() {
             onClick={() => {
               setActiveTab('links');
               if (customLinks.length === 0 && !linksLoading) {
-                fetchCustomLinks();
+                fetchCustomLinks(showDisabledLinks);
               }
             }}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
@@ -939,18 +967,18 @@ export default function PlansPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[800px]">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">링크 ID</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">플랜</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">유형</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">금액</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">대상 회원</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">링크 유효기간</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">사용</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">상태</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">액션</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">링크 ID</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">플랜</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">유형</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">금액</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">대상 회원</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">유효기간</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">사용</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">상태</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 whitespace-nowrap">액션</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -958,7 +986,7 @@ export default function PlansPage() {
                     const status = getLinkStatus(link);
                     return (
                       <tr key={link.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <code className="text-sm font-mono bg-gray-100 px-2 py-0.5 rounded">
                               {link.id}
@@ -979,8 +1007,8 @@ export default function PlansPage() {
                             <p className="text-xs text-gray-500 mt-1">{link.memo}</p>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{link.planName}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{link.planName}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
                             link.billingType === 'onetime'
                               ? 'bg-purple-100 text-purple-700'
@@ -989,13 +1017,13 @@ export default function PlansPage() {
                             {link.billingType === 'onetime' ? '1회성' : '정기'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
+                        <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                           {link.customAmount
                             ? `${link.customAmount.toLocaleString()}원`
                             : <span className="text-gray-400">플랜 가격</span>
                           }
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
                           {link.targetEmail ? (
                             <div>
                               {link.targetUserName && (
@@ -1007,22 +1035,22 @@ export default function PlansPage() {
                             <span className="text-gray-400">제한없음</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                           <div>{formatDate(link.validFrom)}</div>
                           <div className="text-gray-400">~ {formatDate(link.validUntil)}</div>
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
                           <span className="font-medium">{link.currentUses}</span>
                           <span className="text-gray-400">
                             /{link.maxUses === 0 ? '무제한' : link.maxUses}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${status.color}`}>
                             {status.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleOpenLinkModal(link)}

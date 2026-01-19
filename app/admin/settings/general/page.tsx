@@ -423,60 +423,96 @@ export default function GeneralSettingsPage() {
             .map((item, index) => (
               <div
                 key={item.id}
-                className={`flex items-center gap-4 p-4 rounded-lg border ${
-                  item.visible ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100'
-                }`}
+                className={`p-4 rounded-lg border ${item.visible ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100'
+                  }`}
               >
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => handleMenuOrderChange(item.id, 'up')}
-                    disabled={index === 0}
-                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <NavArrowUp className="w-4 h-4 text-gray-500" />
-                  </button>
-                  <button
-                    onClick={() => handleMenuOrderChange(item.id, 'down')}
-                    disabled={index === settings.menuItems.length - 1}
-                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <NavArrowDown className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                  {/* Mobile Only: Top Row with Order & Toggle */}
+                  <div className="flex md:hidden items-center justify-between w-full pb-2 border-b border-gray-100 mb-2">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleMenuOrderChange(item.id, 'up')}
+                        disabled={index === 0}
+                        className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed border border-gray-200 bg-white"
+                      >
+                        <NavArrowUp className="w-4 h-4 text-gray-500" />
+                      </button>
+                      <button
+                        onClick={() => handleMenuOrderChange(item.id, 'down')}
+                        disabled={index === settings.menuItems.length - 1}
+                        className="p-1.5 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed border border-gray-200 bg-white"
+                      >
+                        <NavArrowDown className="w-4 h-4 text-gray-500" />
+                      </button>
+                    </div>
 
-                <div className="flex-1 min-w-0">
-                  <label className="block text-xs text-gray-400 mb-1">메뉴명</label>
-                  <input
-                    type="text"
-                    value={item.name}
-                    onChange={(e) => handleMenuNameChange(item.id, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+                    <label className="relative inline-flex items-center cursor-pointer gap-2">
+                      <input
+                        type="checkbox"
+                        checked={item.visible}
+                        onChange={() => handleMenuVisibilityToggle(item.id)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <span className={`text-xs font-medium min-w-[28px] ${item.visible ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {item.visible ? '표시' : '숨김'}
+                      </span>
+                    </label>
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <label className="block text-xs text-gray-400 mb-1">경로/URL</label>
-                  <input
-                    type="text"
-                    value={item.path}
-                    onChange={(e) => handleMenuPathChange(item.id, e.target.value)}
-                    placeholder="/about 또는 https://..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+                  {/* Desktop Only: Order Buttons */}
+                  <div className="hidden md:flex flex-col gap-1">
+                    <button
+                      onClick={() => handleMenuOrderChange(item.id, 'up')}
+                      disabled={index === 0}
+                      className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <NavArrowUp className="w-4 h-4 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={() => handleMenuOrderChange(item.id, 'down')}
+                      disabled={index === settings.menuItems.length - 1}
+                      className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <NavArrowDown className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
 
-                <label className="relative inline-flex items-center cursor-pointer gap-2">
-                  <input
-                    type="checkbox"
-                    checked={item.visible}
-                    onChange={() => handleMenuVisibilityToggle(item.id)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  <span className={`text-xs font-medium min-w-[28px] ${item.visible ? 'text-blue-600' : 'text-gray-400'}`}>
-                    {item.visible ? '표시' : '숨김'}
-                  </span>
-                </label>
+                  <div className="flex-1 min-w-0 w-full">
+                    <label className="block text-xs text-gray-400 mb-1">메뉴명</label>
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => handleMenuNameChange(item.id, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0 w-full">
+                    <label className="block text-xs text-gray-400 mb-1">경로/URL</label>
+                    <input
+                      type="text"
+                      value={item.path}
+                      onChange={(e) => handleMenuPathChange(item.id, e.target.value)}
+                      placeholder="/about 또는 https://..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Desktop Only: Visibility Toggle */}
+                  <label className="hidden md:inline-flex relative items-center cursor-pointer gap-2">
+                    <input
+                      type="checkbox"
+                      checked={item.visible}
+                      onChange={() => handleMenuVisibilityToggle(item.id)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className={`text-xs font-medium min-w-[28px] ${item.visible ? 'text-blue-600' : 'text-gray-400'}`}>
+                      {item.visible ? '표시' : '숨김'}
+                    </span>
+                  </label>
+                </div>
               </div>
             ))}
         </div>

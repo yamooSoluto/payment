@@ -190,9 +190,9 @@ export async function GET(
       });
     }
 
-    // 총 이용금액 계산 (완료된 결제만)
+    // 총 이용금액 계산 (순매출: 완료된 결제 + 환불)
     const totalAmount = payments
-      .filter((p) => p.status === 'completed' || p.status === 'done')
+      .filter((p) => p.status === 'completed' || p.status === 'done' || p.status === 'refunded')
       .reduce((sum, p) => sum + ((p.amount as number) || 0), 0);
 
     return NextResponse.json({

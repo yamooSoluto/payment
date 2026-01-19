@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       tenants: TenantInfo[];
       tenantCount: number;
       createdAt: string | null;
+      totalPaymentAmount: number;
     }
 
     // 1. users 컬렉션에서 회원 목록 조회
@@ -63,7 +64,23 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // 4. tenants를 이메일로 그룹화
+    // 4. payments 컬렉션에서 순매출 조회 (결제 + 환불)
+    const paymentsSnapshot = await db.collection('payments').get();
+    const paymentsByEmail = new Map<string, number>();
+
+    paymentsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const email = data.email || '';
+      if (!email) return;
+
+      // 완료된 결제 또는 환불 (환불은 음수로 저장됨)
+      if (data.status === 'completed' || data.status === 'done' || data.status === 'refunded') {
+        const amount = data.amount || 0;
+        paymentsByEmail.set(email, (paymentsByEmail.get(email) || 0) + amount);
+      }
+    });
+
+    // 5. tenants를 이메일로 그룹화
     tenantsSnapshot.docs.forEach(doc => {
       const data = doc.data();
       const email = data.email || '';
@@ -86,7 +103,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 5. users 컬렉션 기반으로 회원 목록 생성
+    // 6. users 컬렉션 기반으로 회원 목록 생성
     let members: MemberData[] = usersSnapshot.docs.map(doc => {
       const data = doc.data();
       const email = doc.id; // users 컬렉션은 email을 doc ID로 사용
@@ -101,6 +118,7 @@ export async function GET(request: NextRequest) {
         tenants,
         tenantCount: tenants.length,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        totalPaymentAmount: paymentsByEmail.get(email) || 0,
       };
     });
 

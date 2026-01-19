@@ -36,9 +36,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="제목"
       >
         H2
@@ -46,9 +45,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="소제목"
       >
         H3
@@ -57,9 +55,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
-        className={`px-2 py-1 text-sm font-bold rounded ${
-          editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm font-bold rounded ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="굵게"
       >
         B
@@ -67,9 +64,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={`px-2 py-1 text-sm italic rounded ${
-          editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm italic rounded ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="기울임"
       >
         I
@@ -77,9 +73,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className={`px-2 py-1 text-sm underline rounded ${
-          editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm underline rounded ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="밑줄"
       >
         U
@@ -88,9 +83,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="글머리 기호"
       >
         • 목록
@@ -98,9 +92,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="번호 목록"
       >
         1. 목록
@@ -109,9 +102,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('left').run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="왼쪽 정렬"
       >
         ◀
@@ -119,9 +111,8 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       <button
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('center').run()}
-        className={`px-2 py-1 text-sm rounded ${
-          editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+          }`}
         title="가운데 정렬"
       >
         ◆
@@ -559,116 +550,114 @@ export default function TermsSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Page className="w-8 h-8 text-blue-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">약관 / 개인정보처리방침 관리</h1>
-            <div className="flex items-center gap-4 mt-1">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start md:items-center gap-3">
+          <Page className="w-8 h-8 text-blue-600 shrink-0 mt-1 md:mt-0" />
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 break-keep">약관 / 개인정보처리방침 관리</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
               {termsPublished && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 truncate">
                   이용약관: v{termsPublished.version} ({formatDate(termsPublished.effectiveDate || termsPublished.publishedAt)})
                 </span>
               )}
               {privacyPublished && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 truncate">
                   개인정보: v{privacyPublished.version} ({formatDate(privacyPublished.effectiveDate || privacyPublished.publishedAt)})
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowHistory(true)}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
           >
             <Clock className="w-4 h-4" />
-            배포 내역
+            <span className="hidden sm:inline">배포 내역</span>
+            <span className="sm:hidden">내역</span>
           </button>
           <button
             onClick={() => setShowPreview(true)}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
           >
             <Eye className="w-4 h-4" />
-            미리보기
+            <span className="hidden sm:inline">미리보기</span>
+            <span className="sm:hidden">보기</span>
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : saveSuccess ? (
               <Check className="w-4 h-4 text-green-600" />
             ) : null}
-            {saving ? '저장 중...' : saveSuccess ? '저장됨' : '저장'}
+            {saving ? '저장...' : saveSuccess ? '저장됨' : '저장'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm break-keep">
           {error}
         </div>
       )}
 
       {hasUnsavedChanges && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm break-keep">
           저장되지 않은 변경사항이 있습니다.
         </div>
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {/* 탭 */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row border-b border-gray-200">
           <button
             onClick={() => setActiveTab('terms')}
-            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-between ${
-              activeTab === 'terms'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+            className={`flex-1 px-4 sm:px-6 py-3 sm:py-4 font-medium transition-colors flex items-center justify-between ${activeTab === 'terms'
+                ? 'text-blue-600 border-l-4 sm:border-l-0 sm:border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
-            <span>이용약관</span>
+            <span className="text-sm sm:text-base">이용약관</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handlePublish('terms');
               }}
               disabled={publishingTerms}
-              className={`ml-2 px-3 py-1 text-xs rounded-lg transition-colors ${
-                activeTab === 'terms'
+              className={`ml-2 px-2.5 py-1 text-xs rounded-lg transition-colors whitespace-nowrap ${activeTab === 'terms'
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              } disabled:opacity-50`}
+                } disabled:opacity-50`}
             >
-              {publishingTerms ? '배포 중...' : publishTermsSuccess ? '배포됨' : '배포'}
+              {publishingTerms ? '배포...' : publishTermsSuccess ? '배포됨' : '배포'}
             </button>
           </button>
           <button
             onClick={() => setActiveTab('privacy')}
-            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-between ${
-              activeTab === 'privacy'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+            className={`flex-1 px-4 sm:px-6 py-3 sm:py-4 font-medium transition-colors flex items-center justify-between ${activeTab === 'privacy'
+                ? 'text-blue-600 border-l-4 sm:border-l-0 sm:border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
-            <span>개인정보처리방침</span>
+            <span className="text-sm sm:text-base">개인정보처리방침</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handlePublish('privacy');
               }}
               disabled={publishingPrivacy}
-              className={`ml-2 px-3 py-1 text-xs rounded-lg transition-colors ${
-                activeTab === 'privacy'
+              className={`ml-2 px-2.5 py-1 text-xs rounded-lg transition-colors whitespace-nowrap ${activeTab === 'privacy'
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              } disabled:opacity-50`}
+                } disabled:opacity-50`}
             >
-              {publishingPrivacy ? '배포 중...' : publishPrivacySuccess ? '배포됨' : '배포'}
+              {publishingPrivacy ? '배포...' : publishPrivacySuccess ? '배포됨' : '배포'}
             </button>
           </button>
         </div>

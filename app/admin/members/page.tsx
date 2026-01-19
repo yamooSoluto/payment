@@ -22,6 +22,7 @@ interface Member {
   tenantCount: number;
   createdAt: string;
   group?: string;
+  totalPaymentAmount?: number;
 }
 
 interface MemberGroup {
@@ -353,12 +354,13 @@ export default function MembersPage() {
     }
 
     // CSV 형식으로 생성
-    const headers = ['이메일', '이름', '연락처', '매장', '가입일', '그룹'];
+    const headers = ['이메일', '이름', '연락처', '매장', '이용금액', '가입일', '그룹'];
     const rows = targetMembers.map(m => [
       m.email || '',
       m.name || '',
       m.phone || '',
       m.tenants?.[0]?.brandName || '',
+      m.totalPaymentAmount ? m.totalPaymentAmount.toLocaleString() : '0',
       m.createdAt ? new Date(m.createdAt).toLocaleDateString('ko-KR') : '',
       m.group || '',
     ]);
@@ -559,6 +561,7 @@ export default function MembersPage() {
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">그룹</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">매장</th>
+                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이용금액</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
                   <th className="w-12 px-4 py-4"></th>
                 </tr>
@@ -612,6 +615,9 @@ export default function MembersPage() {
                           )}
                         </div>
                       ) : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 text-center">
+                      {member.totalPaymentAmount ? `${member.totalPaymentAmount.toLocaleString()}원` : '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 text-center">
                       {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}

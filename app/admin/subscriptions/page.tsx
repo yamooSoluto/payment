@@ -61,9 +61,10 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loadingActive, setLoadingActive] = useState(true);
   const [searchActive, setSearchActive] = useState('');
-  const [planFilterActive, setPlanFilterActive] = useState('');
-  const [statusFilterActive, setStatusFilterActive] = useState('');
+  const [planFilterActive, setPlanFilterActive] = useState<string[]>([]);
+  const [statusFilterActive, setStatusFilterActive] = useState<string[]>([]);
   const [showActiveFilter, setShowActiveFilter] = useState(false);
+  const [activeFilterPosition, setActiveFilterPosition] = useState<{ top: number; right: number } | null>(null);
   const activeFilterRef = useRef<HTMLDivElement>(null);
   const [paginationActive, setPaginationActive] = useState<Pagination>({
     page: 1,
@@ -76,9 +77,10 @@ export default function SubscriptionsPage() {
   const [history, setHistory] = useState<SubscriptionHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchHistory, setSearchHistory] = useState('');
-  const [planFilterHistory, setPlanFilterHistory] = useState('');
-  const [statusFilterHistory, setStatusFilterHistory] = useState('');
+  const [planFilterHistory, setPlanFilterHistory] = useState<string[]>([]);
+  const [statusFilterHistory, setStatusFilterHistory] = useState<string[]>([]);
   const [showHistoryFilter, setShowHistoryFilter] = useState(false);
+  const [historyFilterPosition, setHistoryFilterPosition] = useState<{ top: number; right: number } | null>(null);
   const [historyFilterType, setHistoryFilterType] = useState<'all' | 'custom'>('all');
   const [historyDateRange, setHistoryDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
@@ -112,8 +114,8 @@ export default function SubscriptionsPage() {
         page: paginationActive.page.toString(),
         limit: paginationActive.limit.toString(),
         ...(searchActive && { search: searchActive }),
-        ...(planFilterActive && { plan: planFilterActive }),
-        ...(statusFilterActive && { status: statusFilterActive }),
+        ...(planFilterActive.length > 0 && { plan: planFilterActive.join(',') }),
+        ...(statusFilterActive.length > 0 && { status: statusFilterActive.join(',') }),
       });
 
       const response = await fetch(`/api/admin/subscriptions/list?${params}`);
@@ -137,8 +139,8 @@ export default function SubscriptionsPage() {
         page: paginationHistory.page.toString(),
         limit: paginationHistory.limit.toString(),
         ...(searchHistory && { search: searchHistory }),
-        ...(planFilterHistory && { plan: planFilterHistory }),
-        ...(statusFilterHistory && { status: statusFilterHistory }),
+        ...(planFilterHistory.length > 0 && { plan: planFilterHistory.join(',') }),
+        ...(statusFilterHistory.length > 0 && { status: statusFilterHistory.join(',') }),
       });
 
       const response = await fetch(`/api/admin/subscriptions/history?${params}`);
@@ -230,6 +232,10 @@ export default function SubscriptionsPage() {
         return <span className={`${baseClass} bg-gray-100 text-gray-600`}>만료</span>;
       case 'completed':
         return <span className={`${baseClass} bg-gray-100 text-gray-500`}>완료</span>;
+      case 'none':
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>미구독</span>;
+      case 'deleted':
+        return <span className={`${baseClass} bg-red-50 text-red-400`}>삭제</span>;
       default:
         return <span className={`${baseClass} bg-gray-100 text-gray-600`}>{status || '-'}</span>;
     }
@@ -374,9 +380,11 @@ export default function SubscriptionsPage() {
     const handleClickOutside = (event: MouseEvent) => {
       if (activeFilterRef.current && !activeFilterRef.current.contains(event.target as Node)) {
         setShowActiveFilter(false);
+        setActiveFilterPosition(null);
       }
       if (historyFilterRef.current && !historyFilterRef.current.contains(event.target as Node)) {
         setShowHistoryFilter(false);
+        setHistoryFilterPosition(null);
       }
     };
 
@@ -450,9 +458,21 @@ export default function SubscriptionsPage() {
                   </div>
                   <div className="relative" ref={activeFilterRef}>
                     <button
-                      onClick={() => setShowActiveFilter(!showActiveFilter)}
+                      onClick={(e) => {
+                        if (showActiveFilter) {
+                          setShowActiveFilter(false);
+                          setActiveFilterPosition(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setActiveFilterPosition({
+                            top: rect.bottom + 8,
+                            right: window.innerWidth - rect.right,
+                          });
+                          setShowActiveFilter(true);
+                        }
+                      }}
                       className={`p-1.5 rounded-lg transition-colors ${
-                        (planFilterActive || statusFilterActive)
+                        (planFilterActive.length > 0 || statusFilterActive.length > 0)
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
@@ -460,40 +480,74 @@ export default function SubscriptionsPage() {
                     >
                       <Filter className="w-4 h-4" />
                     </button>
-                    {showActiveFilter && (
-                      <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-[200px]">
-                        <div className="space-y-3">
+                    {showActiveFilter && activeFilterPosition && (
+                      <div
+                        className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[240px]"
+                        style={{ top: activeFilterPosition.top, right: activeFilterPosition.right, zIndex: 9999 }}
+                      >
+                        <div className="space-y-4">
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">플랜</label>
-                            <select
-                              value={planFilterActive}
-                              onChange={(e) => { setPlanFilterActive(e.target.value); setPaginationActive(prev => ({ ...prev, page: 1 })); }}
-                              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-                            >
-                              <option value="">전체</option>
-                              <option value="trial">Trial</option>
-                              <option value="basic">Basic</option>
-                              <option value="business">Business</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-2">플랜</label>
+                            <div className="space-y-1.5">
+                              {[
+                                { value: 'none', label: '미지정' },
+                                { value: 'trial', label: 'Trial' },
+                                { value: 'basic', label: 'Basic' },
+                                { value: 'business', label: 'Business' },
+                              ].map(option => (
+                                <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={planFilterActive.includes(option.value)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setPlanFilterActive(prev => [...prev, option.value]);
+                                      } else {
+                                        setPlanFilterActive(prev => prev.filter(v => v !== option.value));
+                                      }
+                                      setPaginationActive(prev => ({ ...prev, page: 1 }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">상태</label>
-                            <select
-                              value={statusFilterActive}
-                              onChange={(e) => { setStatusFilterActive(e.target.value); setPaginationActive(prev => ({ ...prev, page: 1 })); }}
-                              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-                            >
-                              <option value="">전체</option>
-                              <option value="trialing">체험</option>
-                              <option value="active">구독중</option>
-                              <option value="canceled">해지</option>
-                              <option value="expired">만료</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-2">상태</label>
+                            <div className="space-y-1.5">
+                              {[
+                                { value: 'none', label: '미구독' },
+                                { value: 'trialing', label: '체험' },
+                                { value: 'active', label: '구독중' },
+                                { value: 'canceled', label: '해지' },
+                                { value: 'expired', label: '만료' },
+                                { value: 'deleted', label: '삭제' },
+                              ].map(option => (
+                                <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={statusFilterActive.includes(option.value)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setStatusFilterActive(prev => [...prev, option.value]);
+                                      } else {
+                                        setStatusFilterActive(prev => prev.filter(v => v !== option.value));
+                                      }
+                                      setPaginationActive(prev => ({ ...prev, page: 1 }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                           <button
                             onClick={() => {
-                              setPlanFilterActive('');
-                              setStatusFilterActive('');
+                              setPlanFilterActive([]);
+                              setStatusFilterActive([]);
                               setPaginationActive(prev => ({ ...prev, page: 1 }));
                             }}
                             className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
@@ -669,9 +723,21 @@ export default function SubscriptionsPage() {
                   </button>
                   <div className="relative" ref={historyFilterRef}>
                     <button
-                      onClick={() => setShowHistoryFilter(!showHistoryFilter)}
+                      onClick={(e) => {
+                        if (showHistoryFilter) {
+                          setShowHistoryFilter(false);
+                          setHistoryFilterPosition(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHistoryFilterPosition({
+                            top: rect.bottom + 8,
+                            right: window.innerWidth - rect.right,
+                          });
+                          setShowHistoryFilter(true);
+                        }
+                      }}
                       className={`p-1.5 rounded-lg transition-colors ${
-                        (planFilterHistory || statusFilterHistory)
+                        (planFilterHistory.length > 0 || statusFilterHistory.length > 0)
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
@@ -679,42 +745,73 @@ export default function SubscriptionsPage() {
                     >
                       <Filter className="w-4 h-4" />
                     </button>
-                    {showHistoryFilter && (
-                      <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-[200px]">
-                        <div className="space-y-3">
+                    {showHistoryFilter && historyFilterPosition && (
+                      <div
+                        className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[240px]"
+                        style={{ top: historyFilterPosition.top, right: historyFilterPosition.right, zIndex: 9999 }}
+                      >
+                        <div className="space-y-4">
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">플랜</label>
-                            <select
-                              value={planFilterHistory}
-                              onChange={(e) => { setPlanFilterHistory(e.target.value); setPaginationHistory(prev => ({ ...prev, page: 1 })); }}
-                              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-                            >
-                              <option value="">전체</option>
-                              <option value="trial">Trial</option>
-                              <option value="basic">Basic</option>
-                              <option value="business">Business</option>
-                              <option value="enterprise">Enterprise</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-2">플랜</label>
+                            <div className="space-y-1.5">
+                              {[
+                                { value: 'trial', label: 'Trial' },
+                                { value: 'basic', label: 'Basic' },
+                                { value: 'business', label: 'Business' },
+                                { value: 'enterprise', label: 'Enterprise' },
+                              ].map(option => (
+                                <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={planFilterHistory.includes(option.value)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setPlanFilterHistory(prev => [...prev, option.value]);
+                                      } else {
+                                        setPlanFilterHistory(prev => prev.filter(v => v !== option.value));
+                                      }
+                                      setPaginationHistory(prev => ({ ...prev, page: 1 }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">상태</label>
-                            <select
-                              value={statusFilterHistory}
-                              onChange={(e) => { setStatusFilterHistory(e.target.value); setPaginationHistory(prev => ({ ...prev, page: 1 })); }}
-                              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-                            >
-                              <option value="">전체</option>
-                              <option value="trialing">체험</option>
-                              <option value="active">구독중</option>
-                              <option value="completed">완료</option>
-                              <option value="expired">만료</option>
-                              <option value="canceled">해지</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-2">상태</label>
+                            <div className="space-y-1.5">
+                              {[
+                                { value: 'trialing', label: '체험' },
+                                { value: 'active', label: '구독중' },
+                                { value: 'completed', label: '완료' },
+                                { value: 'expired', label: '만료' },
+                                { value: 'canceled', label: '해지' },
+                              ].map(option => (
+                                <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={statusFilterHistory.includes(option.value)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setStatusFilterHistory(prev => [...prev, option.value]);
+                                      } else {
+                                        setStatusFilterHistory(prev => prev.filter(v => v !== option.value));
+                                      }
+                                      setPaginationHistory(prev => ({ ...prev, page: 1 }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                           <button
                             onClick={() => {
-                              setPlanFilterHistory('');
-                              setStatusFilterHistory('');
+                              setPlanFilterHistory([]);
+                              setStatusFilterHistory([]);
                               setPaginationHistory(prev => ({ ...prev, page: 1 }));
                             }}
                             className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
@@ -920,10 +1017,12 @@ export default function SubscriptionsPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">선택</option>
+                <option value="none">미구독</option>
                 <option value="trialing">체험</option>
                 <option value="active">구독중</option>
                 <option value="canceled">해지</option>
                 <option value="expired">만료</option>
+                <option value="deleted">삭제</option>
               </select>
             </div>
 

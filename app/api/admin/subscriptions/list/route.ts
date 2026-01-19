@@ -3,7 +3,7 @@ import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
 
-// GET: 구독 목록 조회
+// GET: 구독 목록 조회 (삭제되지 않은 모든 매장 기반, 미구독 포함)
 export async function GET(request: NextRequest) {
   try {
     const admin = await getAdminFromRequest(request);
@@ -25,33 +25,51 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const search = searchParams.get('search') || '';
+    // 복수 필터 지원 (쉼표로 구분)
     const planFilter = searchParams.get('plan') || '';
     const statusFilter = searchParams.get('status') || '';
+    const planFilters = planFilter ? planFilter.split(',') : [];
+    const statusFilters = statusFilter ? statusFilter.split(',') : [];
 
-    // 구독 정보 조회
-    const subscriptionsSnapshot = await db.collection('subscriptions').get();
-
-    // 테넌트 정보 조회 (브랜드명, 회원 정보 매핑용)
+    // 1. 테넌트 정보 조회 (삭제되지 않은 매장만)
     const tenantsSnapshot = await db.collection('tenants').get();
-    const tenantMap = new Map<string, {
-      brandName: string;
-      name: string;
+
+    // 2. 구독 정보 조회
+    const subscriptionsSnapshot = await db.collection('subscriptions').get();
+    const subscriptionMap = new Map<string, {
+      plan: string;
+      status: string;
+      amount: number;
+      currentPeriodStart: string | null;
+      currentPeriodEnd: string | null;
+      nextBillingDate: string | null;
+      createdAt: string | null;
+      pricePolicy: string | null;
       email: string;
+      name: string;
       phone: string;
+      brandName: string;
     }>();
 
-    tenantsSnapshot.docs.forEach(doc => {
+    subscriptionsSnapshot.docs.forEach(doc => {
       const data = doc.data();
-      const tenantId = data.tenantId || doc.id;
-      tenantMap.set(tenantId, {
-        brandName: data.brandName || data.businessName || '이름 없음',
-        name: data.name || data.ownerName || '',
+      subscriptionMap.set(doc.id, {
+        plan: data.plan || '',
+        status: data.status || '',
+        amount: data.amount || 0,
+        currentPeriodStart: data.currentPeriodStart?.toDate?.()?.toISOString() || null,
+        currentPeriodEnd: data.currentPeriodEnd?.toDate?.()?.toISOString() || null,
+        nextBillingDate: data.nextBillingDate?.toDate?.()?.toISOString() || null,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        pricePolicy: data.pricePolicy || null,
         email: data.email || '',
+        name: data.name || '',
         phone: data.phone || '',
+        brandName: data.brandName || '',
       });
     });
 
-    // 구독 데이터 가공
+    // 구독 데이터 가공 (tenants 기반)
     interface SubscriptionData {
       id: string;
       tenantId: string;
@@ -69,38 +87,79 @@ export async function GET(request: NextRequest) {
       pricePolicy: string | null;
     }
 
-    let subscriptions: SubscriptionData[] = subscriptionsSnapshot.docs.map(doc => {
-      const data = doc.data();
-      const tenantId = doc.id;
-      const tenantInfo = tenantMap.get(tenantId);
+    // 삭제 상태 필터 여부 확인
+    const includeDeleted = statusFilters.includes('deleted');
 
-      return {
-        id: doc.id,
-        tenantId,
-        email: data.email || tenantInfo?.email || '',
-        // subscription에 있으면 먼저 쓰고, 없으면 tenant에서 가져옴
-        memberName: data.name || tenantInfo?.name || '',
-        brandName: data.brandName || tenantInfo?.brandName || '(매장 정보 없음)',
-        phone: data.phone || tenantInfo?.phone || '',
-        plan: data.plan || '',
-        status: data.status || '',
-        amount: data.amount || 0,
-        currentPeriodStart: data.currentPeriodStart?.toDate?.()?.toISOString() || null,
-        currentPeriodEnd: data.currentPeriodEnd?.toDate?.()?.toISOString() || null,
-        nextBillingDate: data.nextBillingDate?.toDate?.()?.toISOString() || null,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        pricePolicy: data.pricePolicy || null,
-      };
-    });
+    let subscriptions: SubscriptionData[] = tenantsSnapshot.docs
+      .filter(doc => {
+        const data = doc.data();
+        // 삭제 필터가 있으면 삭제된 매장도 포함, 아니면 제외
+        if (data.deleted === true) {
+          return includeDeleted;
+        }
+        return true;
+      })
+      .map(doc => {
+        const tenantData = doc.data();
+        const tenantId = tenantData.tenantId || doc.id;
+        const subscription = subscriptionMap.get(tenantId);
 
-    // 플랜 필터
-    if (planFilter) {
-      subscriptions = subscriptions.filter(s => s.plan === planFilter);
+        // 삭제된 매장인 경우
+        const isDeleted = tenantData.deleted === true;
+
+        // 구독 정보가 있으면 사용, 없으면 미구독(none)
+        if (subscription) {
+          return {
+            id: tenantId,
+            tenantId,
+            email: subscription.email || tenantData.email || '',
+            memberName: subscription.name || tenantData.name || tenantData.ownerName || '',
+            brandName: subscription.brandName || tenantData.brandName || tenantData.businessName || '이름 없음',
+            phone: subscription.phone || tenantData.phone || '',
+            plan: subscription.plan,
+            status: isDeleted ? 'deleted' : subscription.status,
+            amount: subscription.amount,
+            currentPeriodStart: subscription.currentPeriodStart,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            nextBillingDate: subscription.nextBillingDate,
+            createdAt: subscription.createdAt || tenantData.createdAt?.toDate?.()?.toISOString() || null,
+            pricePolicy: subscription.pricePolicy,
+          };
+        } else {
+          // 미구독 매장
+          return {
+            id: tenantId,
+            tenantId,
+            email: tenantData.email || '',
+            memberName: tenantData.name || tenantData.ownerName || '',
+            brandName: tenantData.brandName || tenantData.businessName || '이름 없음',
+            phone: tenantData.phone || '',
+            plan: '',
+            status: isDeleted ? 'deleted' : 'none', // 삭제 또는 미구독
+            amount: 0,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            nextBillingDate: null,
+            createdAt: tenantData.createdAt?.toDate?.()?.toISOString() || null,
+            pricePolicy: null,
+          };
+        }
+      });
+
+    // 플랜 필터 (복수 지원)
+    if (planFilters.length > 0) {
+      subscriptions = subscriptions.filter(s => {
+        // 'none'은 plan이 빈 문자열인 경우
+        if (planFilters.includes('none')) {
+          return planFilters.includes(s.plan) || s.plan === '';
+        }
+        return planFilters.includes(s.plan);
+      });
     }
 
-    // 상태 필터
-    if (statusFilter) {
-      subscriptions = subscriptions.filter(s => s.status === statusFilter);
+    // 상태 필터 (복수 지원)
+    if (statusFilters.length > 0) {
+      subscriptions = subscriptions.filter(s => statusFilters.includes(s.status));
     }
 
     // 검색 필터
@@ -116,11 +175,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 시작일 오름차순 정렬
+    // 생성일 내림차순 정렬 (최신순)
     subscriptions.sort((a, b) => {
-      const aTime = a.currentPeriodStart ? new Date(a.currentPeriodStart).getTime() : 0;
-      const bTime = b.currentPeriodStart ? new Date(b.currentPeriodStart).getTime() : 0;
-      return aTime - bTime;
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
     });
 
     // 페이지네이션

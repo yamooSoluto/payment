@@ -26,17 +26,21 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const plan = searchParams.get('plan') || '';
     const status = searchParams.get('status') || '';
+    // 복수 필터 지원 (쉼표로 구분)
+    const planFilters = plan ? plan.split(',') : [];
+    const statusFilters = status ? status.split(',') : [];
 
     // Collection Group Query로 모든 records 서브컬렉션 한 번에 조회
     // 인덱스 필요: records 컬렉션 그룹에 changedAt 내림차순
     let query = db.collectionGroup('records').orderBy('changedAt', 'desc');
 
-    // 서버 사이드 필터링 (plan, status)
-    if (plan) {
-      query = query.where('plan', '==', plan);
+    // 서버 사이드 필터링 - 단일 값인 경우만 where 절 사용
+    // (복수 필터는 클라이언트 사이드에서 처리)
+    if (planFilters.length === 1) {
+      query = query.where('plan', '==', planFilters[0]);
     }
-    if (status) {
-      query = query.where('status', '==', status);
+    if (statusFilters.length === 1) {
+      query = query.where('status', '==', statusFilters[0]);
     }
 
     const snapshot = await query.get();
@@ -117,8 +121,24 @@ export async function GET(request: NextRequest) {
       memberPhone: userMap.get(record.email)?.phone || '',
     }));
 
-    // 검색 필터 (회원명, 매장명, 이메일) - 클라이언트 사이드
+    // 클라이언트 사이드 필터링
     let filteredRecords = recordsWithMember;
+
+    // 복수 플랜 필터 (서버에서 처리 안 된 경우)
+    if (planFilters.length > 1) {
+      filteredRecords = filteredRecords.filter(record =>
+        planFilters.includes(record.plan)
+      );
+    }
+
+    // 복수 상태 필터 (서버에서 처리 안 된 경우)
+    if (statusFilters.length > 1) {
+      filteredRecords = filteredRecords.filter(record =>
+        statusFilters.includes(record.status)
+      );
+    }
+
+    // 검색 필터 (회원명, 매장명, 이메일)
     if (search) {
       const searchLower = search.toLowerCase();
       filteredRecords = filteredRecords.filter(record =>

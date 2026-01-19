@@ -4,16 +4,51 @@ import { generateLinkId, getAllPlansIncludingHidden } from '@/lib/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // 커스텀 결제 링크 목록 조회
-export async function GET() {
+export async function GET(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const includeDisabled = searchParams.get('includeDisabled') === 'true';
+
   try {
-    const snapshot = await db.collection('customPaymentLinks')
-      .orderBy('createdAt', 'desc')
-      .get();
+    let query = db.collection('customPaymentLinks').orderBy('createdAt', 'desc');
+
+    if (!includeDisabled) {
+      // disabled가 아닌 것만 가져오기 (클라이언트 필터링)
+      const snapshot = await query.get();
+      const links = snapshot.docs
+        .filter(doc => doc.data().status !== 'disabled')
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            planId: data.planId,
+            planName: data.planName,
+            customAmount: data.customAmount,
+            targetEmail: data.targetEmail,
+            targetUserName: data.targetUserName,
+            billingType: data.billingType || 'recurring',
+            subscriptionDays: data.subscriptionDays || null,
+            validFrom: data.validFrom?.toDate?.()?.toISOString() || data.validFrom,
+            validUntil: data.validUntil?.toDate?.()?.toISOString() || data.validUntil,
+            maxUses: data.maxUses || 0,
+            currentUses: data.currentUses || 0,
+            memo: data.memo,
+            createdBy: data.createdBy,
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+            updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
+            status: data.status || 'active',
+          };
+        });
+
+      const plans = await getAllPlansIncludingHidden();
+      return NextResponse.json({ links, plans });
+    }
+
+    const snapshot = await query.get();
 
     const links = snapshot.docs.map(doc => {
       const data = doc.data();

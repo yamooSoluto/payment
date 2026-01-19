@@ -991,6 +991,19 @@ export default function FAQManagementPage() {
     return faq ? { type: 'faq', faq } : null;
   }, [activeDragId, faqs]);
 
+  // 모바일에서 편집 패널 표시 여부
+  const showMobileEditor = selectedFaq || isAddingNew;
+
+  // 모바일에서 목록으로 돌아가기
+  const handleBackToList = () => {
+    if (isEditing || isAddingNew) {
+      if (!confirm('수정 중인 내용이 있습니다. 목록으로 돌아가시겠습니까?')) return;
+    }
+    setSelectedFaqId(null);
+    setIsAddingNew(false);
+    setIsEditing(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1000,9 +1013,10 @@ export default function FAQManagementPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-120px)] gap-6">
+    <div className="flex h-[calc(100vh-120px)] md:gap-6">
       {/* 좌측 사이드바 - FAQ 목록 */}
-      <aside className="w-80 flex-shrink-0 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+      {/* 모바일: 편집 중일 때 숨김 / 데스크톱: 항상 표시 */}
+      <aside className={`w-full md:w-80 flex-shrink-0 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden ${showMobileEditor ? 'hidden md:flex' : 'flex'}`}>
         {/* 헤더 */}
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
@@ -1211,12 +1225,21 @@ export default function FAQManagementPage() {
       </aside>
 
       {/* 우측 메인 콘텐츠 - FAQ 편집 */}
-      <main className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+      {/* 모바일: 편집 중일 때만 표시 / 데스크톱: 항상 표시 */}
+      <main className={`flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-col ${showMobileEditor ? 'flex' : 'hidden md:flex'}`}>
         {selectedFaq || isAddingNew ? (
           <>
             {/* 툴바 */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
+                {/* 모바일 뒤로가기 버튼 */}
+                <button
+                  onClick={handleBackToList}
+                  className="md:hidden p-1.5 -ml-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="목록으로"
+                >
+                  <NavArrowRight className="w-5 h-5 rotate-180" />
+                </button>
                 {isAddingNew ? (
                   <span className="text-sm text-gray-500">
                     새 FAQ 추가{' '}
@@ -1284,8 +1307,8 @@ export default function FAQManagementPage() {
             </div>
 
             {/* 폼 */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl space-y-6">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+              <div className="max-w-3xl space-y-6 break-words">
                 <div>
                   <label className="inline-block text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded mb-2">
                     제목
@@ -1299,7 +1322,7 @@ export default function FAQManagementPage() {
                       className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
                     />
                   ) : (
-                    <h2 className="text-xl font-semibold text-gray-900">
+                    <h2 className="text-xl font-semibold text-gray-900 break-words">
                       {selectedFaq?.question}
                     </h2>
                   )}
