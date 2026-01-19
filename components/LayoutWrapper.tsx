@@ -7,7 +7,25 @@ import Footer from '@/components/Footer';
 import ChannelTalk from '@/components/ChannelTalk';
 import ProfileCompletionModal from '@/components/modals/ProfileCompletionModal';
 
-export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
+interface MenuItem {
+  id: string;
+  name: string;
+  path: string;
+  visible: boolean;
+  order: number;
+}
+
+interface SiteSettings {
+  logoUrl: string;
+  menuItems: MenuItem[];
+}
+
+interface LayoutWrapperProps {
+  children: React.ReactNode;
+  siteSettings: SiteSettings | null;
+}
+
+export default function LayoutWrapper({ children, siteSettings }: LayoutWrapperProps) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith('/admin');
   const isLoginPage = pathname === '/login';
@@ -20,7 +38,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
   // 일반 페이지는 Header/Footer 포함
   return (
     <AuthProvider>
-      <Header />
+      <Header siteSettings={siteSettings} />
       <main className="flex-1 bg-gray-50">
         {children}
       </main>

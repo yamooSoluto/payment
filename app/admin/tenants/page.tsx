@@ -18,14 +18,14 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'branchNo', label: '지점번호', defaultVisible: true },
   { key: 'name', label: '회원', defaultVisible: true },
   { key: 'phone', label: '연락처', defaultVisible: true },
-  { key: 'email', label: '이메일', defaultVisible: false },
+  { key: 'email', label: '이메일', defaultVisible: true },
   { key: 'industry', label: '업종', defaultVisible: true },
   { key: 'plan', label: '플랜', defaultVisible: true },
   { key: 'subscriptionStatus', label: '구독상태', defaultVisible: true },
+  { key: 'csTone', label: 'AI톤', defaultVisible: true },
+  { key: 'botName', label: '봇이름', defaultVisible: true },
   { key: 'createdAt', label: '생성일', defaultVisible: false },
   { key: 'brandCode', label: '매장코드', defaultVisible: false },
-  { key: 'csTone', label: 'AI톤', defaultVisible: false },
-  { key: 'botName', label: '봇이름', defaultVisible: false },
   { key: 'reviewCode', label: '리뷰코드', defaultVisible: false },
 ];
 

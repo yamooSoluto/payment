@@ -63,11 +63,12 @@ export async function PATCH(
       tenantUpdateData['subscription.status'] = status;
       tenantUpdateData['status'] = status;
     }
-    if (currentPeriodEnd !== undefined) {
-      tenantUpdateData['subscription.renewsAt'] = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
-    }
     if (currentPeriodStart !== undefined) {
       tenantUpdateData['subscription.startedAt'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
+    }
+    // renewsAt은 nextBillingDate와 매핑됨 (currentPeriodEnd 아님)
+    if (nextBillingDate !== undefined) {
+      tenantUpdateData['subscription.renewsAt'] = nextBillingDate ? new Date(nextBillingDate) : null;
     }
 
     if (Object.keys(tenantUpdateData).length > 0) {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 
@@ -21,27 +21,23 @@ interface SiteSettings {
   menuItems: MenuItem[];
 }
 
-export default function Header() {
+// 기본 메뉴 (SSR 설정이 없을 때 사용)
+const defaultMenuItems: MenuItem[] = [
+  { id: 'about', name: '소개', path: '/about', visible: true, order: 0 },
+  { id: 'trial', name: '무료체험', path: '/trial', visible: true, order: 1 },
+  { id: 'plan', name: '요금제', path: '/plan', visible: true, order: 2 },
+  { id: 'portal', name: '포탈', path: 'https://app.yamoo.ai.kr', visible: true, order: 3 },
+  { id: 'account', name: '마이페이지', path: '/account', visible: true, order: 4 },
+];
+
+interface HeaderProps {
+  siteSettings: SiteSettings | null;
+}
+
+export default function Header({ siteSettings }: HeaderProps) {
   const { user, loading, hasTenants, signOut } = useAuth();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
-
-  // 사이트 설정 불러오기
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch('/api/settings');
-        if (res.ok) {
-          const data = await res.json();
-          setSiteSettings(data.settings);
-        }
-      } catch (error) {
-        console.error('Failed to fetch site settings:', error);
-      }
-    };
-    fetchSettings();
-  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -156,8 +152,8 @@ export default function Header() {
     );
   };
 
-  // 정렬된 visible 메뉴만 필터
-  const visibleMenuItems = (siteSettings?.menuItems || [])
+  // 정렬된 visible 메뉴만 필터 (SSR 설정 없으면 기본 메뉴 사용)
+  const visibleMenuItems = (siteSettings?.menuItems || defaultMenuItems)
     .filter(item => item.visible)
     .sort((a, b) => a.order - b.order);
 
@@ -191,15 +187,13 @@ export default function Header() {
             {!loading && (
               <>
                 {user ? (
-                  <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-                    <span className="text-sm text-gray-500">{user.email}</span>
-                    <button
-                      onClick={handleSignOut}
-                      className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors"
-                    >
-                      <LogOut width={16} height={16} strokeWidth={1.5} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleSignOut}
+                    title="로그아웃"
+                    className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors pl-3 border-l border-gray-200"
+                  >
+                    <LogOut width={16} height={16} strokeWidth={1.5} />
+                  </button>
                 ) : (
                   <Link
                     href="/login"
@@ -242,7 +236,6 @@ export default function Header() {
               {visibleMenuItems.map(item => renderMenuItem(item, true))}
               {!loading && user && (
                 <div className="pt-3 border-t border-gray-100">
-                  <p className="text-sm text-gray-500 mb-2">{user.email}</p>
                   <button
                     onClick={() => {
                       handleSignOut();

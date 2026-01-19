@@ -33,7 +33,10 @@
       "Bash(npx eslint:*)",
       "Bash(npx next lint:*)",
       "Bash(node -e:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(bun:*)",
+      "Bash(node -r dotenv/config -r ts-node/register:*)"
     ]
   }
 }

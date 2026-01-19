@@ -74,11 +74,44 @@ function getDefaultMetadata(): Metadata {
   };
 }
 
-export default function RootLayout({
+// 사이트 설정 불러오기 (SSR)
+async function getSiteSettings() {
+  try {
+    const db = initializeFirebaseAdmin();
+    if (!db) {
+      return null;
+    }
+
+    const settingsDoc = await db.collection('settings').doc('site').get();
+
+    if (!settingsDoc.exists) {
+      return null;
+    }
+
+    const data = settingsDoc.data();
+    return {
+      logoUrl: data?.logoUrl || '',
+      menuItems: data?.menuItems || [
+        { id: 'about', name: '소개', path: '/about', visible: true, order: 0 },
+        { id: 'trial', name: '무료체험', path: '/trial', visible: true, order: 1 },
+        { id: 'plan', name: '요금제', path: '/plan', visible: true, order: 2 },
+        { id: 'portal', name: '포탈', path: 'https://app.yamoo.ai.kr', visible: true, order: 3 },
+        { id: 'account', name: '마이페이지', path: '/account', visible: true, order: 4 },
+      ],
+    };
+  } catch (error) {
+    console.error('Failed to fetch site settings:', error);
+    return null;
+  }
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const siteSettings = await getSiteSettings();
+
   return (
     <html lang="ko">
       <head>
@@ -90,7 +123,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col" style={{ fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif' }}>
-        <LayoutWrapper>
+        <LayoutWrapper siteSettings={siteSettings}>
           {children}
         </LayoutWrapper>
       </body>
