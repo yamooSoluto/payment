@@ -1,6 +1,6 @@
 'use client';
 
-import { useEditor, EditorContent, Node, mergeAttributes, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, Node, mergeAttributes, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer, Extension } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Heading from '@tiptap/extension-heading';
 import ImageResize from 'tiptap-extension-resize-image';
@@ -13,6 +13,63 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Underline as UnderlineExtension } from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
+
+// 커스텀 FontSize 확장
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      setFontSize: (size: string) => ReturnType;
+      unsetFontSize: () => ReturnType;
+    };
+  }
+}
+
+const FontSize = Extension.create({
+  name: 'fontSize',
+
+  addOptions() {
+    return {
+      types: ['textStyle'],
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) {
+                return {};
+              }
+              return {
+                style: `font-size: ${attributes.fontSize}`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    return {
+      setFontSize:
+        (fontSize: string) =>
+        ({ chain }) => {
+          return chain().setMark('textStyle', { fontSize }).run();
+        },
+      unsetFontSize:
+        () =>
+        ({ chain }) => {
+          return chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run();
+        },
+    };
+  },
+});
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   TableRows,
@@ -238,6 +295,236 @@ const ToolbarButton = ({
 // 구분선 컴포넌트
 const Divider = () => <div className="w-px h-5 bg-gray-200 mx-1" />;
 
+// 폰트 크기 드롭다운
+const FontSizeButton = ({
+  editor,
+}: {
+  editor: ReturnType<typeof useEditor>;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const sizes = [
+    { value: '12px', label: '12' },
+    { value: '14px', label: '14' },
+    { value: '16px', label: '16 (기본)' },
+    { value: '18px', label: '18' },
+    { value: '20px', label: '20' },
+    { value: '24px', label: '24' },
+    { value: '28px', label: '28' },
+    { value: '32px', label: '32' },
+  ];
+
+  const currentSize = editor?.getAttributes('textStyle').fontSize || '16px';
+  const currentLabel = sizes.find(s => s.value === currentSize)?.label || currentSize.replace('px', '');
+
+  const handleSizeSelect = (size: string | null) => {
+    if (size) {
+      editor?.chain().focus().setFontSize(size).run();
+    } else {
+      editor?.chain().focus().unsetFontSize().run();
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        title="글자 크기"
+        className="h-8 px-2 flex items-center justify-center gap-1 rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm"
+      >
+        <span>{currentLabel.replace(' (기본)', '')}</span>
+        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 py-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 min-w-[80px]">
+            {sizes.map((size) => (
+              <button
+                key={size.value}
+                type="button"
+                onClick={() => handleSizeSelect(size.value)}
+                className={`w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 ${
+                  currentSize === size.value ? 'bg-gray-50 font-medium' : ''
+                }`}
+              >
+                {size.label}
+              </button>
+            ))}
+            <div className="border-t border-gray-100 mt-1 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSizeSelect(null)}
+                className="w-full px-3 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-100"
+              >
+                기본으로
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// 이모지 피커
+const EmojiButton = ({
+  editor,
+}: {
+  editor: ReturnType<typeof useEditor>;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'face' | 'gesture' | 'heart' | 'object' | 'animal' | 'food' | 'activity' | 'travel'>('face');
+
+  const emojiCategories = {
+    face: {
+      label: '😀',
+      emojis: [
+        '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
+        '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔',
+        '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷',
+        '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐',
+        '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭',
+        '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️',
+      ],
+    },
+    gesture: {
+      label: '👋',
+      emojis: [
+        '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆',
+        '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️',
+        '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀',
+        '👁️', '👅', '👄', '👶', '🧒', '👦', '👧', '🧑', '👱', '👨', '🧔', '👩', '🧓', '👴', '👵', '🙍',
+      ],
+    },
+    heart: {
+      label: '❤️',
+      emojis: [
+        '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖',
+        '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈',
+        '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️',
+        '📴', '📳', '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️', '㊗️', '🈴', '🈵', '🈹',
+      ],
+    },
+    object: {
+      label: '💡',
+      emojis: [
+        '📌', '📍', '📎', '🖇️', '📏', '📐', '✂️', '🗃️', '🗄️', '🗑️', '🔒', '🔓', '🔏', '🔐', '🔑', '🗝️',
+        '🔨', '🪓', '⛏️', '⚒️', '🛠️', '🗡️', '⚔️', '🔫', '🪃', '🏹', '🛡️', '🪚', '🔧', '🪛', '🔩', '⚙️',
+        '💻', '🖥️', '🖨️', '⌨️', '🖱️', '🖲️', '💽', '💾', '💿', '📀', '📱', '📲', '☎️', '📞', '📟', '📠',
+        '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡',
+        '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜',
+        '📝', '📒', '📕', '📗', '📘', '📙', '📚', '📖', '🔗', '📰', '🗞️', '📃', '📄', '📑', '🔖', '🏷️',
+      ],
+    },
+    animal: {
+      label: '🐶',
+      emojis: [
+        '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸',
+        '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺',
+        '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️',
+        '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳',
+        '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘',
+        '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈',
+      ],
+    },
+    food: {
+      label: '🍕',
+      emojis: [
+        '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥',
+        '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠',
+        '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴',
+        '🌭', '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝',
+        '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡',
+        '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜',
+        '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸',
+      ],
+    },
+    activity: {
+      label: '⚽',
+      emojis: [
+        '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍',
+        '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌',
+        '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤼', '🤸', '⛹️', '🤺', '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽',
+        '🚣', '🧗', '🚵', '🚴', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '🏵️', '🎗️', '🎫', '🎟️', '🎪', '🎭',
+        '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🪘', '🎷', '🎺', '🪗', '🎸', '🪕', '🎻', '🎲', '♟️',
+        '🎯', '🎳', '🎮', '🎰', '🧩', '🎉', '🎊', '🎈', '🎀', '🎁', '🪄', '🪅', '🪆', '🔮', '🪩', '🧸',
+      ],
+    },
+    travel: {
+      label: '✈️',
+      emojis: [
+        '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🦯', '🦽',
+        '🦼', '🛴', '🚲', '🛵', '🏍️', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋',
+        '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️',
+        '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🪝', '⛽', '🚧', '🚦', '🚥',
+        '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠', '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋',
+        '⛰️', '🏔️', '🗻', '🏕️', '⛺', '🛖', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤',
+      ],
+    },
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    editor?.chain().focus().insertContent(emoji).run();
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        title="이모지"
+        className="w-8 h-8 flex items-center justify-center rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+      >
+        <span className="text-base">💛</span>
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 w-72">
+            {/* 카테고리 탭 */}
+            <div className="flex border-b border-gray-100 px-1 pt-1">
+              {(Object.keys(emojiCategories) as Array<keyof typeof emojiCategories>).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveTab(key)}
+                  className={`flex-1 p-1.5 text-base rounded-t transition-colors ${
+                    activeTab === key ? 'bg-gray-100' : 'hover:bg-gray-50'
+                  }`}
+                  title={key}
+                >
+                  {emojiCategories[key].label}
+                </button>
+              ))}
+            </div>
+            {/* 이모지 그리드 */}
+            <div className="p-2 h-48 overflow-y-auto">
+              <div className="grid grid-cols-8 gap-0.5">
+                {emojiCategories[activeTab].emojis.map((emoji, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handleEmojiSelect(emoji)}
+                    className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-lg transition-transform hover:scale-110"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // 색상 버튼 (드롭다운)
 const ColorButton = ({
   editor,
@@ -392,6 +679,11 @@ const MenuBar = ({ editor, onImageClick, onLinkClick, onAccordionClick }: { edit
 
       <Divider />
 
+      {/* 글자 크기 */}
+      <FontSizeButton editor={editor} />
+
+      <Divider />
+
       {/* 링크 */}
       <ToolbarButton
         onClick={onLinkClick}
@@ -406,6 +698,11 @@ const MenuBar = ({ editor, onImageClick, onLinkClick, onAccordionClick }: { edit
       {/* 색상 */}
       <ColorButton editor={editor} type="color" />
       <ColorButton editor={editor} type="highlight" />
+
+      <Divider />
+
+      {/* 이모지 */}
+      <EmojiButton editor={editor} />
 
       <Divider />
 
@@ -592,6 +889,7 @@ export default function RichTextEditor({ content, onChange, placeholder, faqId }
       TableHeader,
       TableCell,
       TextStyle,
+      FontSize,
       Color,
       Highlight.configure({
         multicolor: true,

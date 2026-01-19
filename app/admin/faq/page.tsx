@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DocMagnifyingGlassIn,
   Plus,
@@ -414,6 +414,10 @@ export default function FAQManagementPage() {
   const [newFaqCategory, setNewFaqCategory] = useState<string>('');
   const [newFaqSubcategory, setNewFaqSubcategory] = useState<string>(''); // 새 FAQ의 하위 카테고리
 
+  // 자동 임시저장 상태
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // 카테고리 관리
   const [emptyCategories, setEmptyCategories] = useState<string[]>([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -444,6 +448,107 @@ export default function FAQManagementPage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // 자동 임시저장 키 생성
+  const getAutoSaveKey = useCallback((faqId: string | null, isNew: boolean) => {
+    if (isNew) {
+      return `faq_draft_new_${newFaqCategory}_${newFaqSubcategory || 'root'}`;
+    }
+    return faqId ? `faq_draft_${faqId}` : null;
+  }, [newFaqCategory, newFaqSubcategory]);
+
+  // 임시저장 데이터 저장
+  const saveToLocalStorage = useCallback((key: string, data: { question: string; answer: string }) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        ...data,
+        savedAt: new Date().toISOString(),
+      }));
+      setAutoSaveStatus('saved');
+    } catch (e) {
+      console.error('Failed to save draft:', e);
+    }
+  }, []);
+
+  // 임시저장 데이터 불러오기
+  const loadFromLocalStorage = useCallback((key: string): { question: string; answer: string; savedAt: string } | null => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Failed to load draft:', e);
+    }
+    return null;
+  }, []);
+
+  // 임시저장 삭제
+  const clearAutoSave = useCallback((key: string | null) => {
+    if (key) {
+      try {
+        localStorage.removeItem(key);
+        setAutoSaveStatus(null);
+      } catch (e) {
+        console.error('Failed to clear draft:', e);
+      }
+    }
+  }, []);
+
+  // 자동 임시저장 (debounce)
+  useEffect(() => {
+    // 편집 중이 아니면 저장하지 않음
+    if (!isEditing && !isAddingNew) {
+      setAutoSaveStatus(null);
+      return;
+    }
+
+    // 내용이 비어있으면 저장하지 않음
+    if (!editForm.question.trim() && !editForm.answer.trim()) {
+      return;
+    }
+
+    const key = getAutoSaveKey(selectedFaqId, isAddingNew);
+    if (!key) return;
+
+    // 이전 타이머 취소
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    setAutoSaveStatus('saving');
+
+    // 2초 후 저장
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveToLocalStorage(key, editForm);
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [editForm, isEditing, isAddingNew, selectedFaqId, getAutoSaveKey, saveToLocalStorage]);
+
+  // 임시저장 복구 확인
+  const checkAndRestoreDraft = useCallback((key: string, currentData: { question: string; answer: string }) => {
+    const saved = loadFromLocalStorage(key);
+    if (saved) {
+      // 저장된 내용과 현재 내용이 다른 경우에만 복구 확인
+      if (saved.question !== currentData.question || saved.answer !== currentData.answer) {
+        const savedTime = new Date(saved.savedAt).toLocaleString('ko-KR');
+        if (confirm(`임시 저장된 내용이 있습니다. (${savedTime})\n복구하시겠습니까?`)) {
+          setEditForm({ question: saved.question, answer: saved.answer });
+          setAutoSaveStatus('saved');
+          return true;
+        } else {
+          // 복구 안 함 -> 임시저장 삭제
+          clearAutoSave(key);
+        }
+      }
+    }
+    return false;
+  }, [loadFromLocalStorage, clearAutoSave]);
 
   // 데이터 불러오기 (FAQ 및 카테고리)
   const fetchData = async () => {
@@ -541,6 +646,13 @@ export default function FAQManagementPage() {
     setEditForm({ question: faq.question, answer: faq.answer });
     setIsEditing(false);
     setIsAddingNew(false);
+    setAutoSaveStatus(null);
+
+    // 임시저장 복구 확인 (편집 모드로 전환 시)
+    const key = `faq_draft_${faq.id}`;
+    setTimeout(() => {
+      checkAndRestoreDraft(key, { question: faq.question, answer: faq.answer });
+    }, 100);
   };
 
   // 새 FAQ 추가 시작
@@ -554,6 +666,13 @@ export default function FAQManagementPage() {
     setEditForm({ question: '', answer: '' });
     setIsAddingNew(true);
     setIsEditing(false);
+    setAutoSaveStatus(null);
+
+    // 임시저장 복구 확인
+    const key = `faq_draft_new_${category}_${subcategory || 'root'}`;
+    setTimeout(() => {
+      checkAndRestoreDraft(key, { question: '', answer: '' });
+    }, 100);
   };
 
   // 카테고리 접기/펼치기
@@ -834,6 +953,8 @@ export default function FAQManagementPage() {
         });
         if (response.ok) {
           const data = await response.json();
+          // 저장 성공 시 임시저장 삭제
+          clearAutoSave(`faq_draft_new_${newFaqCategory}_${newFaqSubcategory || 'root'}`);
           setEmptyCategories(prev => prev.filter(c => c !== newFaqCategory));
           // 빈 하위 카테고리에서 제거
           if (newFaqSubcategory) {
@@ -855,6 +976,8 @@ export default function FAQManagementPage() {
           body: JSON.stringify(editForm),
         });
         if (response.ok) {
+          // 저장 성공 시 임시저장 삭제
+          clearAutoSave(`faq_draft_${selectedFaqId}`);
           setIsEditing(false);
           fetchData();
         } else {
@@ -1253,6 +1376,16 @@ export default function FAQManagementPage() {
                     {selectedFaq?.subcategory && (
                       <span className="text-gray-400"> &gt; {selectedFaq.subcategory}</span>
                     )}
+                  </span>
+                )}
+                {/* 자동 임시저장 상태 표시 */}
+                {(isEditing || isAddingNew) && autoSaveStatus && (
+                  <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                    autoSaveStatus === 'saving'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-green-100 text-green-700'
+                  }`}>
+                    {autoSaveStatus === 'saving' ? '저장 중...' : '임시 저장됨'}
                   </span>
                 )}
               </div>
