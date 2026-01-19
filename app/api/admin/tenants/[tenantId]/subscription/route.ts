@@ -57,6 +57,24 @@ export async function PATCH(
     const existingData = subscriptionDoc.data();
     await subscriptionRef.update(updateData);
 
+    // tenants 컬렉션에 변경사항 동기화
+    const tenantUpdateData: Record<string, unknown> = {};
+    if (status !== undefined) {
+      tenantUpdateData['subscription.status'] = status;
+      tenantUpdateData['status'] = status;
+    }
+    if (currentPeriodEnd !== undefined) {
+      tenantUpdateData['subscription.renewsAt'] = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+    }
+    if (currentPeriodStart !== undefined) {
+      tenantUpdateData['subscription.startedAt'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
+    }
+
+    if (Object.keys(tenantUpdateData).length > 0) {
+      await db.collection('tenants').doc(tenantId).update(tenantUpdateData);
+      console.log('✅ Tenant subscription synced for admin edit');
+    }
+
     // subscription_history 상태 업데이트 (상태가 변경된 경우)
     if (status !== undefined && status !== existingData?.status) {
       try {

@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { tenantId, name, phone, brandName, industry } = await request.json();
+    const { tenantId, name, phone, brandName } = await request.json();
 
     // 필수 필드 검증
     if (!tenantId || !name || !phone || !brandName) {
@@ -234,49 +234,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // n8n webhook 호출 (tenantId 포함하여 새 tenant 생성 방지)
-    const n8nWebhookUrl = process.env.N8N_TRIAL_APPLY_WEBHOOK_URL || process.env.N8N_WEBHOOK_URL;
-
-    if (n8nWebhookUrl) {
-      try {
-        const timestamp = new Date().toISOString();
-        const n8nResponse = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tenantId, // 기존 tenant ID 전달
-            email,
-            name,
-            phone,
-            brandName,
-            industry: industry || tenantData.industry,
-            timestamp,
-            action: 'apply_trial', // n8n에서 분기 처리용
-          }),
-        });
-
-        if (!n8nResponse.ok) {
-          console.error('n8n webhook 호출 실패:', n8nResponse.status);
-        } else {
-          const n8nData = await n8nResponse.json();
-          console.log('n8n webhook 호출 성공:', n8nData);
-        }
-      } catch (error) {
-        console.error('n8n webhook 호출 오류:', error);
-        // n8n 실패해도 계속 진행
-      }
-    }
-
     // Trial subscription 생성
     const now = new Date();
     const trialEndDate = new Date(now);
     trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
 
-    // currentPeriodEnd는 trialEndDate - 1일 (마지막 이용 가능일)
+    // currentPeriodEnd는 trialEndDate와 동일
     const currentPeriodEnd = new Date(trialEndDate);
-    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
     // userId 조회 또는 생성
     const existingUser = await db.collection('users').doc(email).get();

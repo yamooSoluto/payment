@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshDouble, NavArrowLeft, NavArrowRight, Edit, Xmark, Check, Search, Filter, Download, Calendar, PageFlip, Spark } from 'iconoir-react';
+import { Timer, NavArrowLeft, NavArrowRight, Edit, Xmark, Check, Search, Filter, Download, Calendar, PageFlip, Spark, RefreshDouble, SortUp, SortDown } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 
@@ -74,6 +74,12 @@ export default function SubscriptionsPage() {
     totalPages: 0,
   });
 
+  // 활성 탭 정렬 상태 (기본값: 시작일 오름차순)
+  type SortField = 'currentPeriodStart' | 'currentPeriodEnd' | 'nextBillingDate';
+  type SortOrder = 'asc' | 'desc';
+  const [activeSortField, setActiveSortField] = useState<SortField>('currentPeriodStart');
+  const [activeSortOrder, setActiveSortOrder] = useState<SortOrder>('asc');
+
   // === 전체(내역) 탭 상태 ===
   const [history, setHistory] = useState<SubscriptionHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -92,6 +98,39 @@ export default function SubscriptionsPage() {
     limit: 20,
     total: 0,
     totalPages: 0,
+  });
+
+  // 정렬 토글 핸들러
+  const handleActiveSort = (field: SortField) => {
+    if (activeSortField === field) {
+      // 같은 필드 클릭 시 정렬 순서 토글
+      setActiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // 다른 필드 클릭 시 해당 필드로 변경, 오름차순 시작
+      setActiveSortField(field);
+      setActiveSortOrder('asc');
+    }
+  };
+
+  // 정렬된 구독 목록 (null 값은 맨 뒤로)
+  const sortedSubscriptions = [...subscriptions].sort((a, b) => {
+    const aValue = a[activeSortField];
+    const bValue = b[activeSortField];
+
+    // null/undefined 값은 항상 맨 뒤로
+    if (!aValue && !bValue) return 0;
+    if (!aValue) return 1;
+    if (!bValue) return -1;
+
+    // 날짜 비교
+    const aDate = new Date(aValue).getTime();
+    const bDate = new Date(bValue).getTime();
+
+    if (activeSortOrder === 'asc') {
+      return aDate - bDate;
+    } else {
+      return bDate - aDate;
+    }
   });
 
   // 편집 모달 상태
@@ -234,7 +273,7 @@ export default function SubscriptionsPage() {
       case 'completed':
         return <span className={`${baseClass} bg-gray-100 text-gray-500`}>완료</span>;
       case 'none':
-        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>미구독</span>;
+        return <span className={`${baseClass} bg-gray-100 text-gray-500`}>미구독</span>;
       case 'deleted':
         return <span className={`${baseClass} bg-red-50 text-red-400`}>삭제</span>;
       default:
@@ -397,7 +436,7 @@ export default function SubscriptionsPage() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
-          <RefreshDouble className="w-8 h-8 text-blue-600" />
+          <Timer className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">구독 내역</h1>
         </div>
       </div>
@@ -588,14 +627,44 @@ export default function SubscriptionsPage() {
                       <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">매장</th>
                       <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">플랜</th>
                       <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">상태</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">시작일</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">종료일</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">결제일</th>
+                      <th
+                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                        onClick={() => handleActiveSort('currentPeriodStart')}
+                      >
+                        <span className="inline-flex items-center gap-1 justify-center">
+                          시작일
+                          {activeSortField === 'currentPeriodStart' && (
+                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                          )}
+                        </span>
+                      </th>
+                      <th
+                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                        onClick={() => handleActiveSort('currentPeriodEnd')}
+                      >
+                        <span className="inline-flex items-center gap-1 justify-center">
+                          종료일
+                          {activeSortField === 'currentPeriodEnd' && (
+                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                          )}
+                        </span>
+                      </th>
+                      <th
+                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                        onClick={() => handleActiveSort('nextBillingDate')}
+                      >
+                        <span className="inline-flex items-center gap-1 justify-center">
+                          결제일
+                          {activeSortField === 'nextBillingDate' && (
+                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                          )}
+                        </span>
+                      </th>
                       <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">수정</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {subscriptions.map((subscription, index) => (
+                    {sortedSubscriptions.map((subscription, index) => (
                       <tr key={subscription.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-2 py-3 text-sm text-gray-400 text-center">
                           {(paginationActive.page - 1) * paginationActive.limit + index + 1}

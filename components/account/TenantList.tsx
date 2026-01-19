@@ -303,7 +303,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                               {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
                               {(status === 'canceled' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
                                 <span className="ml-0.5">
-                                  (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })})
+                                  (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Seoul' })})
                                 </span>
                               )}
                             </span>
@@ -330,7 +330,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
               {tenant.subscription && tenant.subscription.status === 'active' && tenant.subscription.nextBillingDate && (
                 <div className="mt-3 ml-16 text-sm text-gray-500">
                   <p>
-                    다음 결제일: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR')}
+                    다음 결제일: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
                   </p>
                 </div>
               )}

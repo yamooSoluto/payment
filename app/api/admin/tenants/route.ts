@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { isValidIndustry } from '@/lib/constants';
+import { isValidIndustry, INDUSTRIES, INDUSTRY_LABEL_TO_CODE, IndustryCode } from '@/lib/constants';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 
 // GET: 매장 목록 조회
@@ -105,10 +105,23 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    // 업종 필터
+    // 업종 필터 (코드 또는 한글 라벨 모두 매칭)
     if (industryFilter) {
       const industries = industryFilter.split(',');
-      tenants = tenants.filter(t => industries.includes(t.industry));
+      tenants = tenants.filter(t => {
+        // 코드로 직접 매칭
+        if (industries.includes(t.industry)) return true;
+        // 한글 라벨로 저장된 경우 코드로 변환해서 매칭
+        const codeFromLabel = INDUSTRY_LABEL_TO_CODE[t.industry];
+        if (codeFromLabel && industries.includes(codeFromLabel)) return true;
+        // 코드로 저장된 경우 라벨로 변환해서 매칭
+        const labelFromCode = INDUSTRIES[t.industry as IndustryCode];
+        if (labelFromCode) {
+          const labelCode = INDUSTRY_LABEL_TO_CODE[labelFromCode];
+          if (labelCode && industries.includes(labelCode)) return true;
+        }
+        return false;
+      });
     }
 
     // 상태 필터 (테넌트 상태: active, deleted 등)

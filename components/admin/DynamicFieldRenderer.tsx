@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { NavArrowDown, NavArrowRight, Copy, Check, Code, List } from 'iconoir-react';
+import { INDUSTRIES, IndustryCode } from '@/lib/constants';
 
 // 읽기 전용 필드 목록
 const READ_ONLY_FIELDS = [
@@ -13,6 +14,24 @@ const READ_ONLY_FIELDS = [
   // 구독 관련 (구독 페이지에서 관리)
   'plan', 'planId', 'subscription', 'subscriptionStatus', 'orderNo', 'totalPrice'
 ];
+
+// 민감 필드 패턴 (마스킹 처리)
+const SENSITIVE_FIELD_PATTERNS = [
+  'secretKey', 'accessKey', 'apiKey', 'token', 'password', 'secret',
+  'billingKey', 'privateKey', 'credential', 'auth'
+];
+
+// 필드명이 민감 필드인지 확인
+function isSensitiveField(fieldName: string): boolean {
+  const lowerName = fieldName.toLowerCase();
+  return SENSITIVE_FIELD_PATTERNS.some(pattern => lowerName.includes(pattern.toLowerCase()));
+}
+
+// 민감 값 마스킹 (마지막 6자만 표시)
+function maskSensitiveValue(value: string): string {
+  if (!value || value.length <= 6) return '••••••';
+  return '••••••••' + value.slice(-6);
+}
 
 // ISO 날짜 문자열 체크
 function isISODateString(value: string): boolean {
@@ -44,7 +63,28 @@ function inferFieldType(value: unknown, fieldName: string): FieldType {
 const FIELD_ICONS: Record<string, string> = {
   slack: '/slack.png',
   channeltalk: '/channeltalk.png',
+  webhook: '/n8n.png',
+  widgetUrl: '/chatwoot.png',
+  naverInboundUrl: '/naver_talktalk.png',
 };
+
+// 업종 코드를 한글 라벨로 변환
+function getIndustryLabel(value: string): string {
+  // 코드인 경우 라벨로 변환
+  if (value in INDUSTRIES) {
+    return INDUSTRIES[value as IndustryCode];
+  }
+  // 이미 한글 라벨이면 그대로 반환
+  return value;
+}
+
+// 특수 필드 값 포맷팅
+function formatFieldValue(fieldName: string, value: unknown): unknown {
+  if (fieldName === 'industry' && typeof value === 'string') {
+    return getIndustryLabel(value);
+  }
+  return value;
+}
 
 // 필드 라벨 변환 (camelCase -> 읽기 쉬운 형태)
 function formatFieldLabel(fieldName: string): string {
@@ -59,7 +99,7 @@ function formatFieldLabel(fieldName: string): string {
     userId: '사용자 ID',
     industry: '업종',
     address: '주소',
-    status: '상태',
+    ai_stop: 'AI 정지',
     deleted: '삭제 여부',
     deletedAt: '삭제일',
     deletedBy: '삭제자',
@@ -103,6 +143,7 @@ function formatFieldLabel(fieldName: string): string {
     totalPrice: '총 가격',
     hasBillingKey: '빌링키 등록',
     billingKey: '빌링키',
+    trial: '트라이얼',
   };
 
   return labelMap[fieldName] || fieldName
@@ -119,7 +160,6 @@ interface DynamicFieldProps {
 }
 
 export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFieldProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [jsonEditMode, setJsonEditMode] = useState<'fields' | 'json'>('fields');
   const isReadOnly = READ_ONLY_FIELDS.includes(fieldName) || disabled;
@@ -188,26 +228,68 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
     }
 
     if (fieldType === 'json') {
-      const jsonString = JSON.stringify(value, null, 2);
+      const jsonObj = typeof value === 'object' && value !== null ? value : {};
+      const isArray = Array.isArray(value);
+
+      // 필드 뷰로 펼쳐서 보여줌
       return (
         <div className="w-full">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
-          >
-            {isExpanded ? <NavArrowDown className="w-4 h-4" /> : <NavArrowRight className="w-4 h-4" />}
-            <span className="text-gray-400">{Array.isArray(value) ? `[${(value as unknown[]).length}]` : '{...}'}</span>
-          </button>
-          {isExpanded && (
-            <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-700 overflow-x-auto max-h-48 overflow-y-auto">
-              {jsonString}
-            </pre>
-          )}
+          <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            {isArray ? (
+              // 배열인 경우
+              (value as unknown[]).length > 0 ? (
+                (value as unknown[]).map((item, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-8">[{index}]</span>
+                    <span className="flex-1 text-sm text-gray-900">{String(item ?? '-')}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">빈 배열입니다</p>
+              )
+            ) : (
+              // 객체인 경우
+              Object.entries(jsonObj as Record<string, unknown>).length > 0 ? (
+                Object.entries(jsonObj as Record<string, unknown>).map(([key, val]) => {
+                  const isNestedObject = typeof val === 'object' && val !== null;
+                  const isSensitive = isSensitiveField(key);
+                  const strVal = val === null ? '' : String(val);
+
+                  return (
+                    <div key={key} className="flex items-start gap-2">
+                      <span className="text-xs text-gray-600 w-28 pt-1 truncate" title={key}>
+                        {key}
+                      </span>
+                      {isNestedObject ? (
+                        <pre className="flex-1 px-2 py-1.5 text-xs bg-white border border-gray-200 rounded overflow-x-auto">
+                          {JSON.stringify(val, null, 2)}
+                        </pre>
+                      ) : val === null ? (
+                        <span className="flex-1 text-sm text-gray-400">null</span>
+                      ) : isSensitive && typeof val === 'string' && val ? (
+                        <span className="flex-1 text-sm text-gray-900 font-mono">
+                          {maskSensitiveValue(strVal)}
+                        </span>
+                      ) : typeof val === 'string' && val.includes('\n') ? (
+                        <pre className="flex-1 text-sm text-gray-900 whitespace-pre-wrap break-words">{strVal}</pre>
+                      ) : (
+                        <span className="flex-1 text-sm text-gray-900">{strVal || '-'}</span>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">빈 객체입니다</p>
+              )
+            )}
+          </div>
         </div>
       );
     }
 
-    return <span className="text-gray-900">{String(value)}</span>;
+    // 특수 필드 값 포맷팅 (예: industry 코드를 한글로 변환)
+    const displayValue = formatFieldValue(fieldName, value);
+    return <span className="text-gray-900">{String(displayValue)}</span>;
   };
 
   // 편집 가능 필드 렌더링
@@ -340,17 +422,28 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
                 // 객체인 경우
                 Object.entries(jsonObj as Record<string, unknown>).map(([key, val]) => {
                   const isNestedObject = typeof val === 'object' && val !== null;
+                  const strVal = val === null ? '' : String(val);
+
                   return (
                     <div key={key} className="flex items-start gap-2">
-                      <span className="text-xs text-gray-600 w-28 pt-2 truncate" title={key}>{key}</span>
+                      <span className="text-xs text-gray-600 w-28 pt-2 truncate" title={key}>
+                        {key}
+                      </span>
                       {isNestedObject ? (
                         <pre className="flex-1 px-2 py-1.5 text-xs bg-white border border-gray-200 rounded overflow-x-auto">
                           {JSON.stringify(val, null, 2)}
                         </pre>
+                      ) : typeof val === 'string' && (val.includes('\n') || val.length > 80) ? (
+                        <textarea
+                          value={val}
+                          onChange={(e) => handleFieldValueChange(key, e.target.value)}
+                          rows={Math.min(10, Math.max(3, val.split('\n').length + 1))}
+                          className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                        />
                       ) : (
                         <input
                           type="text"
-                          value={val === null ? '' : String(val)}
+                          value={strVal}
                           onChange={(e) => handleFieldValueChange(key, e.target.value)}
                           placeholder={val === null ? 'null' : ''}
                           className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -387,6 +480,28 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
       );
     }
 
+    // 업종 필드는 select로 표시
+    if (fieldName === 'industry') {
+      // 한글 라벨로 저장된 경우 코드로 변환
+      const currentValue = String(value ?? '');
+      const industryCode = currentValue in INDUSTRIES
+        ? currentValue
+        : Object.entries(INDUSTRIES).find(([, label]) => label === currentValue)?.[0] || currentValue;
+
+      return (
+        <select
+          value={industryCode}
+          onChange={(e) => onChange?.(fieldName, e.target.value)}
+          className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full max-w-md"
+        >
+          <option value="">선택...</option>
+          {Object.entries(INDUSTRIES).map(([code, label]) => (
+            <option key={code} value={code}>{label}</option>
+          ))}
+        </select>
+      );
+    }
+
     return (
       <input
         type={fieldType === 'url' ? 'url' : 'text'}
@@ -400,7 +515,7 @@ export function DynamicField({ fieldName, value, onChange, disabled }: DynamicFi
   const iconSrc = FIELD_ICONS[fieldName];
 
   return (
-    <div className={`py-3 border-b border-gray-100 last:border-0 ${isReadOnly ? 'bg-gray-50/50' : ''}`}>
+    <div className="py-3 border-b border-gray-100 last:border-0">
       <div className="flex flex-col sm:flex-row sm:items-start gap-2">
         <label className="text-sm font-medium text-gray-600 w-40 flex-shrink-0 pt-2 flex items-center gap-1.5">
           {iconSrc && (

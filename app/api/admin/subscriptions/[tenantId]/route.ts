@@ -280,6 +280,10 @@ export async function DELETE(
       updatedBy: 'admin',
     });
 
+    // tenants 컬렉션에 만료 상태 동기화
+    const { syncSubscriptionExpired } = await import('@/lib/tenant-sync');
+    await syncSubscriptionExpired(tenantId);
+
     // 변경 로그 기록
     await db.collection('subscription_changes').add({
       tenantId,

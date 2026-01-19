@@ -2,30 +2,29 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Notes, Xmark, PageFlip, EditPencil } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
 
-type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription' | 'admin-meta';
+type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription';
 
 // 탭별 필드 그룹핑
 const FIELD_GROUPS: Record<string, string[]> = {
   basic: [
     'tenantId', 'branchNo', 'brandName', 'brandCode', 'address', 'industry',
-    'email', 'phone', 'name', 'userId', 'status', 'deleted', 'deletedAt', 'deletedBy',
+    'email', 'phone', 'name', 'userId', 'deleted', 'deletedAt', 'deletedBy',
     'permanentDeleteAt', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
     'isManualRegistration', 'onboardingCompleted', 'onboardingCompletedAt',
     'locale', 'timezone', 'opsTimeStart', 'opsTimeEnd', 'storeInfo', 'storeInfoCompleted'
   ],
-  ai: ['csTone', 'avatar_url', 'tenantPrompt', 'tenantItem', 'criteria', 'items', 'library', 'meta'],
+  ai: ['ai_stop', 'csTone', 'avatar_url', 'tenantPrompt', 'tenantItem', 'criteria', 'items', 'library', 'meta'],
   integrations: [
     'slack', 'channeltalk', 'naverAuthorization', 'taskBoard', 'addons',
     'policy', 'qa', 'widgetUrl', 'naverInboundUrl', 'webhook'
   ],
-  subscription: ['plan', 'planId', 'subscription', 'subscriptionStatus', 'orderNo', 'totalPrice'],
+  subscription: ['plan', 'planId', 'subscription', 'subscriptionStatus', 'orderNo', 'totalPrice', 'trial'],
   payments: [], // 결제 탭은 별도 데이터 사용
-  'admin-meta': [], // 관리자 메모 탭은 별도 데이터 사용
 };
 
 const ALL_GROUPED_FIELDS = [
@@ -145,8 +144,15 @@ export default function TenantDetailPage() {
   const [subscription, setSubscription] = useState<Record<string, unknown> | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subscriptionHistory, setSubscriptionHistory] = useState<SubscriptionHistoryItem[]>([]);
+  const [adminNames, setAdminNames] = useState<Record<string, string>>({});
   const [editedFields, setEditedFields] = useState<Record<string, unknown>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // 충돌 감지용 원본 데이터
+  const [originalTenant, setOriginalTenant] = useState<Record<string, unknown>>({});
+  const [originalAdminFields, setOriginalAdminFields] = useState<Record<string, unknown>>({});
 
   // 결제 상세 모달
   const [paymentDetailModal, setPaymentDetailModal] = useState<Payment | null>(null);
@@ -157,11 +163,6 @@ export default function TenantDetailPage() {
   // 구독 내역 정렬 (desc: 최신순, asc: 오래된순)
   const [historySortOrder, setHistorySortOrder] = useState<'desc' | 'asc'>('desc');
 
-  // 어드민 메타 상태
-  const [adminMeta, setAdminMeta] = useState<Record<string, unknown>>({});
-  const [editedAdminMeta, setEditedAdminMeta] = useState<Record<string, unknown>>({});
-  const [hasAdminMetaChanges, setHasAdminMetaChanges] = useState(false);
-  const [savingAdminMeta, setSavingAdminMeta] = useState(false);
 
   // 구독 수정 모달
   const [subscriptionEditModal, setSubscriptionEditModal] = useState(false);
@@ -174,27 +175,43 @@ export default function TenantDetailPage() {
   });
   const [savingSubscription, setSavingSubscription] = useState(false);
 
-  // 공유 스키마
-  interface MetaFieldSchema {
+  // 커스텀 필드 스키마
+  type CustomFieldType = 'string' | 'number' | 'boolean' | 'map' | 'array' | 'timestamp' | 'select';
+  type CustomFieldTab = 'basic' | 'ai' | 'integrations' | 'subscription';
+  interface CustomFieldSchema {
     name: string;
     label: string;
-    type: 'text' | 'number' | 'boolean' | 'select';
+    type: CustomFieldType;
     options?: string[];
+    tab: CustomFieldTab;
+    saveToFirestore: boolean;
     order: number;
   }
-  const [metaSchema, setMetaSchema] = useState<MetaFieldSchema[]>([]);
+  const [customFieldSchema, setCustomFieldSchema] = useState<CustomFieldSchema[]>([]);
 
-  const fetchTenantDetail = useCallback(async () => {
-    setLoading(true);
+  // 관리자 필드 데이터 (tenant_admin_fields 컬렉션)
+  const [adminFields, setAdminFields] = useState<Record<string, unknown>>({});
+  const [editedAdminFields, setEditedAdminFields] = useState<Record<string, unknown>>({});
+
+  const fetchTenantDetail = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const response = await fetch(`/api/admin/tenants/${tenantId}`);
       if (response.ok) {
         const data = await response.json();
-        setTenant(data.tenant || {});
+        const tenantData = data.tenant || {};
+        setTenant(tenantData);
+        setOriginalTenant(JSON.parse(JSON.stringify(tenantData))); // 깊은 복사
         setSubscription(data.subscription);
         setPayments(data.payments || []);
         setSubscriptionHistory(data.subscriptionHistory || []);
+        setAdminNames(data.adminNames || {});
         setEditedFields({});
+        setEditedAdminFields({});
         setHasChanges(false);
       } else if (response.status === 404) {
         alert('매장을 찾을 수 없습니다.');
@@ -204,40 +221,42 @@ export default function TenantDetailPage() {
       console.error('Failed to fetch tenant:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [tenantId, router]);
 
-  const fetchAdminMeta = useCallback(async () => {
+  const fetchAdminFields = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/tenants/${tenantId}/admin-meta`);
+      const response = await fetch(`/api/admin/tenants/${tenantId}/admin-fields`);
       if (response.ok) {
         const data = await response.json();
-        setAdminMeta(data.adminMeta?.fields || {});
-        setEditedAdminMeta({});
-        setHasAdminMetaChanges(false);
+        const fieldsData = data.data || {};
+        setAdminFields(fieldsData);
+        setOriginalAdminFields(JSON.parse(JSON.stringify(fieldsData))); // 깊은 복사
+        setEditedAdminFields({});
       }
     } catch (error) {
-      console.error('Failed to fetch admin meta:', error);
+      console.error('Failed to fetch admin fields:', error);
     }
   }, [tenantId]);
 
-  const fetchMetaSchema = useCallback(async () => {
+  const fetchCustomFieldSchema = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/tenant-meta-schema');
       if (response.ok) {
         const data = await response.json();
-        setMetaSchema(data.fields || []);
+        setCustomFieldSchema(data.fields || []);
       }
     } catch (error) {
-      console.error('Failed to fetch meta schema:', error);
+      console.error('Failed to fetch custom field schema:', error);
     }
   }, []);
 
   useEffect(() => {
     fetchTenantDetail();
-    fetchAdminMeta();
-    fetchMetaSchema();
-  }, [fetchTenantDetail, fetchAdminMeta, fetchMetaSchema]);
+    fetchAdminFields();
+    fetchCustomFieldSchema();
+  }, [fetchTenantDetail, fetchAdminFields, fetchCustomFieldSchema]);
 
   const handleFieldChange = (fieldName: string, value: unknown) => {
     setEditedFields(prev => ({
@@ -247,25 +266,124 @@ export default function TenantDetailPage() {
     setHasChanges(true);
   };
 
+  // 충돌 감지 함수
+  const checkForConflicts = async (): Promise<{ hasConflict: boolean; message: string }> => {
+    try {
+      // 최신 데이터 조회
+      const [tenantRes, adminFieldsRes] = await Promise.all([
+        fetch(`/api/admin/tenants/${tenantId}`),
+        fetch(`/api/admin/tenants/${tenantId}/admin-fields`)
+      ]);
+
+      if (!tenantRes.ok || !adminFieldsRes.ok) {
+        return { hasConflict: false, message: '' };
+      }
+
+      const tenantData = await tenantRes.json();
+      const adminFieldsData = await adminFieldsRes.json();
+
+      const currentTenant = tenantData.tenant || {};
+      const currentAdminFields = adminFieldsData.data || {};
+
+      // 변경된 필드 찾기
+      const changedTenantFields: string[] = [];
+      const changedAdminFields: string[] = [];
+
+      // 편집 중인 필드만 비교
+      for (const fieldName of Object.keys(editedFields)) {
+        const originalValue = JSON.stringify(originalTenant[fieldName]);
+        const currentValue = JSON.stringify(currentTenant[fieldName]);
+        if (originalValue !== currentValue) {
+          changedTenantFields.push(fieldName);
+        }
+      }
+
+      for (const fieldName of Object.keys(editedAdminFields)) {
+        const originalValue = JSON.stringify(originalAdminFields[fieldName]);
+        const currentValue = JSON.stringify(currentAdminFields[fieldName]);
+        if (originalValue !== currentValue) {
+          changedAdminFields.push(fieldName);
+        }
+      }
+
+      const allChangedFields = [...changedTenantFields, ...changedAdminFields];
+
+      if (allChangedFields.length > 0) {
+        return {
+          hasConflict: true,
+          message: `다음 필드가 다른 곳에서 수정되었습니다:\n${allChangedFields.join(', ')}\n\n계속 저장하시겠습니까? (기존 값을 덮어씁니다)`,
+        };
+      }
+
+      return { hasConflict: false, message: '' };
+    } catch (error) {
+      console.error('Conflict check failed:', error);
+      return { hasConflict: false, message: '' };
+    }
+  };
+
   const handleSave = async () => {
-    if (!hasChanges || Object.keys(editedFields).length === 0) return;
+    const allEditedFields = { ...editedFields, ...editedAdminFields };
+    if (Object.keys(allEditedFields).length === 0) return;
 
     setSaving(true);
     try {
-      const response = await fetch(`/api/admin/tenants/${tenantId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editedFields),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('저장되었습니다.');
-        await fetchTenantDetail();
-      } else {
-        alert(data.error || '저장에 실패했습니다.');
+      // 충돌 감지
+      const { hasConflict, message } = await checkForConflicts();
+      if (hasConflict && !confirm(message)) {
+        setSaving(false);
+        return;
       }
+
+      // 커스텀 필드 스키마에서 saveToFirestore 여부 확인
+      const firestoreFields: Record<string, unknown> = {};
+      const adminFieldsToSave: Record<string, unknown> = {};
+
+      for (const [fieldName, value] of Object.entries(allEditedFields)) {
+        const schema = customFieldSchema.find(s => s.name === fieldName);
+        if (schema && !schema.saveToFirestore) {
+          // tenant_admin_fields에 저장
+          adminFieldsToSave[fieldName] = value;
+        } else {
+          // tenant 문서에 저장 (기본 필드 또는 saveToFirestore=true인 커스텀 필드)
+          firestoreFields[fieldName] = value;
+        }
+      }
+
+      // Firestore 필드 저장
+      if (Object.keys(firestoreFields).length > 0) {
+        const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(firestoreFields),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          alert(data.error || '저장에 실패했습니다.');
+          return;
+        }
+      }
+
+      // 관리자 필드 저장
+      if (Object.keys(adminFieldsToSave).length > 0) {
+        const response = await fetch(`/api/admin/tenants/${tenantId}/admin-fields`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: adminFieldsToSave }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          alert(data.error || '관리자 필드 저장에 실패했습니다.');
+          return;
+        }
+      }
+
+      alert('저장되었습니다.');
+      setIsEditMode(false);
+      await fetchTenantDetail();
+      await fetchAdminFields();
     } catch {
       alert('오류가 발생했습니다.');
     } finally {
@@ -275,70 +393,76 @@ export default function TenantDetailPage() {
 
   const handleCancel = () => {
     setEditedFields({});
+    setEditedAdminFields({});
     setHasChanges(false);
+    setIsEditMode(false);
   };
 
-  // 어드민 메타 필드 변경
-  const handleAdminMetaChange = (fieldName: string, value: unknown) => {
-    setEditedAdminMeta(prev => ({
-      ...prev,
-      [fieldName]: value,
-    }));
-    setHasAdminMetaChanges(true);
+  // 새로고침 핸들러
+  const handleRefresh = async () => {
+    await fetchTenantDetail(true);
+    await fetchAdminFields();
+    setIsEditMode(false);
   };
 
-  // 어드민 메타 저장
-  const handleSaveAdminMeta = async () => {
-    if (!hasAdminMetaChanges) return;
-
-    setSavingAdminMeta(true);
-    try {
-      // 기존 메타와 편집된 메타 병합
-      const mergedFields = { ...adminMeta, ...editedAdminMeta };
-
-      const response = await fetch(`/api/admin/tenants/${tenantId}/admin-meta`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: mergedFields }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('저장되었습니다.');
-        await fetchAdminMeta();
-      } else {
-        alert(data.error || '저장에 실패했습니다.');
-      }
-    } catch {
-      alert('오류가 발생했습니다.');
-    } finally {
-      setSavingAdminMeta(false);
+  // 커스텀 필드 변경 핸들러 (saveToFirestore에 따라 적절한 상태에 저장)
+  const handleCustomFieldChange = (fieldName: string, value: unknown) => {
+    const schema = customFieldSchema.find(s => s.name === fieldName);
+    if (schema && !schema.saveToFirestore) {
+      setEditedAdminFields(prev => ({ ...prev, [fieldName]: value }));
+    } else {
+      setEditedFields(prev => ({ ...prev, [fieldName]: value }));
     }
+    setHasChanges(true);
   };
 
-  // 어드민 메타 취소
-  const handleCancelAdminMeta = () => {
-    setEditedAdminMeta({});
-    setHasAdminMetaChanges(false);
+  // 관리자 UID를 이름으로 변환
+  const resolveAdminName = (uid: unknown): string => {
+    if (!uid || typeof uid !== 'string') return String(uid || '-');
+    // adminNames에서 찾기
+    if (adminNames[uid]) return adminNames[uid];
+    // 예약어 확인 (system, admin 등)
+    if (uid === 'system') return '시스템';
+    if (uid === 'admin') return '관리자';
+    // UID 그대로 반환
+    return uid;
   };
 
-
-  // 어드민 메타 현재 값
-  const getAdminMetaValue = (fieldName: string) => {
-    if (fieldName in editedAdminMeta) {
-      return editedAdminMeta[fieldName];
-    }
-    return adminMeta[fieldName];
-  };
-
-  // 현재 값 가져오기 (편집된 값 우선)
+  // 현재 값 가져오기 (편집된 값 우선, adminFields도 고려)
   const getCurrentValue = (fieldName: string) => {
+    let value: unknown;
+
+    // 편집된 값 우선
     if (fieldName in editedFields) {
-      return editedFields[fieldName];
+      value = editedFields[fieldName];
+    } else if (fieldName in editedAdminFields) {
+      value = editedAdminFields[fieldName];
+    } else if (fieldName in tenant) {
+      // tenant 문서에서 찾기
+      value = tenant[fieldName];
+    } else {
+      // adminFields에서 찾기
+      value = adminFields[fieldName];
     }
-    return tenant[fieldName];
+
+    // 관리자 UID 필드는 이름으로 변환 (뷰 모드에서만)
+    const adminUidFields = ['updatedBy', 'createdBy', 'deletedBy'];
+    if (adminUidFields.includes(fieldName) && !isEditMode) {
+      return resolveAdminName(value);
+    }
+
+    return value;
   };
+
+  // 해당 탭의 커스텀 필드 스키마 가져오기
+  const getCustomFieldsForTab = (tab: CustomFieldTab): CustomFieldSchema[] => {
+    return customFieldSchema
+      .filter(f => f.tab === tab)
+      .sort((a, b) => a.order - b.order);
+  };
+
+  // 변경사항 있는지 확인
+  const hasAnyChanges = hasChanges || Object.keys(editedAdminFields).length > 0;
 
   // 탭별 필드 필터링
   const getFieldsForTab = (tab: TabType): Record<string, unknown> => {
@@ -358,40 +482,13 @@ export default function TenantDetailPage() {
   const getOtherFields = (): Record<string, unknown> => {
     const result: Record<string, unknown> = {};
 
-    for (const [key, value] of Object.entries(tenant)) {
+    for (const key of Object.keys(tenant)) {
       if (!ALL_GROUPED_FIELDS.includes(key) && key !== 'id') {
         result[key] = getCurrentValue(key);
       }
     }
 
     return result;
-  };
-
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('ko-KR');
-  };
-
-  const formatAmount = (amount: number | undefined) => {
-    if (!amount) return '-';
-    return amount.toLocaleString() + '원';
-  };
-
-  const getPaymentStatusBadge = (status: string) => {
-    const baseClass = "px-2 py-1 text-xs font-medium rounded-full";
-    switch (status) {
-      case 'completed':
-      case 'paid':
-        return <span className={`${baseClass} bg-green-100 text-green-700`}>완료</span>;
-      case 'pending':
-        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>대기</span>;
-      case 'failed':
-        return <span className={`${baseClass} bg-red-100 text-red-700`}>실패</span>;
-      case 'refunded':
-        return <span className={`${baseClass} bg-gray-100 text-gray-600`}>환불</span>;
-      default:
-        return <span className={`${baseClass} bg-gray-100 text-gray-600`}>{status || '-'}</span>;
-    }
   };
 
   const getPlanName = (plan: unknown) => {
@@ -437,7 +534,6 @@ export default function TenantDetailPage() {
   const basicFields = getFieldsForTab('basic');
   const aiFields = getFieldsForTab('ai');
   const integrationFields = getFieldsForTab('integrations');
-  const subscriptionFields = getFieldsForTab('subscription');
   const otherFields = getOtherFields();
 
   return (
@@ -465,34 +561,47 @@ export default function TenantDetailPage() {
           )}
         </div>
 
-        {/* 저장 버튼 */}
-        {hasChanges && (
-          <div className="flex items-center gap-2">
+        {/* 우측 버튼 그룹: 새로고침 / 수정 / 저장 */}
+        <div className="flex items-center gap-2">
+          {/* 새로고침 버튼 */}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || saving}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            title="새로고침"
+          >
+            <RefreshDouble className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          {/* 수정 모드가 아닐 때: 수정 버튼 */}
+          {!isEditMode && (
             <button
-              onClick={handleCancel}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              onClick={() => setIsEditMode(true)}
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-300 hover:border-blue-400 rounded-lg transition-colors"
             >
-              취소
+              수정
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <RefreshDouble className="w-4 h-4 animate-spin" />
-                  저장 중...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  저장
-                </>
-              )}
-            </button>
-          </div>
-        )}
+          )}
+
+          {/* 수정 모드일 때: 취소 / 저장 버튼 */}
+          {isEditMode && (
+            <>
+              <button
+                onClick={handleCancel}
+                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !hasAnyChanges}
+                className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-300 hover:border-blue-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? '저장 중...' : '저장'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* 탭 */}
@@ -550,24 +659,8 @@ export default function TenantDetailPage() {
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <RefreshDouble className="w-4 h-4" />
+            <Timer className="w-4 h-4" />
             구독
-          </button>
-          <button
-            onClick={() => setActiveTab('admin-meta')}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'admin-meta'
-                ? 'text-purple-600 border-b-2 border-purple-600 -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Notes className="w-4 h-4" />
-            관리자 메모
-            {metaSchema.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-                {metaSchema.length}
-              </span>
-            )}
           </button>
         </div>
 
@@ -592,6 +685,7 @@ export default function TenantDetailPage() {
                         title="회원 정보"
                         fields={memberFieldsData}
                         onChange={handleFieldChange}
+                        disabled={!isEditMode}
                       />
                     ) : null;
                   })()}
@@ -599,9 +693,9 @@ export default function TenantDetailPage() {
                   {(() => {
                     const memberFields = ['name', 'phone', 'email', 'userId'];
                     const storeFieldsData: Record<string, unknown> = {};
-                    for (const [key, value] of Object.entries(basicFields)) {
+                    for (const [key] of Object.entries(basicFields)) {
                       if (!memberFields.includes(key)) {
-                        storeFieldsData[key] = value;
+                        storeFieldsData[key] = basicFields[key];
                       }
                     }
                     return Object.keys(storeFieldsData).length > 0 ? (
@@ -609,6 +703,7 @@ export default function TenantDetailPage() {
                         title="매장 정보"
                         fields={storeFieldsData}
                         onChange={handleFieldChange}
+                        disabled={!isEditMode}
                       />
                     ) : null;
                   })()}
@@ -617,6 +712,21 @@ export default function TenantDetailPage() {
                       title="기타"
                       fields={otherFields}
                       onChange={handleFieldChange}
+                      disabled={!isEditMode}
+                    />
+                  )}
+                  {/* 커스텀 필드 (basic 탭) */}
+                  {getCustomFieldsForTab('basic').length > 0 && (
+                    <DynamicFieldGroup
+                      title="커스텀 필드"
+                      fields={Object.fromEntries(
+                        getCustomFieldsForTab('basic').map(schema => [
+                          schema.name,
+                          getCurrentValue(schema.name) ?? ''
+                        ])
+                      )}
+                      onChange={handleCustomFieldChange}
+                      disabled={!isEditMode}
                     />
                   )}
                 </>
@@ -626,6 +736,7 @@ export default function TenantDetailPage() {
                   title="전체 필드"
                   fields={tenant}
                   onChange={handleFieldChange}
+                  disabled={!isEditMode}
                 />
               ) : (
                 <div className="text-center py-10 text-gray-500">
@@ -638,39 +749,104 @@ export default function TenantDetailPage() {
           {/* AI 설정 탭 */}
           {activeTab === 'ai' && (
             <div className="space-y-4">
-              {Object.keys(aiFields).length === 0 ? (
-                <div className="text-center py-10 text-gray-500">
-                  AI 설정 정보가 없습니다.
+              {/* AI 정지 토글 */}
+              <div className="py-3 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <label className="text-sm font-medium text-gray-600 w-40 flex-shrink-0">AI 정지</label>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!tenant.ai_stop}
+                      onChange={async (e) => {
+                        const newValue = e.target.checked;
+                        const msg = newValue
+                          ? 'AI 프로세스가 중지됩니다. 정지하시겠습니까?'
+                          : 'AI 정지를 해제하시겠습니까?';
+                        if (!confirm(msg)) {
+                          e.preventDefault();
+                          return;
+                        }
+                        try {
+                          const response = await fetch(`/api/admin/tenants/${tenantId}/ai-stop`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ai_stop: newValue }),
+                          });
+                          if (response.ok) {
+                            setTenant(prev => ({ ...prev, ai_stop: newValue }));
+                          } else {
+                            const data = await response.json();
+                            alert(data.error || 'AI 상태 변경에 실패했습니다.');
+                          }
+                        } catch {
+                          alert('오류가 발생했습니다.');
+                        }
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                  </label>
                 </div>
-              ) : (
-                Object.entries(aiFields).map(([key, value]) => (
-                  <DynamicField
-                    key={key}
-                    fieldName={key}
-                    value={value}
-                    onChange={handleFieldChange}
-                  />
-                ))
-              )}
+              </div>
+
+              {/* 기존 AI 설정 필드 (ai_stop 제외) */}
+              {(() => {
+                const filteredAiFields = Object.entries(aiFields).filter(([key]) => key !== 'ai_stop');
+                return filteredAiFields.length === 0 && getCustomFieldsForTab('ai').length === 0 ? null : (
+                  <>
+                    {filteredAiFields.map(([key, value]) => (
+                      <DynamicField
+                        key={key}
+                        fieldName={key}
+                        value={value}
+                        onChange={handleFieldChange}
+                        disabled={!isEditMode}
+                      />
+                    ))}
+                    {getCustomFieldsForTab('ai').map(schema => (
+                      <DynamicField
+                        key={schema.name}
+                        fieldName={schema.name}
+                        value={getCurrentValue(schema.name) ?? ''}
+                        onChange={handleCustomFieldChange}
+                        disabled={!isEditMode}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           )}
 
           {/* 연동 설정 탭 */}
           {activeTab === 'integrations' && (
             <div className="space-y-4">
-              {Object.keys(integrationFields).length === 0 ? (
+              {Object.keys(integrationFields).length === 0 && getCustomFieldsForTab('integrations').length === 0 ? (
                 <div className="text-center py-10 text-gray-500">
                   연동 설정 정보가 없습니다.
                 </div>
               ) : (
-                Object.entries(integrationFields).map(([key, value]) => (
-                  <DynamicField
-                    key={key}
-                    fieldName={key}
-                    value={value}
-                    onChange={handleFieldChange}
-                  />
-                ))
+                <>
+                  {Object.entries(integrationFields).map(([key, value]) => (
+                    <DynamicField
+                      key={key}
+                      fieldName={key}
+                      value={value}
+                      onChange={handleFieldChange}
+                      disabled={!isEditMode}
+                    />
+                  ))}
+                  {/* 커스텀 필드 (integrations 탭) */}
+                  {getCustomFieldsForTab('integrations').map(schema => (
+                    <DynamicField
+                      key={schema.name}
+                      fieldName={schema.name}
+                      value={getCurrentValue(schema.name) ?? ''}
+                      onChange={handleCustomFieldChange}
+                      disabled={!isEditMode}
+                    />
+                  ))}
+                </>
               )}
             </div>
           )}
@@ -847,7 +1023,7 @@ export default function TenantDetailPage() {
                         <p className="text-xs text-gray-400 mb-1">구독 시작</p>
                         <p className="text-sm font-medium text-gray-900">
                           {subscription.currentPeriodStart
-                            ? new Date(subscription.currentPeriodStart as string).toLocaleDateString('ko-KR')
+                            ? new Date(subscription.currentPeriodStart as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
                             : '-'}
                         </p>
                       </div>
@@ -855,7 +1031,7 @@ export default function TenantDetailPage() {
                         <p className="text-xs text-gray-400 mb-1">구독 종료</p>
                         <p className="text-sm font-medium text-gray-900">
                           {subscription.currentPeriodEnd
-                            ? new Date(subscription.currentPeriodEnd as string).toLocaleDateString('ko-KR')
+                            ? new Date(subscription.currentPeriodEnd as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
                             : '-'}
                         </p>
                       </div>
@@ -863,7 +1039,7 @@ export default function TenantDetailPage() {
                         <p className="text-xs text-gray-400 mb-1">다음 결제</p>
                         <p className={`text-sm font-medium ${subscription.nextBillingDate ? 'text-blue-600' : 'text-gray-400'}`}>
                           {subscription.nextBillingDate
-                            ? new Date(subscription.nextBillingDate as string).toLocaleDateString('ko-KR')
+                            ? new Date(subscription.nextBillingDate as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
                             : '-'}
                         </p>
                         {Boolean(subscription.nextBillingDate) && ((subscription.baseAmount as number) || (subscription.amount as number) || 0) > 0 && (
@@ -964,7 +1140,7 @@ export default function TenantDetailPage() {
                               {record.periodEnd ? new Date(record.periodEnd).toLocaleDateString('ko-KR') : '-'}
                             </td>
                             <td className="px-3 py-3 text-sm text-gray-600 text-center">
-                              {record.changedBy ? (INITIATED_BY_LABELS[record.changedBy] || record.changedBy) : '-'}
+                              {record.changedBy ? (INITIATED_BY_LABELS[record.changedBy] || resolveAdminName(record.changedBy)) : '-'}
                             </td>
                           </tr>
                         ))}
@@ -976,114 +1152,6 @@ export default function TenantDetailPage() {
             </div>
           )}
 
-          {/* 관리자 메모 탭 */}
-          {activeTab === 'admin-meta' && (
-            <div className="space-y-6">
-              {/* 설명 */}
-              <div className="bg-purple-50 rounded-lg p-4 text-sm text-purple-800">
-                <p className="font-medium mb-1">관리자 전용 메모</p>
-                <p className="text-purple-600">
-                  이 섹션의 데이터는 Firestore 매장 데이터와 별개로 저장됩니다.
-                  필드 추가/삭제는 매장 관리 목록 페이지의 &quot;관리자 필드&quot; 버튼에서 설정할 수 있습니다.
-                </p>
-              </div>
-
-              {/* 저장/취소 버튼 */}
-              {hasAdminMetaChanges && (
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={handleCancelAdminMeta}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleSaveAdminMeta}
-                    disabled={savingAdminMeta}
-                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {savingAdminMeta ? (
-                      <>
-                        <RefreshDouble className="w-4 h-4 animate-spin" />
-                        저장 중...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        메모 저장
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* 필드 목록 - 스키마 기반 */}
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900">관리자 메모 필드</h3>
-                </div>
-
-                {metaSchema.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">
-                    <Notes className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    <p>등록된 관리자 필드가 없습니다.</p>
-                    <p className="text-sm mt-1">매장 관리 목록 페이지에서 필드를 추가하세요.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {metaSchema.map((field) => (
-                      <div key={field.name} className="px-4 py-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          {field.label}
-                        </label>
-                        {field.type === 'text' && (
-                          <input
-                            type="text"
-                            value={String(getAdminMetaValue(field.name) ?? '')}
-                            onChange={(e) => handleAdminMetaChange(field.name, e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder={`${field.label} 입력...`}
-                          />
-                        )}
-                        {field.type === 'number' && (
-                          <input
-                            type="number"
-                            value={Number(getAdminMetaValue(field.name)) || ''}
-                            onChange={(e) => handleAdminMetaChange(field.name, parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder="0"
-                          />
-                        )}
-                        {field.type === 'boolean' && (
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(getAdminMetaValue(field.name))}
-                              onChange={(e) => handleAdminMetaChange(field.name, e.target.checked)}
-                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                            <span className="text-sm text-gray-600">예</span>
-                          </label>
-                        )}
-                        {field.type === 'select' && field.options && (
-                          <select
-                            value={String(getAdminMetaValue(field.name) ?? '')}
-                            onChange={(e) => handleAdminMetaChange(field.name, e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          >
-                            <option value="">선택...</option>
-                            {field.options.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

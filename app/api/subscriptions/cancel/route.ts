@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
 import { cancelPayment, PLAN_PRICES } from '@/lib/toss';
-import { syncSubscriptionCancellation, syncSubscriptionExpired } from '@/lib/tenant-sync';
+import { syncSubscriptionCancellation, syncSubscriptionPendingCancel } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { FieldValue } from 'firebase-admin/firestore';
 import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
@@ -243,12 +243,8 @@ export async function POST(request: NextRequest) {
         });
       });
 
-      // tenants 컬렉션에 만료 상태 동기화
-      if (typeof syncSubscriptionExpired === 'function') {
-        await syncSubscriptionExpired(tenantId);
-      } else {
-        await syncSubscriptionCancellation(tenantId);
-      }
+      // tenants 컬렉션에 취소 상태 동기화 (subscriptions와 동일하게 'canceled')
+      await syncSubscriptionCancellation(tenantId);
 
       // subscription_history 상태 업데이트 (즉시 해지: canceled)
       try {
@@ -303,8 +299,8 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       });
 
-      // tenants 컬렉션에 취소 상태 동기화
-      await syncSubscriptionCancellation(tenantId);
+      // tenants 컬렉션에 예약 해지 상태 동기화 (subscriptions와 동일하게 'pending_cancel')
+      await syncSubscriptionPendingCancel(tenantId);
 
       // subscription_history 상태 업데이트 (예약 해지: pending_cancel)
       try {

@@ -434,9 +434,8 @@ export async function POST(request: Request) {
       const trialEndDate = new Date(now);
       trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
 
-      // currentPeriodEnd는 trialEndDate - 1일 (마지막 이용 가능일)
+      // currentPeriodEnd는 trialEndDate와 동일
       const currentPeriodEnd = new Date(trialEndDate);
-      currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
       // subscription 생성 (trial 상태, userId 포함)
       await db.collection('subscriptions').doc(tenantId).set({
@@ -454,6 +453,22 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+
+      // tenants 컬렉션에 trial 구독 정보 동기화
+      try {
+        await db.collection('tenants').doc(tenantId).update({
+          'subscription.plan': 'trial',
+          'subscription.status': 'trial',
+          'subscription.startedAt': now,
+          'subscription.trialEndsAt': trialEndDate,
+          plan: 'trial',
+          status: 'trial',
+          trialEndsAt: trialEndDate,
+          updatedAt: now,
+        });
+      } catch (syncError) {
+        console.error('Failed to sync tenant subscription:', syncError);
+      }
 
       console.log(`Trial subscription 생성됨: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);
     }

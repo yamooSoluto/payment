@@ -136,6 +136,11 @@ export async function POST(request: NextRequest) {
                     cancelReason: 'Payment canceled via Toss',
                     updatedAt: new Date(),
                   });
+
+                  // tenants 컬렉션에 취소 상태 동기화
+                  const { syncSubscriptionCancellation } = await import('@/lib/tenant-sync');
+                  await syncSubscriptionCancellation(email);
+
                   console.log('Subscription marked as canceled for:', email ? email.replace(/@.*/, '@***') : 'unknown');
                 }
               }
@@ -209,6 +214,10 @@ export async function POST(request: NextRequest) {
             status: 'past_due',
             updatedAt: new Date(),
           });
+
+          // tenants 컬렉션에 결제 실패 상태 동기화
+          const { syncPaymentFailure } = await import('@/lib/tenant-sync');
+          await syncPaymentFailure(customerKey);
 
           // N8N 웹훅 호출 (결제 실패 알림)
           if (isN8NNotificationEnabled()) {

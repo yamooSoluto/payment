@@ -10,7 +10,7 @@ import {
   Package,
   HomeSimpleDoor,
   CreditCards,
-  RefreshDouble,
+  Timer,
   StatsUpSquare,
   Mail,
   DocMagnifyingGlassIn,
@@ -69,7 +69,7 @@ const menuItems = [
   {
     name: '구독',
     href: '/admin/subscriptions',
-    icon: RefreshDouble,
+    icon: Timer,
     permission: 'subscriptions:read',
   },
   {

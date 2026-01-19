@@ -41,6 +41,7 @@ export async function GET(
     const member = {
       id: encodeURIComponent(email),
       email,
+      userId: userData.userId || null,
       name: userData.name || '',
       phone: userData.phone || '',
       group: userData.group || 'normal',

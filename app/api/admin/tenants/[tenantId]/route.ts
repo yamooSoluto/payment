@@ -124,6 +124,18 @@ export async function GET(
       console.error('Failed to fetch subscription history:', historyError);
     }
 
+    // 관리자 이름 매핑 조회
+    let adminNames: Record<string, string> = {};
+    try {
+      const adminsSnapshot = await db.collection('admins').get();
+      adminsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        adminNames[doc.id] = data.name || data.loginId || doc.id;
+      });
+    } catch (adminError) {
+      console.error('Failed to fetch admin names:', adminError);
+    }
+
     return NextResponse.json({
       tenant: {
         id: tenantDoc.id,
@@ -133,6 +145,7 @@ export async function GET(
       subscription,
       payments,
       subscriptionHistory,
+      adminNames,
     });
   } catch (error) {
     console.error('Get tenant detail error:', error);
@@ -201,11 +214,67 @@ export async function PUT(
       }
     }
 
-    // 업데이트 메타데이터 추가
-    updateData.updatedAt = FieldValue.serverTimestamp();
-    updateData.updatedBy = admin.adminId;
+    // 구독 필드 분리 (subscription.* 형태의 필드들)
+    const subscriptionUpdateData: Record<string, unknown> = {};
+    const keysToRemove: string[] = [];
 
-    await db.collection('tenants').doc(tenantId).update(updateData);
+    for (const [key, value] of Object.entries(body)) {
+      if (key.startsWith('subscription.')) {
+        const subKey = key.replace('subscription.', '');
+        // 날짜 문자열을 Date로 변환
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)) {
+          subscriptionUpdateData[subKey] = new Date(value);
+        } else {
+          subscriptionUpdateData[subKey] = value;
+        }
+        keysToRemove.push(key);
+      }
+    }
+
+    // 구독 필드는 updateData에서 제거
+    for (const key of keysToRemove) {
+      delete updateData[key];
+    }
+
+    // 구독 필드 업데이트 (subscriptions 컬렉션 + tenants.subscription 필드)
+    if (Object.keys(subscriptionUpdateData).length > 0) {
+      subscriptionUpdateData.updatedAt = FieldValue.serverTimestamp();
+      subscriptionUpdateData.updatedBy = admin.name;
+
+      // 1. subscriptions 컬렉션 업데이트
+      const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+      if (subscriptionDoc.exists) {
+        await db.collection('subscriptions').doc(tenantId).update(subscriptionUpdateData);
+      } else {
+        // 구독 문서가 없으면 생성
+        await db.collection('subscriptions').doc(tenantId).set({
+          tenantId,
+          ...subscriptionUpdateData,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+
+      // 2. tenants 컬렉션의 subscription 필드도 함께 업데이트
+      const tenantSubscriptionUpdate: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(subscriptionUpdateData)) {
+        // updatedAt, updatedBy는 제외 (tenants 문서 레벨에서 별도로 관리)
+        if (key !== 'updatedAt' && key !== 'updatedBy') {
+          tenantSubscriptionUpdate[`subscription.${key}`] = value;
+        }
+      }
+      if (Object.keys(tenantSubscriptionUpdate).length > 0) {
+        tenantSubscriptionUpdate.updatedAt = FieldValue.serverTimestamp();
+        tenantSubscriptionUpdate.updatedBy = admin.name;
+        await db.collection('tenants').doc(tenantId).update(tenantSubscriptionUpdate);
+      }
+    }
+
+    // 테넌트 필드 업데이트 (tenants 컬렉션)
+    if (Object.keys(updateData).length > 0) {
+      updateData.updatedAt = FieldValue.serverTimestamp();
+      updateData.updatedBy = admin.name;
+      await db.collection('tenants').doc(tenantId).update(updateData);
+    }
 
     // brandName이 변경되면 subscriptions 컬렉션에도 업데이트
     if (body.brandName) {
@@ -220,7 +289,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      message: '매장 정보가 수정되었습니다.',
+      message: '정보가 수정되었습니다.',
     });
   } catch (error) {
     console.error('Update tenant error:', error);

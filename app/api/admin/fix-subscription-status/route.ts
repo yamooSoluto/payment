@@ -130,6 +130,32 @@ export async function POST(request: NextRequest) {
 
     await subscriptionRef.update(updateData);
 
+    // tenants 컬렉션에 변경사항 동기화
+    const tenantUpdateData: Record<string, unknown> = {};
+    if (newStatus) {
+      tenantUpdateData['subscription.status'] = newStatus;
+      tenantUpdateData['status'] = newStatus;
+    }
+    if (updates?.plan) {
+      tenantUpdateData['subscription.plan'] = updates.plan;
+      tenantUpdateData['plan'] = updates.plan;
+    }
+    if (updates?.currentPeriodEnd) {
+      tenantUpdateData['subscription.renewsAt'] = new Date(updates.currentPeriodEnd);
+    }
+    if (updates?.currentPeriodStart) {
+      tenantUpdateData['subscription.startedAt'] = new Date(updates.currentPeriodStart);
+    }
+
+    if (Object.keys(tenantUpdateData).length > 0) {
+      try {
+        await db.collection('tenants').doc(tenantId).update(tenantUpdateData);
+        console.log('✅ Tenant subscription synced for fix-subscription-status');
+      } catch (syncError) {
+        console.error('Failed to sync tenant subscription:', syncError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       tenantId,

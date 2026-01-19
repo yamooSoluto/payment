@@ -10,6 +10,7 @@ import Spinner from '@/components/admin/Spinner';
 interface Member {
   id: string;
   email: string;
+  userId?: string | null;
   name: string;
   phone: string;
   group: string;
@@ -1513,7 +1514,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{member.name || '이름 없음'}</h1>
-            <p className="text-sm text-gray-500">{member.email}</p>
+            <p className="text-sm text-gray-500">{member.userId || member.email}</p>
           </div>
           <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
             매장 {tenants.length}개

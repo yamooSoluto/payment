@@ -123,6 +123,19 @@ export async function syncSubscriptionCancellation(
 }
 
 /**
+ * 예약 해지 시 tenants에 반영 (pending_cancel 상태)
+ */
+export async function syncSubscriptionPendingCancel(
+  tenantId: string
+): Promise<boolean> {
+  if (!tenantId) return false;
+
+  return syncSubscriptionToTenant(tenantId, {
+    status: 'pending_cancel',
+  });
+}
+
+/**
  * 구독 재활성화 시 tenants에 반영
  */
 export async function syncSubscriptionReactivation(

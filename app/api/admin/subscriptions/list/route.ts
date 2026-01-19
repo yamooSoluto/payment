@@ -293,6 +293,32 @@ export async function PUT(request: NextRequest) {
 
     await subscriptionRef.update(updateData);
 
+    // tenants 컬렉션에 변경사항 동기화
+    const tenantUpdateData: Record<string, unknown> = {};
+    if (status !== undefined) {
+      tenantUpdateData['subscription.status'] = status;
+      tenantUpdateData['status'] = status;
+    }
+    if (plan !== undefined) {
+      tenantUpdateData['subscription.plan'] = plan;
+      tenantUpdateData['plan'] = plan;
+    }
+    if (currentPeriodEnd !== undefined) {
+      tenantUpdateData['subscription.renewsAt'] = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+    }
+    if (currentPeriodStart !== undefined) {
+      tenantUpdateData['subscription.startedAt'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
+    }
+
+    if (Object.keys(tenantUpdateData).length > 0) {
+      try {
+        await db.collection('tenants').doc(tenantId).update(tenantUpdateData);
+        console.log('✅ Tenant subscription synced for admin list edit');
+      } catch (syncError) {
+        console.error('Failed to sync tenant subscription:', syncError);
+      }
+    }
+
     // 구독 히스토리에 수정 기록 추가
     const finalPlan = plan !== undefined ? plan : previousData?.plan || '';
     const finalStatus = status !== undefined ? status : previousData?.status || '';

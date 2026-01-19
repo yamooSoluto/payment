@@ -146,16 +146,9 @@ export async function POST(request: NextRequest) {
           });
           subscriptionCanceled = true;
 
-          // tenants 컬렉션도 업데이트
-          try {
-            await db.collection('tenants').doc(subscriptionTenantId).update({
-              subscriptionStatus: 'expired',
-              subscriptionPlan: null,
-              updatedAt: now,
-            });
-          } catch {
-            // tenants 업데이트 실패해도 무시
-          }
+          // tenants 컬렉션에 만료 상태 동기화
+          const { syncSubscriptionExpired } = await import('@/lib/tenant-sync');
+          await syncSubscriptionExpired(subscriptionTenantId);
         }
       }
 
@@ -171,6 +164,10 @@ export async function POST(request: NextRequest) {
             updatedBy: admin?.adminId || 'unknown',
           });
           subscriptionCanceled = true;
+
+          // tenants 컬렉션에 만료 상태 동기화
+          const { syncSubscriptionExpired } = await import('@/lib/tenant-sync');
+          await syncSubscriptionExpired(subscriptionEmail);
         }
       }
     }

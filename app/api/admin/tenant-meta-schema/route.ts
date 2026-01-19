@@ -3,12 +3,18 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 
-interface MetaFieldSchema {
-  name: string;
-  label: string;
-  type: 'text' | 'number' | 'boolean' | 'select';
-  options?: string[]; // for select type
-  order: number;
+// 커스텀 필드 스키마 타입
+export type CustomFieldType = 'string' | 'number' | 'boolean' | 'map' | 'array' | 'timestamp' | 'select';
+export type CustomFieldTab = 'basic' | 'ai' | 'integrations' | 'subscription';
+
+export interface CustomFieldSchema {
+  name: string;           // 필드 키 (예: "salesNote")
+  label: string;          // 표시 라벨 (예: "영업 메모")
+  type: CustomFieldType;
+  options?: string[];     // select 타입용
+  tab: CustomFieldTab;    // 표시될 탭
+  saveToFirestore: boolean; // true: tenant 문서에 저장, false: tenant_admin_fields에 저장
+  order: number;          // 해당 탭 내 정렬 순서
 }
 
 // GET: 관리자 메타 필드 스키마 조회
@@ -29,7 +35,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
-    const schemaDoc = await db.collection('admin_settings').doc('tenant_meta_schema').get();
+    const schemaDoc = await db.collection('admin_settings').doc('admin_field_schema').get();
 
     if (!schemaDoc.exists) {
       return NextResponse.json({
@@ -69,7 +75,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { fields } = body as { fields: MetaFieldSchema[] };
+    const { fields } = body as { fields: CustomFieldSchema[] };
 
     if (!Array.isArray(fields)) {
       return NextResponse.json({ error: 'fields 배열이 필요합니다.' }, { status: 400 });
@@ -82,7 +88,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    await db.collection('admin_settings').doc('tenant_meta_schema').set({
+    await db.collection('admin_settings').doc('admin_field_schema').set({
       fields,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: admin.adminId,
@@ -120,33 +126,39 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, label, type, options } = body as MetaFieldSchema;
+    const { name, label, type, options, tab, saveToFirestore } = body as CustomFieldSchema;
 
-    if (!name || !label || !type) {
-      return NextResponse.json({ error: 'name, label, type이 필요합니다.' }, { status: 400 });
+    if (!name || !label || !type || !tab) {
+      return NextResponse.json({ error: 'name, label, type, tab이 필요합니다.' }, { status: 400 });
     }
 
     // 기존 스키마 조회
-    const schemaDoc = await db.collection('admin_settings').doc('tenant_meta_schema').get();
-    const existingFields: MetaFieldSchema[] = schemaDoc.exists ? (schemaDoc.data()?.fields || []) : [];
+    const schemaDoc = await db.collection('admin_settings').doc('admin_field_schema').get();
+    const existingFields: CustomFieldSchema[] = schemaDoc.exists ? (schemaDoc.data()?.fields || []) : [];
 
     // 중복 체크
     if (existingFields.some(f => f.name === name)) {
       return NextResponse.json({ error: '이미 존재하는 필드명입니다.' }, { status: 400 });
     }
 
+    // 같은 탭 내에서의 order 계산
+    const sameTabFields = existingFields.filter(f => f.tab === tab);
+    const newOrder = sameTabFields.length > 0 ? Math.max(...sameTabFields.map(f => f.order)) + 1 : 0;
+
     // 새 필드 추가
-    const newField: MetaFieldSchema = {
+    const newField: CustomFieldSchema = {
       name,
       label,
       type,
       options: type === 'select' ? options : undefined,
-      order: existingFields.length,
+      tab,
+      saveToFirestore: saveToFirestore ?? false,
+      order: newOrder,
     };
 
     const updatedFields = [...existingFields, newField];
 
-    await db.collection('admin_settings').doc('tenant_meta_schema').set({
+    await db.collection('admin_settings').doc('admin_field_schema').set({
       fields: updatedFields,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: admin.adminId,
@@ -192,12 +204,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 기존 스키마 조회
-    const schemaDoc = await db.collection('admin_settings').doc('tenant_meta_schema').get();
+    const schemaDoc = await db.collection('admin_settings').doc('admin_field_schema').get();
     if (!schemaDoc.exists) {
       return NextResponse.json({ error: '스키마가 없습니다.' }, { status: 404 });
     }
 
-    const existingFields: MetaFieldSchema[] = schemaDoc.data()?.fields || [];
+    const existingFields: CustomFieldSchema[] = schemaDoc.data()?.fields || [];
     const updatedFields = existingFields.filter(f => f.name !== fieldName);
 
     if (existingFields.length === updatedFields.length) {
@@ -209,7 +221,7 @@ export async function DELETE(request: NextRequest) {
       f.order = idx;
     });
 
-    await db.collection('admin_settings').doc('tenant_meta_schema').set({
+    await db.collection('admin_settings').doc('admin_field_schema').set({
       fields: updatedFields,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: admin.adminId,

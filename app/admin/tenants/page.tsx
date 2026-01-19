@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Eye, Settings, Plus, Trash, Notes } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Eye, Settings, Plus, Trash } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
@@ -30,11 +30,16 @@ interface Pagination {
   totalPages: number;
 }
 
-interface MetaFieldSchema {
+type CustomFieldType = 'string' | 'number' | 'boolean' | 'map' | 'array' | 'timestamp' | 'select';
+type CustomFieldTab = 'basic' | 'ai' | 'integrations' | 'subscription';
+
+interface CustomFieldSchema {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'boolean' | 'select';
+  type: CustomFieldType;
   options?: string[];
+  tab: CustomFieldTab;
+  saveToFirestore: boolean;
   order: number;
 }
 
@@ -58,10 +63,12 @@ export default function TenantsPage() {
 
   // 관리자 메타 필드 스키마 상태
   const [showSchemaModal, setShowSchemaModal] = useState(false);
-  const [metaSchema, setMetaSchema] = useState<MetaFieldSchema[]>([]);
+  const [customFieldSchema, setCustomFieldSchema] = useState<CustomFieldSchema[]>([]);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldLabel, setNewFieldLabel] = useState('');
-  const [newFieldType, setNewFieldType] = useState<'text' | 'number' | 'boolean' | 'select'>('text');
+  const [newFieldType, setNewFieldType] = useState<CustomFieldType>('string');
+  const [newFieldTab, setNewFieldTab] = useState<CustomFieldTab>('basic');
+  const [newFieldSaveToFirestore, setNewFieldSaveToFirestore] = useState(false);
   const [savingSchema, setSavingSchema] = useState(false);
 
   const fetchTenants = useCallback(async () => {
@@ -99,22 +106,22 @@ export default function TenantsPage() {
     fetchTenants();
   };
 
-  // 관리자 메타 필드 스키마 fetch
-  const fetchMetaSchema = useCallback(async () => {
+  // 커스텀 필드 스키마 fetch
+  const fetchCustomFieldSchema = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/tenant-meta-schema');
       if (response.ok) {
         const data = await response.json();
-        setMetaSchema(data.fields || []);
+        setCustomFieldSchema(data.fields || []);
       }
     } catch (error) {
-      console.error('Failed to fetch meta schema:', error);
+      console.error('Failed to fetch custom field schema:', error);
     }
   }, []);
 
   useEffect(() => {
-    fetchMetaSchema();
-  }, [fetchMetaSchema]);
+    fetchCustomFieldSchema();
+  }, [fetchCustomFieldSchema]);
 
   // 새 필드 추가
   const handleAddField = async () => {
@@ -132,14 +139,18 @@ export default function TenantsPage() {
           name: newFieldName.trim(),
           label: newFieldLabel.trim(),
           type: newFieldType,
+          tab: newFieldTab,
+          saveToFirestore: newFieldSaveToFirestore,
         }),
       });
 
       if (response.ok) {
-        await fetchMetaSchema();
+        await fetchCustomFieldSchema();
         setNewFieldName('');
         setNewFieldLabel('');
-        setNewFieldType('text');
+        setNewFieldType('string');
+        setNewFieldTab('basic');
+        setNewFieldSaveToFirestore(false);
       } else {
         const data = await response.json();
         alert(data.error || '필드 추가에 실패했습니다.');
@@ -163,7 +174,7 @@ export default function TenantsPage() {
       });
 
       if (response.ok) {
-        await fetchMetaSchema();
+        await fetchCustomFieldSchema();
       } else {
         const data = await response.json();
         alert(data.error || '필드 삭제에 실패했습니다.');
@@ -251,11 +262,11 @@ export default function TenantsPage() {
         </div>
         <button
           onClick={() => setShowSchemaModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          title="관리자 필드 설정"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
+          title="커스텀 필드 설정"
         >
-          <Notes className="w-4 h-4" />
-          <span>관리자 필드</span>
+          <Settings className="w-4 h-4" />
+          <span>필드 설정</span>
         </button>
       </div>
 
@@ -548,12 +559,12 @@ export default function TenantsPage() {
         )}
       </div>
 
-      {/* 관리자 필드 스키마 관리 모달 */}
+      {/* 커스텀 필드 스키마 관리 모달 */}
       {showSchemaModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">관리자 필드 설정</h2>
+              <h2 className="text-lg font-semibold text-gray-900">커스텀 필드 설정</h2>
               <button
                 onClick={() => setShowSchemaModal(false)}
                 className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -564,29 +575,41 @@ export default function TenantsPage() {
 
             <div className="p-4 overflow-y-auto flex-1">
               <p className="text-sm text-gray-500 mb-4">
-                여기서 정의한 필드는 모든 매장의 상세 페이지에서 관리자 메모 탭에 표시됩니다.
+                여기서 정의한 필드는 모든 매장의 상세 페이지에서 지정된 탭에 표시됩니다.
               </p>
 
               {/* 기존 필드 목록 */}
-              {metaSchema.length > 0 && (
+              {customFieldSchema.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">등록된 필드</h3>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">등록된 필드 ({customFieldSchema.length}개)</h3>
                   <div className="space-y-2">
-                    {metaSchema.map((field) => (
+                    {customFieldSchema.map((field) => (
                       <div
                         key={field.name}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                       >
-                        <div>
-                          <span className="font-medium text-gray-900">{field.label}</span>
-                          <span className="ml-2 text-xs text-gray-500">({field.name})</span>
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
-                            {field.type}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-900">{field.label}</span>
+                            <span className="text-xs text-gray-500">({field.name})</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                              {field.tab === 'basic' ? '기본정보' : field.tab === 'ai' ? 'AI설정' : field.tab === 'integrations' ? '연동설정' : '구독'}
+                            </span>
+                            <span className="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
+                              {field.type}
+                            </span>
+                            {!field.saveToFirestore && (
+                              <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-600 rounded">
+                                관리자용
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleDeleteField(field.name)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                           title="삭제"
                         >
                           <Trash className="w-4 h-4" />
@@ -609,7 +632,7 @@ export default function TenantsPage() {
                         value={newFieldName}
                         onChange={(e) => setNewFieldName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                         placeholder="예: manager_name"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                     <div>
@@ -619,27 +642,54 @@ export default function TenantsPage() {
                         value={newFieldLabel}
                         onChange={(e) => setNewFieldLabel(e.target.value)}
                         placeholder="예: 담당자명"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">필드 타입</label>
+                      <select
+                        value={newFieldType}
+                        onChange={(e) => setNewFieldType(e.target.value as CustomFieldType)}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="string">텍스트</option>
+                        <option value="number">숫자</option>
+                        <option value="boolean">예/아니오</option>
+                        <option value="select">선택</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">표시 탭</label>
+                      <select
+                        value={newFieldTab}
+                        onChange={(e) => setNewFieldTab(e.target.value as CustomFieldTab)}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="basic">기본 정보</option>
+                        <option value="ai">AI 설정</option>
+                        <option value="integrations">연동 설정</option>
+                        <option value="subscription">구독</option>
+                      </select>
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">필드 타입</label>
-                    <select
-                      value={newFieldType}
-                      onChange={(e) => setNewFieldType(e.target.value as 'text' | 'number' | 'boolean' | 'select')}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="text">텍스트</option>
-                      <option value="number">숫자</option>
-                      <option value="boolean">예/아니오</option>
-                      <option value="select">선택</option>
-                    </select>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newFieldSaveToFirestore}
+                        onChange={(e) => setNewFieldSaveToFirestore(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">매장 데이터에 저장</span>
+                      <span className="text-xs text-gray-400">(체크 해제 시 관리자 전용)</span>
+                    </label>
                   </div>
                   <button
                     onClick={handleAddField}
                     disabled={savingSchema || !newFieldName.trim() || !newFieldLabel.trim()}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Plus className="w-4 h-4" />
                     {savingSchema ? '추가 중...' : '필드 추가'}
