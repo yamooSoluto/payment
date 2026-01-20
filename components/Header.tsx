@@ -197,7 +197,7 @@ export default function Header({ siteSettings }: HeaderProps) {
                 ) : (
                   <Link
                     href="/login"
-                    className="btn-primary py-2 px-4 text-sm"
+                    className="bg-yamoo-primary text-gray-900 text-sm font-medium py-1.5 px-4 rounded-full hover:bg-yellow-400 transition-colors"
                   >
                     로그인
                   </Link>

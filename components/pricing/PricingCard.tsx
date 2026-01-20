@@ -134,7 +134,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
           onClick={handleSelect}
           disabled={isCurrentPlan}
           className={cn(
-            'w-full py-3 px-4 rounded-lg font-semibold transition-all',
+            'w-full py-2.5 px-4 rounded-full font-semibold transition-all',
             isCurrentPlan
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : plan.popular
