@@ -164,7 +164,11 @@ export async function POST(request: Request) {
         if (tId === tenantId) continue;
 
         // subscription이 있거나 trial 관련 필드가 있는 경우
-        if (tData.subscription?.plan || tData.subscription?.status || tData.trialEndsAt) {
+        // 단, status만 'expired'이고 plan이 없는 경우는 실제 구독 이력이 아님 (매장 추가 시 기본값)
+        const hasRealSubscription = tData.subscription?.plan ||
+          (tData.subscription?.status && tData.subscription.status !== 'expired') ||
+          tData.trialEndsAt;
+        if (hasRealSubscription) {
           hasActualTrialHistory = true;
 
           // 이력 정보 조회
@@ -195,7 +199,9 @@ export async function POST(request: Request) {
         const subDoc = await db.collection('subscriptions').doc(tId).get();
         if (subDoc.exists) {
           const subData = subDoc.data();
-          if (subData?.plan || subData?.status) {
+          // 단, status만 'expired'이고 plan이 없는 경우는 실제 구독 이력이 아님
+          const hasRealSubHistory = subData?.plan || (subData?.status && subData.status !== 'expired');
+          if (hasRealSubHistory) {
             hasActualTrialHistory = true;
 
             trialHistoryInfo = {

@@ -282,6 +282,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '매장 ID 생성에 실패했습니다.' }, { status: 500 });
     }
 
+    // tenants 컬렉션에 subscription.status를 expired로 설정
+    try {
+      await db.collection('tenants').doc(tenantId).set(
+        { subscription: { status: 'expired' } },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error('subscription.status 설정 오류:', error);
+    }
+
     return NextResponse.json({
       success: true,
       tenantId,

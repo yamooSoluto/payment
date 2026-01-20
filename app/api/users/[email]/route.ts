@@ -185,7 +185,10 @@ export async function GET(
         const tenantId = tenantData.tenantId || doc.id;
 
         // tenant에 subscription 정보가 있는 경우
-        if (tenantData.subscription?.plan || tenantData.subscription?.status) {
+        // 단, status만 'expired'이고 plan이 없는 경우는 실제 구독 이력이 아님 (매장 추가 시 기본값)
+        const hasRealSubscription = tenantData.subscription?.plan ||
+          (tenantData.subscription?.status && tenantData.subscription.status !== 'expired');
+        if (hasRealSubscription) {
           trialApplied = true;
           // trial인 경우 상세 정보 저장
           if (tenantData.subscription?.plan === 'trial') {
@@ -204,7 +207,9 @@ export async function GET(
         const subDoc = await db.collection('subscriptions').doc(tenantId).get();
         if (subDoc.exists) {
           const subData = subDoc.data();
-          if (subData?.plan || subData?.status) {
+          // 단, status만 'expired'이고 plan이 없는 경우는 실제 구독 이력이 아님
+          const hasRealSubHistory = subData?.plan || (subData?.status && subData.status !== 'expired');
+          if (hasRealSubHistory) {
             trialApplied = true;
             // trial인 경우 상세 정보 저장
             if (subData?.plan === 'trial') {
