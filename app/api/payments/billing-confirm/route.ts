@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
 
           // tenants 컬렉션에 userId 설정 (n8n은 userId를 처리하지 않음)
           try {
-            await db.collection('tenants').doc(tenantId).set(
+            await db.collection('tenants').doc(n8nData.tenantId).set(
               { userId: userData?.userId || null },
               { merge: true }
             );
