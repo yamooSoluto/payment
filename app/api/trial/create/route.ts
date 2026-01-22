@@ -466,9 +466,10 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-      // tenants 컬렉션에 trial 구독 정보 동기화
+      // tenants 컬렉션에 trial 구독 정보 및 userId 동기화
       try {
         await db.collection('tenants').doc(tenantId).update({
+          userId, // userId 추가
           'subscription.plan': 'trial',
           'subscription.status': 'trial',
           'subscription.startedAt': now,

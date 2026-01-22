@@ -680,7 +680,7 @@ export default function TenantDetailPage() {
             <div className="space-y-6">
               {Object.keys(basicFields).length > 0 ? (
                 <>
-                  {/* 회원 정보 섹션 */}
+                  {/* 회원 정보 섹션 - 항상 읽기 전용 (회원 정보는 회원 상세 페이지에서만 수정 가능) */}
                   {(() => {
                     const memberFields = ['name', 'phone', 'email', 'userId'];
                     const memberFieldsData: Record<string, unknown> = {};
@@ -691,10 +691,10 @@ export default function TenantDetailPage() {
                     }
                     return Object.keys(memberFieldsData).length > 0 ? (
                       <DynamicFieldGroup
-                        title="회원 정보"
+                        title="회원 정보 (회원 상세 페이지에서 수정)"
                         fields={memberFieldsData}
-                        onChange={handleFieldChange}
-                        disabled={!isEditMode}
+                        onChange={() => {}} // 회원 정보는 수정 불가
+                        disabled={true} // 항상 비활성화
                       />
                     ) : null;
                   })()}

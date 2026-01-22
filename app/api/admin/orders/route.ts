@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
         businessName: string;
         ownerName: string;
         email: string;
+        phone?: string;
       } | null;
       [key: string]: unknown;
     }
@@ -110,22 +111,61 @@ export async function GET(request: NextRequest) {
     });
 
     // tenantId별 매장 정보 캐싱
-    const tenantInfoCache = new Map<string, { businessName: string; ownerName: string; email: string } | null>();
+    const tenantInfoCache = new Map<string, { businessName: string; ownerName: string; email: string; phone?: string } | null>();
+    // userId별 users 정보 캐싱
+    const userInfoByIdCache = new Map<string, { name: string; phone: string; email: string } | null>();
+
+    // users 컬렉션에서 userId로 회원 정보 조회
+    const getUserInfoByUserId = async (userId: string): Promise<{ name: string; phone: string; email: string } | null> => {
+      if (!userId) return null;
+      if (userInfoByIdCache.has(userId)) {
+        return userInfoByIdCache.get(userId) || null;
+      }
+      try {
+        const userSnapshot = await db.collection('users')
+          .where('userId', '==', userId)
+          .limit(1)
+          .get();
+        if (!userSnapshot.empty) {
+          const userData = userSnapshot.docs[0].data();
+          const info = {
+            name: userData?.name || '',
+            phone: userData?.phone || '',
+            email: userData?.email || userSnapshot.docs[0].id,
+          };
+          userInfoByIdCache.set(userId, info);
+          return info;
+        }
+        userInfoByIdCache.set(userId, null);
+        return null;
+      } catch {
+        userInfoByIdCache.set(userId, null);
+        return null;
+      }
+    };
 
     let orders: OrderData[] = await Promise.all(
       snapshot.docs.map(async (doc) => {
         const data = doc.data();
 
         // 회원 정보 조회 (tenantId 기반 우선, 없으면 email 기반)
-        let memberInfo: { businessName: string; ownerName: string; email: string } | null = null;
+        let memberInfo: { businessName: string; ownerName: string; email: string; phone?: string } | null = null;
         const tenantId = data.tenantId;
         const email = data.email;
+        const userId = data.userId;
+
+        // userId로 users 컬렉션에서 회원 정보(phone) 조회
+        const userInfo = userId ? await getUserInfoByUserId(userId) : null;
 
         // tenantId로 조회 시도
         if (tenantId && tenantId !== 'new') {
           // 캐시 확인
           if (tenantInfoCache.has(tenantId)) {
             memberInfo = tenantInfoCache.get(tenantId) || null;
+            // 캐시된 memberInfo에 userInfo의 phone 적용
+            if (memberInfo && userInfo?.phone) {
+              memberInfo = { ...memberInfo, phone: userInfo.phone };
+            }
           } else {
             try {
               // tenantId 필드로 매장 조회
@@ -138,8 +178,9 @@ export async function GET(request: NextRequest) {
                 const tenantData = tenantSnapshot.docs[0].data();
                 memberInfo = {
                   businessName: tenantData?.brandName || tenantData?.businessName || '',
-                  ownerName: tenantData?.ownerName || tenantData?.name || '',
-                  email: tenantData?.email || email || '',
+                  ownerName: userInfo?.name || tenantData?.ownerName || tenantData?.name || '',
+                  email: userInfo?.email || tenantData?.email || email || '',
+                  phone: userInfo?.phone || tenantData?.phone || '',
                 };
               }
               tenantInfoCache.set(tenantId, memberInfo);
@@ -155,6 +196,10 @@ export async function GET(request: NextRequest) {
           const emailCacheKey = `email:${email}`;
           if (tenantInfoCache.has(emailCacheKey)) {
             memberInfo = tenantInfoCache.get(emailCacheKey) || null;
+            // 캐시된 memberInfo에 userInfo의 phone 적용
+            if (memberInfo && userInfo?.phone) {
+              memberInfo = { ...memberInfo, phone: userInfo.phone };
+            }
           } else {
             try {
               const memberSnapshot = await db.collection('tenants')
@@ -166,22 +211,26 @@ export async function GET(request: NextRequest) {
                 const memberData = memberSnapshot.docs[0].data();
                 memberInfo = {
                   businessName: memberData?.brandName || memberData?.businessName || '',
-                  ownerName: memberData?.ownerName || memberData?.name || '',
-                  email: memberData?.email || email,
+                  ownerName: userInfo?.name || memberData?.ownerName || memberData?.name || '',
+                  email: userInfo?.email || memberData?.email || email,
+                  phone: userInfo?.phone || memberData?.phone || '',
                 };
               } else {
+                // tenants에 없으면 userInfo 사용
                 memberInfo = {
                   businessName: '',
-                  ownerName: '',
-                  email: email,
+                  ownerName: userInfo?.name || '',
+                  email: userInfo?.email || email,
+                  phone: userInfo?.phone || '',
                 };
               }
               tenantInfoCache.set(emailCacheKey, memberInfo);
             } catch {
               memberInfo = {
                 businessName: '',
-                ownerName: '',
-                email: email,
+                ownerName: userInfo?.name || '',
+                email: userInfo?.email || email,
+                phone: userInfo?.phone || '',
               };
               tenantInfoCache.set(emailCacheKey, memberInfo);
             }
@@ -272,16 +321,19 @@ export async function GET(request: NextRequest) {
       orders = orders.filter(o => o.status === 'refunded' || o.canceledAt);
     }
 
-    // 검색 필터 (회원명, 이메일)
+    // 검색 필터 (회원명, 이메일, 연락처)
     if (search) {
       const searchLower = search.toLowerCase();
+      const searchNoHyphen = search.replace(/-/g, '');
       orders = orders.filter(o => {
         const ownerName = (o.memberInfo?.ownerName || '').toLowerCase();
         const email = (o.memberInfo?.email || o.email || '').toLowerCase();
         const businessName = (o.memberInfo?.businessName || '').toLowerCase();
+        const phone = (o.memberInfo?.phone || '').replace(/-/g, '');
         return ownerName.includes(searchLower) ||
                email.includes(searchLower) ||
-               businessName.includes(searchLower);
+               businessName.includes(searchLower) ||
+               phone.includes(searchNoHyphen);
       });
     }
 

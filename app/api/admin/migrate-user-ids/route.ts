@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { dryRun = true, limit = 100, phase = 'all' } = body;
-    // phase: 'users' | 'tenants' | 'subscriptions' | 'payments' | 'refunds' | 'subscription_history' | 'cards' | 'all'
+    // phase: 'users' | 'tenants' | 'subscriptions' | 'payments' | 'refunds' | 'subscription_history' | 'subscription_changes' | 'account_deletions' | 'tenant_deletions' | 'cards' | 'all'
 
     const results = {
       users: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
       payments: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
       refunds: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
       subscription_history: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
+      subscription_changes: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
+      account_deletions: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
+      tenant_deletions: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
       cards: { total: 0, migrated: 0, skipped: 0, errors: [] as string[] },
     };
 
@@ -244,16 +247,60 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6단계: subscription_history 컬렉션에 userId 연결
+    // 6단계: subscription_history 서브컬렉션에 userId 연결
+    // 구조: subscription_history/{tenantId}/records/{recordId}
     if (phase === 'all' || phase === 'subscription_history') {
-      const historySnapshot = await db.collection('subscription_history').limit(limit).get();
-      results.subscription_history.total = historySnapshot.size;
+      // 모든 tenant의 subscription_history 조회
+      const historyParentsSnapshot = await db.collection('subscription_history').limit(limit).get();
 
-      for (const doc of historySnapshot.docs) {
+      for (const parentDoc of historyParentsSnapshot.docs) {
+        const tenantId = parentDoc.id;
+        const userId = tenantIdToUserIdMap.get(tenantId);
+
+        if (!userId) {
+          results.subscription_history.errors.push(`${tenantId}: no userId found`);
+          continue;
+        }
+
+        // 해당 tenant의 records 서브컬렉션 조회
+        const recordsSnapshot = await parentDoc.ref.collection('records').get();
+        results.subscription_history.total += recordsSnapshot.size;
+
+        for (const recordDoc of recordsSnapshot.docs) {
+          const recordData = recordDoc.data();
+
+          if (recordData.userId) {
+            results.subscription_history.skipped++;
+            continue;
+          }
+
+          if (!dryRun) {
+            try {
+              await recordDoc.ref.update({
+                userId,
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+              results.subscription_history.migrated++;
+            } catch (error) {
+              results.subscription_history.errors.push(`${tenantId}/${recordDoc.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
+            }
+          } else {
+            results.subscription_history.migrated++;
+          }
+        }
+      }
+    }
+
+    // 6-1단계: subscription_changes 컬렉션에 userId 연결
+    if (phase === 'all' || phase === 'subscription_changes') {
+      const changesSnapshot = await db.collection('subscription_changes').limit(limit).get();
+      results.subscription_changes.total = changesSnapshot.size;
+
+      for (const doc of changesSnapshot.docs) {
         const data = doc.data();
 
         if (data.userId) {
-          results.subscription_history.skipped++;
+          results.subscription_changes.skipped++;
           continue;
         }
 
@@ -261,7 +308,7 @@ export async function POST(request: NextRequest) {
         const userId = tenantId ? tenantIdToUserIdMap.get(tenantId) : null;
 
         if (!userId) {
-          results.subscription_history.errors.push(`${doc.id}: no userId found for tenantId ${tenantId}`);
+          results.subscription_changes.errors.push(`${doc.id}: no userId found for tenantId ${tenantId}`);
           continue;
         }
 
@@ -271,12 +318,89 @@ export async function POST(request: NextRequest) {
               userId,
               updatedAt: FieldValue.serverTimestamp(),
             });
-            results.subscription_history.migrated++;
+            results.subscription_changes.migrated++;
           } catch (error) {
-            results.subscription_history.errors.push(`${doc.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
+            results.subscription_changes.errors.push(`${doc.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
           }
         } else {
-          results.subscription_history.migrated++;
+          results.subscription_changes.migrated++;
+        }
+      }
+    }
+
+    // 6-2단계: account_deletions 컬렉션에 userId 연결
+    if (phase === 'all' || phase === 'account_deletions') {
+      const deletionsSnapshot = await db.collection('account_deletions').limit(limit).get();
+      results.account_deletions.total = deletionsSnapshot.size;
+
+      for (const doc of deletionsSnapshot.docs) {
+        const data = doc.data();
+
+        if (data.userId) {
+          results.account_deletions.skipped++;
+          continue;
+        }
+
+        const email = data.email;
+        const userId = email ? emailToUserIdMap.get(email) : null;
+
+        if (!userId) {
+          results.account_deletions.errors.push(`${doc.id}: no userId found for email ${email}`);
+          continue;
+        }
+
+        if (!dryRun) {
+          try {
+            await doc.ref.update({
+              userId,
+            });
+            results.account_deletions.migrated++;
+          } catch (error) {
+            results.account_deletions.errors.push(`${doc.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
+          }
+        } else {
+          results.account_deletions.migrated++;
+        }
+      }
+    }
+
+    // 6-3단계: tenant_deletions 컬렉션에 userId 연결
+    if (phase === 'all' || phase === 'tenant_deletions') {
+      const tenantDeletionsSnapshot = await db.collection('tenant_deletions').limit(limit).get();
+      results.tenant_deletions.total = tenantDeletionsSnapshot.size;
+
+      for (const doc of tenantDeletionsSnapshot.docs) {
+        const data = doc.data();
+
+        if (data.userId) {
+          results.tenant_deletions.skipped++;
+          continue;
+        }
+
+        // tenantId 또는 email로 userId 찾기
+        const tenantId = data.tenantId;
+        const email = data.email;
+        let userId = tenantId ? tenantIdToUserIdMap.get(tenantId) : null;
+        if (!userId && email) {
+          userId = emailToUserIdMap.get(email) || null;
+        }
+
+        if (!userId) {
+          results.tenant_deletions.errors.push(`${doc.id}: no userId found`);
+          continue;
+        }
+
+        if (!dryRun) {
+          try {
+            await doc.ref.update({
+              userId,
+            });
+            results.tenant_deletions.migrated++;
+          } catch (error) {
+            results.tenant_deletions.errors.push(`${doc.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
+          }
+        } else {
+          results.tenant_deletions.migrated++;
         }
       }
     }
@@ -377,10 +501,31 @@ export async function GET() {
     const refundsWithId = refundsSnapshot.docs.filter(d => d.data().userId).length;
     const refundsTotal = (await db.collection('refunds').count().get()).data().count;
 
-    // subscription_history 상태
-    const historySnapshot = await db.collection('subscription_history').limit(sampleSize).get();
-    const historyWithId = historySnapshot.docs.filter(d => d.data().userId).length;
+    // subscription_history 상태 (서브컬렉션이라 샘플링 방식 다름)
+    const historyParentsSnapshot = await db.collection('subscription_history').limit(10).get();
+    let historyWithId = 0;
+    let historySampleTotal = 0;
+    for (const parentDoc of historyParentsSnapshot.docs) {
+      const recordsSnapshot = await parentDoc.ref.collection('records').limit(5).get();
+      historySampleTotal += recordsSnapshot.size;
+      historyWithId += recordsSnapshot.docs.filter(d => d.data().userId).length;
+    }
     const historyTotal = (await db.collection('subscription_history').count().get()).data().count;
+
+    // subscription_changes 상태
+    const changesSnapshot = await db.collection('subscription_changes').limit(sampleSize).get();
+    const changesWithId = changesSnapshot.docs.filter(d => d.data().userId).length;
+    const changesTotal = (await db.collection('subscription_changes').count().get()).data().count;
+
+    // account_deletions 상태
+    const accountDeletionsSnapshot = await db.collection('account_deletions').limit(sampleSize).get();
+    const accountDeletionsWithId = accountDeletionsSnapshot.docs.filter(d => d.data().userId).length;
+    const accountDeletionsTotal = (await db.collection('account_deletions').count().get()).data().count;
+
+    // tenant_deletions 상태
+    const tenantDeletionsSnapshot = await db.collection('tenant_deletions').limit(sampleSize).get();
+    const tenantDeletionsWithId = tenantDeletionsSnapshot.docs.filter(d => d.data().userId).length;
+    const tenantDeletionsTotal = (await db.collection('tenant_deletions').count().get()).data().count;
 
     // cards 상태
     const cardsSnapshot = await db.collection('cards').limit(sampleSize).get();
@@ -424,8 +569,26 @@ export async function GET() {
         subscription_history: {
           total: historyTotal,
           sampleWithUserId: historyWithId,
-          sampleWithoutUserId: Math.min(sampleSize, historyTotal) - historyWithId,
-          estimatedNeedsMigration: historyTotal > 0 ? Math.round(((Math.min(sampleSize, historyTotal) - historyWithId) / Math.min(sampleSize, historyTotal)) * historyTotal) : 0,
+          sampleWithoutUserId: historySampleTotal - historyWithId,
+          note: 'subscription_history는 서브컬렉션이라 정확한 추정이 어려움',
+        },
+        subscription_changes: {
+          total: changesTotal,
+          sampleWithUserId: changesWithId,
+          sampleWithoutUserId: Math.min(sampleSize, changesTotal) - changesWithId,
+          estimatedNeedsMigration: changesTotal > 0 ? Math.round(((Math.min(sampleSize, changesTotal) - changesWithId) / Math.min(sampleSize, changesTotal)) * changesTotal) : 0,
+        },
+        account_deletions: {
+          total: accountDeletionsTotal,
+          sampleWithUserId: accountDeletionsWithId,
+          sampleWithoutUserId: Math.min(sampleSize, accountDeletionsTotal) - accountDeletionsWithId,
+          estimatedNeedsMigration: accountDeletionsTotal > 0 ? Math.round(((Math.min(sampleSize, accountDeletionsTotal) - accountDeletionsWithId) / Math.min(sampleSize, accountDeletionsTotal)) * accountDeletionsTotal) : 0,
+        },
+        tenant_deletions: {
+          total: tenantDeletionsTotal,
+          sampleWithUserId: tenantDeletionsWithId,
+          sampleWithoutUserId: Math.min(sampleSize, tenantDeletionsTotal) - tenantDeletionsWithId,
+          estimatedNeedsMigration: tenantDeletionsTotal > 0 ? Math.round(((Math.min(sampleSize, tenantDeletionsTotal) - tenantDeletionsWithId) / Math.min(sampleSize, tenantDeletionsTotal)) * tenantDeletionsTotal) : 0,
         },
         cards: {
           total: cardsTotal,

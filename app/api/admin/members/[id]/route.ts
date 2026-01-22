@@ -288,6 +288,12 @@ export async function PUT(
         // 2. 새 users 문서 생성 (기존 데이터 복사 + 이력 추가)
         const oldName = oldUserData?.name;
         const oldPhone = oldUserData?.phone;
+        const originalCreatedAt = oldUserData?.createdAt; // 가입일 보존
+
+        // 기존 이력 배열에 추가 (set에서는 arrayUnion이 덮어쓰므로 수동 병합)
+        const existingPreviousEmails = oldUserData?.previousEmails || [];
+        const existingPreviousNames = oldUserData?.previousNames || [];
+        const existingPreviousPhones = oldUserData?.previousPhones || [];
 
         transaction.set(db.collection('users').doc(normalizedNewEmail), {
           ...oldUserData,
@@ -295,16 +301,18 @@ export async function PUT(
           ...(name !== undefined && { name }),
           ...(phone !== undefined && { phone }),
           ...(group !== undefined && { group }),
-          // 이전 이메일 이력
-          previousEmails: FieldValue.arrayUnion(oldEmail),
+          // 이전 이메일 이력 (기존 배열 + 새 이메일)
+          previousEmails: [...existingPreviousEmails, oldEmail],
           // 이전 이름 이력 (변경된 경우)
           ...(name !== undefined && oldName && oldName !== name && {
-            previousNames: FieldValue.arrayUnion(oldName),
+            previousNames: [...existingPreviousNames, oldName],
           }),
           // 이전 연락처 이력 (변경된 경우)
           ...(phone !== undefined && oldPhone && oldPhone !== phone && {
-            previousPhones: FieldValue.arrayUnion(oldPhone),
+            previousPhones: [...existingPreviousPhones, oldPhone],
           }),
+          // 가입일은 반드시 유지 (덮어쓰기 방지)
+          createdAt: originalCreatedAt || now,
           emailChangedAt: now,
           updatedAt: now,
           updatedBy: admin.adminId,
@@ -322,10 +330,7 @@ export async function PUT(
 
         tenantsSnapshot.docs.forEach(doc => {
           transaction.update(doc.ref, {
-            email: normalizedNewEmail,
-            ...(name !== undefined && { name }),
-            ...(phone !== undefined && { phone }),
-            ...(memo !== undefined && { memo }),
+            email: normalizedNewEmail, // 이메일만 변경
             updatedAt: now,
             updatedBy: admin.adminId,
           });
@@ -402,10 +407,39 @@ export async function PUT(
         ...(name !== undefined && { name }),
         ...(phone !== undefined && { phone }),
         updatedAt: new Date(),
+        updatedBy: admin.adminId,
       });
     });
 
     await batch.commit();
+
+    // 관리자 로그 기록 (정보 수정)
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    if (name !== undefined && currentName !== name) {
+      changes.name = { from: currentName || '', to: name };
+    }
+    if (phone !== undefined && currentPhone !== phone) {
+      changes.phone = { from: currentPhone || '', to: phone };
+    }
+    if (memo !== undefined && currentUserData?.memo !== memo) {
+      changes.memo = { from: currentUserData?.memo || '', to: memo };
+    }
+    if (group !== undefined && currentUserData?.group !== group) {
+      changes.group = { from: currentUserData?.group || 'normal', to: group };
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await db.collection('admin_logs').add({
+        action: 'member_update',
+        targetEmail: oldEmail,
+        targetUserId: currentUserData?.userId || null,
+        changes,
+        adminId: admin.adminId,
+        adminLoginId: admin.loginId,
+        adminName: admin.name,
+        createdAt: new Date(),
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

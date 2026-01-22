@@ -71,9 +71,14 @@ export async function GET(request: NextRequest) {
     const currentPeriodEnd = new Date(nextBillingDate);
     currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+    // users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(customerKey).get();
+    const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
     await db.collection('subscriptions').doc(customerKey).set(
       {
         email: customerKey,
+        userId: userId || null, // userId 추가
         status: 'active',
         plan,
         amount,
@@ -90,8 +95,10 @@ export async function GET(request: NextRequest) {
     );
 
     // 4. 결제 내역 저장 (멱등성 키 포함)
+
     await db.collection('payments').add({
       email: customerKey,
+      userId: userId || '',
       orderId,
       orderName,
       paymentKey: paymentResponse.paymentKey,

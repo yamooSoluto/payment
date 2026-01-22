@@ -255,10 +255,26 @@ export async function POST(request: NextRequest) {
       name: name || '',
       phone: phone || '',
       group: group || 'normal',
+      provider: 'email',
       createdAt: now,
       updatedAt: now,
       createdBy: admin.adminId,
-      isManualRegistration: true,
+    });
+
+    // 관리자 로그 기록
+    await db.collection('admin_logs').add({
+      action: 'member_create',
+      targetEmail: email,
+      targetUserId: userId,
+      details: {
+        name: name || '',
+        phone: phone || '',
+        group: group || 'normal',
+      },
+      adminId: admin.adminId,
+      adminLoginId: admin.loginId,
+      adminName: admin.name,
+      createdAt: now,
     });
 
     return NextResponse.json({

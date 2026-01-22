@@ -392,6 +392,7 @@ export async function POST(request: NextRequest) {
           : `YAMOO ${getPlanName(newPlan)} 결제 - ${getPlanName(previousPlan)}에서 변경`;
         transaction.set(paymentRef, {
           tenantId,
+          userId: subscription?.userId || '',
           email: authenticatedEmail,
           orderId: paymentOrderId,
           orderName: chargeOrderName,
@@ -438,6 +439,7 @@ export async function POST(request: NextRequest) {
     try {
       await handleSubscriptionChange(db, {
         tenantId,
+        userId: subscription?.userId || '',
         email: authenticatedEmail,
         brandName,
         newPlan,

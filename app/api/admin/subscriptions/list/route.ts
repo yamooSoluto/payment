@@ -31,10 +31,24 @@ export async function GET(request: NextRequest) {
     const planFilters = planFilter ? planFilter.split(',') : [];
     const statusFilters = statusFilter ? statusFilter.split(',') : [];
 
-    // 1. 테넌트 정보 조회 (삭제되지 않은 매장만)
+    // 1. users 컬렉션 조회 (userId → 현재 회원 정보 매핑)
+    const usersSnapshot = await db.collection('users').get();
+    const userByUserId = new Map<string, { email: string; name: string; phone: string }>();
+    usersSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.userId) {
+        userByUserId.set(data.userId, {
+          email: data.email || doc.id,
+          name: data.name || '',
+          phone: data.phone || '',
+        });
+      }
+    });
+
+    // 2. 테넌트 정보 조회 (삭제되지 않은 매장만)
     const tenantsSnapshot = await db.collection('tenants').get();
 
-    // 2. 구독 정보 조회
+    // 3. 구독 정보 조회
     const subscriptionsSnapshot = await db.collection('subscriptions').get();
     const subscriptionMap = new Map<string, {
       plan: string;
@@ -45,6 +59,7 @@ export async function GET(request: NextRequest) {
       nextBillingDate: string | null;
       createdAt: string | null;
       pricePolicy: string | null;
+      userId: string;
       email: string;
       name: string;
       phone: string;
@@ -63,6 +78,7 @@ export async function GET(request: NextRequest) {
         nextBillingDate: data.nextBillingDate?.toDate?.()?.toISOString() || null,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         pricePolicy: data.pricePolicy || null,
+        userId: data.userId || '',
         email: data.email || '',
         name: data.name || '',
         phone: data.phone || '',
@@ -111,14 +127,19 @@ export async function GET(request: NextRequest) {
         const isDeleted = tenantData.deleted === true;
 
         // 구독 정보가 있으면 사용, 없으면 미구독(none)
+        // 회원 정보(email, name, phone)는 userId로 users 컬렉션에서 현재 정보 조회
         if (subscription) {
+          // userId로 현재 회원 정보 조회 (tenants.userId 또는 subscription.userId)
+          const userId = tenantData.userId || subscription.userId;
+          const currentUser = userId ? userByUserId.get(userId) : null;
+
           return {
             id: tenantId,
             tenantId,
-            email: subscription.email || tenantData.email || '',
-            memberName: subscription.name || tenantData.name || tenantData.ownerName || '',
-            brandName: subscription.brandName || tenantData.brandName || tenantData.businessName || '이름 없음',
-            phone: subscription.phone || tenantData.phone || '',
+            email: currentUser?.email || tenantData.email || subscription.email || '',
+            memberName: currentUser?.name || tenantData.name || tenantData.ownerName || subscription.name || '',
+            brandName: tenantData.brandName || tenantData.businessName || subscription.brandName || '이름 없음',
+            phone: currentUser?.phone || tenantData.phone || subscription.phone || '',
             plan: subscription.plan,
             status: isDeleted ? 'deleted' : subscription.status,
             amount: subscription.amount,
@@ -131,13 +152,17 @@ export async function GET(request: NextRequest) {
           };
         } else {
           // 미구독 매장
+          // userId로 현재 회원 정보 조회
+          const userId = tenantData.userId;
+          const currentUser = userId ? userByUserId.get(userId) : null;
+
           return {
             id: tenantId,
             tenantId,
-            email: tenantData.email || '',
-            memberName: tenantData.name || tenantData.ownerName || '',
+            email: currentUser?.email || tenantData.email || '',
+            memberName: currentUser?.name || tenantData.name || tenantData.ownerName || '',
             brandName: tenantData.brandName || tenantData.businessName || '이름 없음',
-            phone: tenantData.phone || '',
+            phone: currentUser?.phone || tenantData.phone || '',
             plan: '',
             status: isDeleted ? 'deleted' : 'none', // 삭제 또는 미구독
             amount: 0,
@@ -167,15 +192,18 @@ export async function GET(request: NextRequest) {
       subscriptions = subscriptions.filter(s => statusFilters.includes(s.status));
     }
 
-    // 검색 필터
+    // 검색 필터 (이메일, 회원명, 매장명, 연락처)
     if (search) {
       const searchLower = search.toLowerCase();
+      const searchNoHyphen = search.replace(/-/g, '');
       subscriptions = subscriptions.filter(s => {
+        const phoneNoHyphen = s.phone.replace(/-/g, '');
         return (
           s.email.toLowerCase().includes(searchLower) ||
           s.memberName.toLowerCase().includes(searchLower) ||
           s.brandName.toLowerCase().includes(searchLower) ||
-          s.tenantId.toLowerCase().includes(searchLower)
+          s.tenantId.toLowerCase().includes(searchLower) ||
+          phoneNoHyphen.includes(searchNoHyphen)
         );
       });
     }
@@ -329,6 +357,7 @@ export async function PUT(request: NextRequest) {
 
     await addSubscriptionHistoryRecord(db, {
       tenantId,
+      userId: previousData?.userId || '',
       email: previousData?.email || '',
       brandName: brandName !== undefined ? brandName : previousData?.brandName || null,
       plan: finalPlan,
@@ -344,6 +373,55 @@ export async function PUT(request: NextRequest) {
       previousPlan: previousData?.plan || null,
       previousStatus: previousData?.status || null,
     });
+
+    // 관리자 로그 기록
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    if (plan !== undefined && previousData?.plan !== plan) {
+      changes.plan = { from: previousData?.plan || '', to: plan };
+    }
+    if (status !== undefined && previousData?.status !== status) {
+      changes.status = { from: previousData?.status || '', to: status };
+    }
+    if (currentPeriodStart !== undefined) {
+      changes.currentPeriodStart = {
+        from: previousData?.currentPeriodStart?.toDate?.()?.toISOString() || null,
+        to: currentPeriodStart,
+      };
+    }
+    if (currentPeriodEnd !== undefined) {
+      changes.currentPeriodEnd = {
+        from: previousData?.currentPeriodEnd?.toDate?.()?.toISOString() || null,
+        to: currentPeriodEnd,
+      };
+    }
+    if (nextBillingDate !== undefined) {
+      changes.nextBillingDate = {
+        from: previousData?.nextBillingDate?.toDate?.()?.toISOString() || null,
+        to: nextBillingDate,
+      };
+    }
+    if (brandName !== undefined && previousData?.brandName !== brandName) {
+      changes.brandName = { from: previousData?.brandName || '', to: brandName };
+    }
+    if (name !== undefined && previousData?.name !== name) {
+      changes.name = { from: previousData?.name || '', to: name };
+    }
+    if (phone !== undefined && previousData?.phone !== phone) {
+      changes.phone = { from: previousData?.phone || '', to: phone };
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await db.collection('admin_logs').add({
+        action: 'subscription_update',
+        targetTenantId: tenantId,
+        targetUserId: previousData?.userId || null,
+        changes,
+        adminId: admin.adminId,
+        adminLoginId: admin.loginId,
+        adminName: admin.name,
+        createdAt: new Date(),
+      });
+    }
 
     return NextResponse.json({
       success: true,

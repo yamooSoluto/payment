@@ -138,14 +138,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 검색 필터 (회원명, 매장명, 이메일)
+    // 검색 필터 (회원명, 매장명, 이메일, 연락처)
     if (search) {
       const searchLower = search.toLowerCase();
-      filteredRecords = filteredRecords.filter(record =>
-        record.memberName.toLowerCase().includes(searchLower) ||
-        record.brandName.toLowerCase().includes(searchLower) ||
-        record.email.toLowerCase().includes(searchLower)
-      );
+      const searchNoHyphen = search.replace(/-/g, '');
+      filteredRecords = filteredRecords.filter(record => {
+        const phoneNoHyphen = (record.memberPhone || '').replace(/-/g, '');
+        return (
+          record.memberName.toLowerCase().includes(searchLower) ||
+          record.brandName.toLowerCase().includes(searchLower) ||
+          record.email.toLowerCase().includes(searchLower) ||
+          phoneNoHyphen.includes(searchNoHyphen)
+        );
+      });
     }
 
     const total = filteredRecords.length;

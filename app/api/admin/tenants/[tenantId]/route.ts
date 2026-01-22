@@ -246,9 +246,19 @@ export async function PUT(
       if (subscriptionDoc.exists) {
         await db.collection('subscriptions').doc(tenantId).update(subscriptionUpdateData);
       } else {
-        // 구독 문서가 없으면 생성
+        // 구독 문서가 없으면 생성 (userId 포함)
+        const tenantData = tenantDoc.data();
+        let userId = tenantData?.userId || null;
+        // userId가 없으면 users 컬렉션에서 조회
+        if (!userId && tenantData?.email) {
+          const userDoc = await db.collection('users').doc(tenantData.email).get();
+          userId = userDoc.exists ? userDoc.data()?.userId : null;
+        }
         await db.collection('subscriptions').doc(tenantId).set({
           tenantId,
+          userId,
+          email: tenantData?.email || null,
+          brandName: tenantData?.brandName || null,
           ...subscriptionUpdateData,
           createdAt: FieldValue.serverTimestamp(),
         });
@@ -366,12 +376,22 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
-  const db = adminDb || initializeFirebaseAdmin();
-  if (!db) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(admin, 'tenants:delete')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+    }
+
     const { tenantId } = await params;
 
     // 매장 존재 여부 확인
@@ -394,7 +414,7 @@ export async function DELETE(
     await db.collection('tenants').doc(tenantId).update({
       deleted: true,
       deletedAt: now,
-      deletedBy: 'admin',
+      deletedBy: admin.adminId,
       permanentDeleteAt,
       updatedAt: FieldValue.serverTimestamp(),
       // 구독 정보도 만료 처리
@@ -414,18 +434,42 @@ export async function DELETE(
         pendingAmount: null,
         pendingChangeAt: null,
         updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: 'admin',
+        updatedBy: admin.adminId,
       });
     }
 
     // 3. 삭제 로그 기록
+    // users 컬렉션에서 userId 조회
+    let userIdForLog = tenantData?.userId || '';
+    if (!userIdForLog && tenantData?.email) {
+      const userDocForLog = await db.collection('users').doc(tenantData.email).get();
+      userIdForLog = userDocForLog.exists ? userDocForLog.data()?.userId : '';
+    }
+
     await db.collection('tenant_deletions').add({
       tenantId,
+      userId: userIdForLog || '',
       brandName: tenantData?.brandName,
       email: tenantData?.email,
       deletedAt: now,
       permanentDeleteAt,
       reason: 'admin_delete',
+    });
+
+    // 4. 관리자 로그 기록
+    await db.collection('admin_logs').add({
+      action: 'tenant_delete',
+      targetTenantId: tenantId,
+      targetUserId: userIdForLog || null,
+      deletedData: {
+        brandName: tenantData?.brandName || '',
+        email: tenantData?.email || '',
+        industry: tenantData?.industry || '',
+      },
+      adminId: admin.adminId,
+      adminLoginId: admin.loginId,
+      adminName: admin.name,
+      createdAt: now,
     });
 
     return NextResponse.json({

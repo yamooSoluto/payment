@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, NavArrowLeft, NavArrowRight, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download, Filter } from 'iconoir-react';
+import { Search, NavArrowLeft, NavArrowRight, NavArrowUp, NavArrowDown, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download, Filter, Eye, EyeClosed } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import { MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 
@@ -54,10 +54,13 @@ export default function MembersPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    passwordConfirm: '',
     name: '',
     phone: '',
     group: 'normal',
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
   // 선택 관련 상태
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -80,6 +83,10 @@ export default function MembersPage() {
   const [filterGroup, setFilterGroup] = useState<string[]>([]);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // 정렬 상태
+  const [sortField, setSortField] = useState<'createdAt' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -117,10 +124,13 @@ export default function MembersPage() {
     setFormData({
       email: '',
       password: '',
+      passwordConfirm: '',
       name: '',
       phone: '',
       group: 'normal',
     });
+    setShowPassword(false);
+    setShowPasswordConfirm(false);
     setShowModal(true);
   };
 
@@ -135,6 +145,14 @@ export default function MembersPage() {
     }
     if (!formData.password) {
       alert('비밀번호는 필수입니다.');
+      return;
+    }
+    if (formData.password.length < 6) {
+      alert('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    if (formData.password !== formData.passwordConfirm) {
+      alert('비밀번호가 일치하지 않습니다.');
       return;
     }
 
@@ -333,7 +351,15 @@ export default function MembersPage() {
         fetchMembers();
       } else {
         const data = await response.json();
-        alert(data.error || '삭제에 실패했습니다.');
+        // 상세 에러 메시지 표시
+        if (data.details && Array.isArray(data.details)) {
+          const detailMessages = data.details.map((d: { email: string; reason: string }) =>
+            `• ${d.email}: ${d.reason}`
+          ).join('\n');
+          alert(`${data.error || '삭제에 실패했습니다.'}\n\n${detailMessages}`);
+        } else {
+          alert(data.error || '삭제에 실패했습니다.');
+        }
       }
     } catch (error) {
       console.error('Failed to delete members:', error);
@@ -377,6 +403,34 @@ export default function MembersPage() {
     link.download = `회원목록_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  // 정렬된 회원 목록
+  const sortedMembers = useMemo(() => {
+    let filtered = members.filter(member => {
+      if (filterGroup.length === 0) return true;
+      return filterGroup.includes(member.group || 'normal');
+    });
+
+    if (sortField === 'createdAt') {
+      filtered = [...filtered].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+    }
+
+    return filtered;
+  }, [members, filterGroup, sortField, sortOrder]);
+
+  // 가입일 정렬 토글
+  const handleSortCreatedAt = () => {
+    if (sortField === 'createdAt') {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField('createdAt');
+      setSortOrder('desc');
+    }
   };
 
   // 액션 메뉴 및 필터 드롭다운 외부 클릭 감지
@@ -562,17 +616,28 @@ export default function MembersPage() {
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">그룹</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">매장</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">이용금액</th>
-                  <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">가입일</th>
+                  <th
+                    className="text-center px-6 py-4 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                    onClick={handleSortCreatedAt}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      가입일
+                      {sortField === 'createdAt' ? (
+                        sortOrder === 'desc' ? (
+                          <NavArrowDown className="w-4 h-4 text-blue-600" strokeWidth={2} />
+                        ) : (
+                          <NavArrowUp className="w-4 h-4 text-blue-600" strokeWidth={2} />
+                        )
+                      ) : (
+                        <NavArrowDown className="w-4 h-4 text-gray-300" strokeWidth={2} />
+                      )}
+                    </div>
+                  </th>
                   <th className="w-12 px-4 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {members
-                  .filter(member => {
-                    if (filterGroup.length === 0) return true;
-                    return filterGroup.includes(member.group || 'normal');
-                  })
-                  .map((member, index) => (
+                {sortedMembers.map((member) => (
                   <tr
                     key={member.id}
                     onClick={() => router.push(`/admin/members/${member.id}`)}
@@ -742,13 +807,47 @@ export default function MembersPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   비밀번호 (PW) <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="비밀번호 입력"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="비밀번호 입력 (6자 이상)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  비밀번호 확인 <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswordConfirm ? 'text' : 'password'}
+                    value={formData.passwordConfirm}
+                    onChange={(e) => setFormData({ ...formData, passwordConfirm: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="비밀번호 재입력"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPasswordConfirm ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {formData.passwordConfirm && formData.password !== formData.passwordConfirm && (
+                  <p className="text-xs text-red-500 mt-1">비밀번호가 일치하지 않습니다.</p>
+                )}
               </div>
 
               <div>

@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
               const paymentRef = db.collection('payments').doc(`${orderId}_${Date.now()}`);
               transaction.set(paymentRef, {
                 tenantId,
+                userId: subscription.userId || '',
                 email,
                 orderId,
                 orderName,
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest) {
             try {
               await handleSubscriptionChange(db, {
                 tenantId,
+                userId: subscription.userId || '',
                 email,
                 brandName,
                 newPlan: plan,
@@ -313,6 +315,7 @@ export async function GET(request: NextRequest) {
           const isUpgrade = (newAmount || 0) > (subscription.amount || 0);
           await handleSubscriptionChange(db, {
             tenantId,
+            userId: subscription.userId || '',
             email: subscription.email,
             brandName: subscription.brandName || null,
             newPlan,
@@ -574,6 +577,7 @@ export async function GET(request: NextRequest) {
           // 결제 내역 저장 (멱등성 키 포함)
           await db.collection('payments').add({
             tenantId,
+            userId: subscription.userId || '',
             email,
             orderId,
             orderName,
@@ -610,6 +614,7 @@ export async function GET(request: NextRequest) {
           try {
             await handleSubscriptionChange(db, {
               tenantId,
+              userId: subscription.userId || '',
               email,
               brandName,
               newPlan: subscription.plan,

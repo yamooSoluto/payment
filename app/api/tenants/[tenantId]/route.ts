@@ -35,14 +35,21 @@ export async function PATCH(
       return NextResponse.json({ error: '매장명을 입력해주세요.' }, { status: 400 });
     }
 
-    // 매장 존재 여부 및 소유권 확인
+    // users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(email).get();
+    const userId = userDoc.exists ? userDoc.data()?.userId : null;
+
+    // 매장 존재 여부 및 소유권 확인 (userId 기반, fallback으로 email)
     const tenantDoc = await db.collection('tenants').doc(tenantId).get();
     if (!tenantDoc.exists) {
       return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
     }
 
     const tenantData = tenantDoc.data();
-    if (tenantData?.email !== email) {
+    const isOwner = userId
+      ? tenantData?.userId === userId
+      : tenantData?.email === email;
+    if (!isOwner) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
@@ -110,14 +117,21 @@ export async function DELETE(
       return NextResponse.json({ error: '확인 문구가 일치하지 않습니다.' }, { status: 400 });
     }
 
-    // 매장 존재 여부 및 소유권 확인
+    // users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(email).get();
+    const userId = userDoc.exists ? userDoc.data()?.userId : null;
+
+    // 매장 존재 여부 및 소유권 확인 (userId 기반, fallback으로 email)
     const tenantDoc = await db.collection('tenants').doc(tenantId).get();
     if (!tenantDoc.exists) {
       return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
     }
 
     const tenantData = tenantDoc.data();
-    if (tenantData?.email !== email) {
+    const isOwner = userId
+      ? tenantData?.userId === userId
+      : tenantData?.email === email;
+    if (!isOwner) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
@@ -159,9 +173,10 @@ export async function DELETE(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // 삭제 로그 기록
+    // 삭제 로그 기록 (userId는 위에서 이미 조회함)
     await db.collection('tenant_deletions').add({
       tenantId,
+      userId: userId || tenantData?.userId || '',
       brandName: tenantData?.brandName,
       email,
       deletedAt: now,

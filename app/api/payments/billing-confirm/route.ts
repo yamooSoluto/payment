@@ -119,6 +119,16 @@ export async function GET(request: NextRequest) {
         if (n8nData.tenantId) {
           tenantId = n8nData.tenantId;
           console.log('새 tenantId 생성됨:', tenantId);
+
+          // tenants 컬렉션에 userId 설정 (n8n은 userId를 처리하지 않음)
+          try {
+            await db.collection('tenants').doc(tenantId).set(
+              { userId: userData?.userId || null },
+              { merge: true }
+            );
+          } catch (updateError) {
+            console.error('tenants userId 업데이트 오류:', updateError);
+          }
         } else {
           console.error('n8n webhook에서 tenantId를 받지 못함');
           const authQuery = authParam ? `&${authParam}` : '';
@@ -238,6 +248,7 @@ export async function GET(request: NextRequest) {
 
             subscriptionData = {
               tenantId: validTenantId,
+              userId: tenantData.userId || null, // userId 추가
               email: tenantData.email || email,
               brandName: tenantData.brandName,
               name: tenantData.name,
@@ -374,11 +385,16 @@ export async function GET(request: NextRequest) {
     // 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
     const paymentDocId = `${orderId}_${Date.now()}`;
 
+    // users 컬렉션에서 userId 조회 (트랜잭션 전에 조회)
+    const userDocForPayment = await db.collection('users').doc(email).get();
+    const userIdForPayment = userDocForPayment.exists ? userDocForPayment.data()?.userId : '';
+
     await db.runTransaction(async (transaction) => {
       // 구독 정보 저장
       const subscriptionRef = db.collection('subscriptions').doc(validTenantId);
       transaction.set(subscriptionRef, {
         tenantId: validTenantId,
+        userId: userIdForPayment || null, // userId 추가
         brandName: brandName || null,  // 한글 매장명
         name: ownerName || null,        // 담당자 이름
         phone: phone || null,           // 전화번호
@@ -403,6 +419,7 @@ export async function GET(request: NextRequest) {
       const paymentRef = db.collection('payments').doc(paymentDocId);
       transaction.set(paymentRef, {
         tenantId: validTenantId,
+        userId: userIdForPayment || '',
         email,
         orderId,
         orderName,
@@ -427,9 +444,14 @@ export async function GET(request: NextRequest) {
     await syncNewSubscription(validTenantId, plan, nextBillingDate);
 
     // subscription_history에 기록 추가
+    // users 컬렉션에서 userId 조회
+    const userDocForHistory = await db.collection('users').doc(email).get();
+    const userIdForHistory = userDocForHistory.exists ? userDocForHistory.data()?.userId : '';
+
     try {
       await handleSubscriptionChange(db, {
         tenantId: validTenantId,
+        userId: userIdForHistory || '',
         email,
         brandName: brandName || null,
         newPlan: plan,

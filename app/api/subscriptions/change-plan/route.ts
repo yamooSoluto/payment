@@ -273,6 +273,7 @@ export async function POST(request: NextRequest) {
           const now = new Date();
           await handleSubscriptionChange(db, {
             tenantId,
+            userId: subscription?.userId || '',
             email,
             brandName: subscription.brandName || null,
             newPlan,

@@ -483,7 +483,7 @@ export default function SubscriptionsPage() {
                       value={searchActive}
                       onChange={(e) => setSearchActive(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleFilterActive()}
-                      placeholder="회원명, 매장명, 이메일 검색..."
+                      placeholder="회원명, 매장명, 이메일, 연락처 검색..."
                       className="w-48 sm:w-64 pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -754,7 +754,7 @@ export default function SubscriptionsPage() {
                       value={searchHistory}
                       onChange={(e) => setSearchHistory(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleFilterHistory()}
-                      placeholder="회원명, 매장명, 이메일 검색..."
+                      placeholder="회원명, 매장명, 이메일, 연락처 검색..."
                       className="w-48 sm:w-64 pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

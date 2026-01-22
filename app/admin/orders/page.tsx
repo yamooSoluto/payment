@@ -36,6 +36,7 @@ interface Payment {
     businessName: string;
     ownerName: string;
     email: string;
+    phone?: string;
   } | null;
 }
 
@@ -199,7 +200,7 @@ export default function OrdersPage() {
 
   // 필터링된 결제 내역
   const filteredPayments = payments.filter((payment) => {
-    // 검색어 필터 (ID, orderId, 매장명, 회원명, 이메일)
+    // 검색어 필터 (ID, orderId, 매장명, 회원명, 이메일, 연락처)
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       const paymentIdMatch = payment.id.toLowerCase().includes(searchLower);
@@ -207,7 +208,8 @@ export default function OrdersPage() {
       const tenantMatch = (payment.memberInfo?.businessName || '').toLowerCase().includes(searchLower);
       const memberMatch = (payment.memberInfo?.ownerName || '').toLowerCase().includes(searchLower);
       const emailMatch = (payment.memberInfo?.email || payment.email || '').toLowerCase().includes(searchLower);
-      if (!paymentIdMatch && !orderIdMatch && !tenantMatch && !memberMatch && !emailMatch) {
+      const phoneMatch = (payment.memberInfo?.phone || '').replace(/-/g, '').includes(searchQuery.replace(/-/g, ''));
+      if (!paymentIdMatch && !orderIdMatch && !tenantMatch && !memberMatch && !emailMatch && !phoneMatch) {
         return false;
       }
     }
@@ -939,6 +941,10 @@ export default function OrdersPage() {
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">이메일</span>
                 <span className="text-gray-900">{paymentDetailModal.memberInfo?.email || paymentDetailModal.email || '-'}</span>
+              </div>
+              <div className="flex py-3">
+                <span className="text-gray-500 w-24 shrink-0">연락처</span>
+                <span className="text-gray-900">{paymentDetailModal.memberInfo?.phone || '-'}</span>
               </div>
               <div className="flex py-3">
                 <span className="text-gray-500 w-24 shrink-0">매장</span>

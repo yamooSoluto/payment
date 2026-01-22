@@ -33,11 +33,24 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '확인 문구가 일치하지 않습니다.' }, { status: 400 });
     }
 
-    // 해당 사용자의 모든 테넌트 조회
-    const tenantsSnapshot = await db
-      .collection('tenants')
-      .where('email', '==', email)
-      .get();
+    // users 컬렉션에서 userId 조회
+    const userRef = db.collection('users').doc(email);
+    const userDocForUserId = await userRef.get();
+    const userId = userDocForUserId.exists ? userDocForUserId.data()?.userId : null;
+
+    // 해당 사용자의 모든 테넌트 조회 (userId 기반, 없으면 email fallback)
+    let tenantsSnapshot;
+    if (userId) {
+      tenantsSnapshot = await db
+        .collection('tenants')
+        .where('userId', '==', userId)
+        .get();
+    } else {
+      tenantsSnapshot = await db
+        .collection('tenants')
+        .where('email', '==', email)
+        .get();
+    }
 
     const tenantIds = tenantsSnapshot.docs.map(doc => doc.data().tenantId || doc.id);
 
@@ -125,9 +138,8 @@ export async function DELETE(request: NextRequest) {
     // 4. users 컬렉션 처리 - 보관 기간 차등 적용
     // - 결제 고객: 5년 (전자상거래법)
     // - 무료체험만: 1년 (부정 이용 방지)
-    const userRef = db.collection('users').doc(email);
-    const userDocData = await userRef.get();
-    if (userDocData.exists) {
+    // userRef, userDocForUserId는 위에서 이미 조회함
+    if (userDocForUserId.exists) {
       // 결제 이력 확인 (payments 컬렉션에서 성공한 결제가 있는지)
       let hasPaidHistory = false;
       for (const tenantId of tenantIds) {
@@ -164,7 +176,9 @@ export async function DELETE(request: NextRequest) {
 
     // 5. 탈퇴 로그 저장
     const deletionLogRef = db.collection('account_deletions').doc();
+    const userIdForLog = userId || '';
     batch.set(deletionLogRef, {
+      userId: userIdForLog || '',
       email,
       tenantIds,
       deletedAt: now,

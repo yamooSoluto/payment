@@ -3,6 +3,7 @@ import { Firestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 export interface SubscriptionHistoryRecord {
   // 연결 ID들
   tenantId: string;
+  userId: string;
   email: string;
   brandName?: string | null;
   paymentId?: string | null;
@@ -89,6 +90,7 @@ export async function handleSubscriptionChange(
   db: Firestore,
   params: {
     tenantId: string;
+    userId: string;
     email: string;
     brandName?: string | null;
     newPlan: string;
@@ -115,6 +117,7 @@ export async function handleSubscriptionChange(
   // 2. 새 레코드 추가
   const newRecordId = await addSubscriptionHistoryRecord(db, {
     tenantId: params.tenantId,
+    userId: params.userId,
     email: params.email,
     brandName: params.brandName || null,
     paymentId: params.paymentId || null,
@@ -200,8 +203,43 @@ export async function getSubscriptionHistory(
 }
 
 /**
+ * userId 기준으로 모든 tenant의 구독 히스토리 조회 (어드민용)
+ * Collection Group Query 사용
+ * 이메일이 변경되어도 userId로 조회 가능
+ */
+export async function getSubscriptionHistoryByUserId(
+  db: Firestore,
+  userId: string,
+  limit?: number
+): Promise<(SubscriptionHistoryRecord & { recordId: string })[]> {
+  // Collection Group Query로 모든 tenant의 records 서브컬렉션 조회
+  let query = db.collectionGroup('records')
+    .where('userId', '==', userId)
+    .orderBy('changedAt', 'desc');
+
+  if (limit) {
+    query = query.limit(limit);
+  }
+
+  const snapshot = await query.get();
+
+  return snapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      recordId: doc.id,
+      ...data,
+      periodStart: data.periodStart?.toDate?.() || data.periodStart,
+      periodEnd: data.periodEnd?.toDate?.() || data.periodEnd,
+      billingDate: data.billingDate?.toDate?.() || data.billingDate,
+      changedAt: data.changedAt?.toDate?.() || data.changedAt,
+    } as SubscriptionHistoryRecord & { recordId: string };
+  });
+}
+
+/**
  * 이메일 기준으로 모든 tenant의 구독 히스토리 조회 (어드민용)
  * Collection Group Query 사용
+ * @deprecated userId 기준 조회를 권장 (getSubscriptionHistoryByUserId)
  */
 export async function getSubscriptionHistoryByEmail(
   db: Firestore,

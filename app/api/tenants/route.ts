@@ -27,11 +27,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    // tenants 컬렉션에서 email로 매장 목록 조회
-    const tenantsSnapshot = await db
-      .collection('tenants')
-      .where('email', '==', email)
-      .get();
+    // 1. users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(email).get();
+    const userData = userDoc.exists ? userDoc.data() : null;
+    const userId = userData?.userId;
+
+    // 2. tenants 컬렉션에서 userId로 매장 목록 조회 (userId가 없으면 email로 fallback)
+    let tenantsSnapshot;
+    if (userId) {
+      tenantsSnapshot = await db
+        .collection('tenants')
+        .where('userId', '==', userId)
+        .get();
+    } else {
+      // userId가 없는 경우 email로 fallback (기존 데이터 호환성)
+      tenantsSnapshot = await db
+        .collection('tenants')
+        .where('email', '==', email)
+        .get();
+    }
 
     if (tenantsSnapshot.empty) {
       return NextResponse.json({ tenants: [] });
@@ -199,14 +213,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '매장 ID 생성에 실패했습니다.' }, { status: 500 });
     }
 
-    // tenants 컬렉션에 subscription.status를 expired로 설정
+    // tenants 컬렉션에 userId 및 subscription.status 설정
     try {
       await db.collection('tenants').doc(tenantId).set(
-        { subscription: { status: 'expired' } },
+        {
+          userId: userData?.userId || null, // userId 설정
+          subscription: { status: 'expired' },
+        },
         { merge: true }
       );
     } catch (error) {
-      console.error('subscription.status 설정 오류:', error);
+      console.error('tenants 업데이트 오류:', error);
     }
 
     return NextResponse.json({

@@ -182,6 +182,7 @@ export async function PUT(
     // 변경 로그 기록
     await db.collection('subscription_changes').add({
       tenantId,
+      userId: userData.userId || existingData?.userId || '',
       brandName: tenantData?.brandName,
       changedBy: 'admin',
       changedAt: new Date(),
@@ -218,6 +219,7 @@ export async function PUT(
       try {
         await handleSubscriptionChange(db, {
           tenantId,
+          userId: userData.userId || existingData?.userId || '',
           email: tenantData?.email || '',
           brandName: tenantData?.brandName,
           newPlan,
@@ -287,6 +289,7 @@ export async function DELETE(
     // 변경 로그 기록
     await db.collection('subscription_changes').add({
       tenantId,
+      userId: existingData?.userId || '',
       brandName: existingData?.brandName,
       changedBy: 'admin',
       changedAt: new Date(),
