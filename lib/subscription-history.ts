@@ -34,7 +34,8 @@ export interface SubscriptionHistoryRecord {
 }
 
 /**
- * 현재 active 상태인 구독 히스토리 레코드를 completed로 변경
+ * 현재 활성 상태인 구독 히스토리 레코드를 completed로 변경
+ * (active, trial 상태 모두 포함)
  */
 export async function completeCurrentHistoryRecord(
   db: Firestore,
@@ -43,9 +44,10 @@ export async function completeCurrentHistoryRecord(
 ): Promise<string | null> {
   const historyRef = db.collection('subscription_history').doc(tenantId).collection('records');
 
-  // 현재 active인 레코드 찾기
+  // 활성 상태인 레코드 찾기 (active 또는 trial)
+  // Firestore는 단일 필드에 대해 'in' 쿼리 지원
   const activeRecords = await historyRef
-    .where('status', '==', 'active')
+    .where('status', 'in', ['active', 'trial'])
     .limit(1)
     .get();
 
@@ -142,6 +144,7 @@ export async function handleSubscriptionChange(
 
 /**
  * 구독 히스토리 레코드 상태만 업데이트 (해지, 만료 등)
+ * (active, trial 상태 모두 포함)
  */
 export async function updateCurrentHistoryStatus(
   db: Firestore,
@@ -151,9 +154,9 @@ export async function updateCurrentHistoryStatus(
 ): Promise<boolean> {
   const historyRef = db.collection('subscription_history').doc(tenantId).collection('records');
 
-  // 현재 active인 레코드 찾기
+  // 현재 활성 상태인 레코드 찾기 (active 또는 trial)
   const activeRecords = await historyRef
-    .where('status', '==', 'active')
+    .where('status', 'in', ['active', 'trial'])
     .limit(1)
     .get();
 
