@@ -1371,7 +1371,7 @@ export default function TenantDetailPage() {
             <div className="p-6 space-y-4">
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-800 font-medium mb-2">
-                  &quot;{tenant.brandName}&quot; 매장을 삭제하시겠습니까?
+                  &quot;{String(tenant.brandName || '')}&quot; 매장을 삭제하시겠습니까?
                 </p>
                 <p className="text-xs text-red-600">
                   • 삭제된 매장은 90일 후 영구 삭제됩니다.<br />
