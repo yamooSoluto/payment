@@ -264,8 +264,8 @@ export async function POST(request: NextRequest) {
     // 관리자 로그 기록
     await db.collection('admin_logs').add({
       action: 'member_create',
-      targetEmail: email,
-      targetUserId: userId,
+      email,
+      userId,
       details: {
         name: name || '',
         phone: phone || '',

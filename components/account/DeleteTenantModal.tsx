@@ -37,9 +37,10 @@ export default function DeleteTenantModal({ tenant, onClose, onSuccess, authPara
     };
   };
 
-  // 삭제 가능 여부 확인
+  // 삭제 가능 여부 확인 (만료, 해지 완료 상태만 삭제 가능)
   const canDelete = !tenant.subscription ||
-    tenant.subscription.status === 'expired';
+    tenant.subscription.status === 'expired' ||
+    tenant.subscription.status === 'canceled';
 
   const handleDelete = async () => {
     if (confirmText !== '매장삭제') {

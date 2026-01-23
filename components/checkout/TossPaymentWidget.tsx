@@ -346,6 +346,33 @@ export default function TossPaymentWidget({
         } else {
           throw new Error(data.error || '결제에 실패했습니다.');
         }
+      } else if (hasBillingKey && !isChangePlan && !isReserve && !isTrialImmediate) {
+        // 재구독 (해지 후 재시작) + 이미 카드 등록됨: 기존 빌링키로 바로 결제
+        const idempotencyKey = generateIdempotencyKey('RESUBSCRIBE');
+        const authHeader = idToken ? `Bearer ${idToken}` : '';
+        const response = await fetch('/api/payments/resubscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
+          body: JSON.stringify({
+            email,
+            tenantId: effectiveTenantId,
+            plan,
+            amount,
+            idempotencyKey,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const authQuery = authParam ? `&${authParam}` : '';
+          window.location.href = `/checkout/success?plan=${plan}&tenantId=${effectiveTenantId}&orderId=${data.orderId}${authQuery}`;
+        } else {
+          throw new Error(data.error || '결제에 실패했습니다.');
+        }
       } else {
         // 신규 결제 or 예약: 빌링키 발급
         if (!sdkReady) {
@@ -710,6 +737,8 @@ export default function TossPaymentWidget({
               ? currentPeriodEnd
                 ? '구독 종료 후 자동 변경'
                 : '무료체험 종료 후 자동 시작'
+              : hasBillingKey
+              ? '등록된 카드로 즉시 결제'
               : '정기결제 카드 등록'}
           </h3>
           <p className={`text-sm ${isDowngrade ? 'text-green-700' : 'text-blue-700'}`}>
@@ -721,6 +750,8 @@ export default function TossPaymentWidget({
               ? currentPeriodEnd
                 ? `현재 구독이 종료되면 자동으로 ${planName} 플랜으로 변경되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
                 : `무료체험이 종료되면 자동으로 ${planName} 플랜이 시작되며, 등록하신 카드로 ${formatPrice(amount)}원이 결제됩니다.`
+              : hasBillingKey
+              ? `등록된 카드로 ${formatPrice(amount)}원이 즉시 결제되고 ${planName} 플랜이 바로 시작됩니다.`
               : '아래 버튼을 클릭하면 카드 등록 페이지로 이동합니다. 카드 등록 후 자동으로 첫 결제가 진행됩니다.'}
           </p>
           {isReserve && (
@@ -811,7 +842,7 @@ export default function TossPaymentWidget({
         ) : isProcessing ? (
           <span className="flex items-center justify-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yamoo-primary"></div>
-            {(isChangePlan || (hasBillingKey && isTrialImmediate) || (hasBillingKey && isReserve)) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
+            {(isChangePlan || (hasBillingKey && isTrialImmediate) || (hasBillingKey && isReserve) || hasBillingKey) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
           </span>
         ) : isChangePlan ? (
           isDowngrade ? '플랜 변경하기' : `${formatPrice(amount)}원 결제하기`
@@ -819,6 +850,8 @@ export default function TossPaymentWidget({
           `${formatPrice(amount)}원 즉시 결제하기`
         ) : hasBillingKey && isReserve ? (
           '등록된 카드로 예약하기'
+        ) : hasBillingKey ? (
+          `${formatPrice(amount)}원 결제하기`
         ) : isReserve ? (
           '카드 등록하고 예약하기'
         ) : (
@@ -829,7 +862,7 @@ export default function TossPaymentWidget({
       {/* 안내 문구 */}
       {!isChangePlan && (
         <ul className="text-sm text-gray-500 space-y-1">
-          {hasBillingKey && isTrialImmediate ? (
+          {(hasBillingKey && isTrialImmediate) || (hasBillingKey && !isReserve) ? (
           <>
             <li>• 등록된 카드로 즉시 결제됩니다.</li>
             <li>• 결제 후 바로 유료 플랜이 시작됩니다.</li>

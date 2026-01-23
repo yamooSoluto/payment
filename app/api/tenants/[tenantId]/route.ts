@@ -143,19 +143,22 @@ export async function DELETE(
       return NextResponse.json({ error: '이미 삭제된 매장입니다.' }, { status: 400 });
     }
 
-    // 구독 상태 확인 (활성 구독 중인 경우 삭제 불가)
+    // 구독 상태 확인 (expired, canceled만 삭제 가능)
     const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
     if (subscriptionDoc.exists) {
       const subscriptionData = subscriptionDoc.data();
       const status = subscriptionData?.status;
 
-      // 삭제 불가능한 상태: trial, active, canceled, past_due
-      if (['trial', 'active', 'canceled', 'past_due'].includes(status)) {
+      // 회원은 expired, canceled 상태에서만 삭제 가능
+      // canceled = 즉시 해지 완료 (환불 처리됨, 서비스 종료)
+      // active, pending_cancel, trial, past_due, suspended 등은 삭제 불가
+      if (status && status !== 'expired' && status !== 'canceled') {
         const statusLabels: Record<string, string> = {
-          trial: '무료체험 중',
           active: '구독 중',
-          canceled: '해지 예정',
+          pending_cancel: '해지 예정',
+          trial: '무료체험 중',
           past_due: '결제 실패',
+          suspended: '일시 정지',
         };
         return NextResponse.json(
           { error: `${statusLabels[status] || '구독'} 상태에서는 매장을 삭제할 수 없습니다.` },
@@ -168,14 +171,43 @@ export async function DELETE(
     const now = new Date();
     const permanentDeleteAt = new Date(now);
     permanentDeleteAt.setDate(permanentDeleteAt.getDate() + 90); // 90일 후 영구 삭제
+    const paymentDeleteAt = new Date(now);
+    paymentDeleteAt.setFullYear(paymentDeleteAt.getFullYear() + 5); // 5년 후 결제 기록 삭제
 
     await db.collection('tenants').doc(tenantId).update({
       deleted: true,
       deletedAt: now,
-      deletedBy: email,
-      permanentDeleteAt,
+      deletedBy: 'user',
+      deletedByDetails: userId || email,
       updatedAt: FieldValue.serverTimestamp(),
+      // 구독 상태 만료 처리
+      'subscription.status': 'expired',
     });
+
+    // subscriptions 컬렉션 업데이트
+    if (subscriptionDoc.exists) {
+      await db.collection('subscriptions').doc(tenantId).update({
+        status: 'expired',
+        expiredAt: now,
+        nextBillingDate: null,
+        // pending 플랜도 제거 (예약 결제 방지)
+        pendingPlan: null,
+        pendingAmount: null,
+        pendingChangeAt: null,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'user',
+        // currentPeriodEnd는 건드리지 않음 (구독 이벤트에서만 설정)
+      });
+    }
+
+    // users 컬렉션에서 name, phone 조회
+    let userName = tenantData?.name || tenantData?.ownerName || '';
+    let userPhone = tenantData?.phone || '';
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      if (!userName) userName = userData?.name || '';
+      if (!userPhone) userPhone = userData?.phone || '';
+    }
 
     // 삭제 로그 기록 (userId는 위에서 이미 조회함)
     await db.collection('tenant_deletions').add({
@@ -183,8 +215,13 @@ export async function DELETE(
       userId: userId || tenantData?.userId || '',
       brandName: tenantData?.brandName,
       email,
+      name: userName,
+      phone: userPhone,
       deletedAt: now,
+      deletedBy: 'user',
+      deletedByDetails: userId || email,
       permanentDeleteAt,
+      paymentDeleteAt,
       reason: 'user_request',
     });
 

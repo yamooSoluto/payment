@@ -62,7 +62,8 @@ export function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
     trial: '체험 중',
     active: '구독 중',
-    canceled: '해지예정',
+    pending_cancel: '해지예정',
+    canceled: '해지됨',
     past_due: '결제 실패',
     expired: '만료됨',
   };
@@ -73,6 +74,7 @@ export function getStatusColor(status: string): string {
   const colorMap: Record<string, string> = {
     trial: 'text-blue-600 bg-blue-100',
     active: 'text-green-600 bg-green-100',
+    pending_cancel: 'text-orange-600 bg-orange-100',
     canceled: 'text-gray-600 bg-gray-100',
     past_due: 'text-red-600 bg-red-100',
     expired: 'text-orange-600 bg-orange-100',

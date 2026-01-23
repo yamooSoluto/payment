@@ -66,10 +66,12 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
         periodStatus = 'trial';
       } else if (record.status === 'active') {
         periodStatus = 'active';
-      } else if (record.status === 'canceled') {
+      } else if (record.status === 'pending_cancel') {
         periodStatus = 'pending_cancel';
-      } else if (record.status === 'expired') {
+      } else if (record.status === 'canceled') {
         periodStatus = 'canceled';
+      } else if (record.status === 'expired') {
+        periodStatus = 'completed';
       }
 
       // 종료일: periodEnd에 이미 마지막 이용일이 저장되어 있음
@@ -107,10 +109,12 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
     let periodStatus: SubscriptionPeriod['status'] = 'active';
     if (subscription.status === 'trial') {
       periodStatus = 'trial';
-    } else if (subscription.status === 'expired') {
-      periodStatus = 'canceled';
-    } else if (subscription.status === 'canceled') {
+    } else if (subscription.status === 'pending_cancel') {
       periodStatus = 'pending_cancel';
+    } else if (subscription.status === 'canceled') {
+      periodStatus = 'canceled';
+    } else if (subscription.status === 'expired') {
+      periodStatus = 'completed';
     }
 
     subscriptionPeriods.push({

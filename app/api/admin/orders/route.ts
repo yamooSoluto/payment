@@ -114,6 +114,38 @@ export async function GET(request: NextRequest) {
     const tenantInfoCache = new Map<string, { businessName: string; ownerName: string; email: string; phone?: string } | null>();
     // userId별 users 정보 캐싱
     const userInfoByIdCache = new Map<string, { name: string; phone: string; email: string } | null>();
+    // 삭제된 매장 정보 캐싱 (tenant_deletions)
+    const deletedTenantCache = new Map<string, { brandName: string; email: string; name: string; phone: string } | null>();
+
+    // tenant_deletions에서 삭제된 매장 정보 조회
+    const getDeletedTenantInfo = async (tenantId: string): Promise<{ brandName: string; email: string; name: string; phone: string } | null> => {
+      if (!tenantId) return null;
+      if (deletedTenantCache.has(tenantId)) {
+        return deletedTenantCache.get(tenantId) || null;
+      }
+      try {
+        const deletionSnapshot = await db.collection('tenant_deletions')
+          .where('tenantId', '==', tenantId)
+          .limit(1)
+          .get();
+        if (!deletionSnapshot.empty) {
+          const data = deletionSnapshot.docs[0].data();
+          const info = {
+            brandName: data?.brandName || '',
+            email: data?.email || '',
+            name: data?.name || '',
+            phone: data?.phone || '',
+          };
+          deletedTenantCache.set(tenantId, info);
+          return info;
+        }
+        deletedTenantCache.set(tenantId, null);
+        return null;
+      } catch {
+        deletedTenantCache.set(tenantId, null);
+        return null;
+      }
+    };
 
     // users 컬렉션에서 userId로 회원 정보 조회
     const getUserInfoByUserId = async (userId: string): Promise<{ name: string; phone: string; email: string } | null> => {
@@ -182,6 +214,17 @@ export async function GET(request: NextRequest) {
                   email: userInfo?.email || tenantData?.email || email || '',
                   phone: userInfo?.phone || tenantData?.phone || '',
                 };
+              } else {
+                // tenants에 없으면 tenant_deletions에서 조회 (삭제된 매장)
+                const deletedInfo = await getDeletedTenantInfo(tenantId);
+                if (deletedInfo) {
+                  memberInfo = {
+                    businessName: deletedInfo.brandName,
+                    ownerName: userInfo?.name || deletedInfo.name || '',
+                    email: userInfo?.email || deletedInfo.email || email || '',
+                    phone: userInfo?.phone || deletedInfo.phone || '',
+                  };
+                }
               }
               tenantInfoCache.set(tenantId, memberInfo);
             } catch {

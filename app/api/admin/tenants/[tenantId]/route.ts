@@ -429,45 +429,74 @@ export async function DELETE(
       return NextResponse.json({ error: '이미 삭제된 매장입니다.' }, { status: 400 });
     }
 
+    // 구독 상태 확인 (활성 구독 중인 경우 삭제 불가 - 환불 문제)
+    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+    if (subscriptionDoc.exists) {
+      const subscriptionData = subscriptionDoc.data();
+      const status = subscriptionData?.status;
+
+      // 삭제 불가능한 상태: active, pending_cancel (서비스 이용 중, 환불 이슈)
+      // trial, past_due, suspended, expired, canceled 등은 삭제 가능
+      // canceled = 즉시 해지 완료 (환불 처리됨, 서비스 종료)
+      if (['active', 'pending_cancel'].includes(status)) {
+        const statusLabels: Record<string, string> = {
+          active: '구독 중',
+          pending_cancel: '해지 예정',
+        };
+        return NextResponse.json(
+          { error: `${statusLabels[status] || '구독'} 상태에서는 매장을 삭제할 수 없습니다. 구독 만료 후 삭제해주세요.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Soft Delete 처리
     const now = new Date();
     const permanentDeleteAt = new Date(now);
     permanentDeleteAt.setDate(permanentDeleteAt.getDate() + 90); // 90일 후 영구 삭제
+    const paymentDeleteAt = new Date(now);
+    paymentDeleteAt.setFullYear(paymentDeleteAt.getFullYear() + 5); // 5년 후 결제 기록 삭제
 
     // 1. tenants 컬렉션 업데이트
     await db.collection('tenants').doc(tenantId).update({
       deleted: true,
       deletedAt: now,
-      deletedBy: admin.adminId,
-      permanentDeleteAt,
+      deletedBy: 'admin',
+      deletedByDetails: admin.adminId,
       updatedAt: FieldValue.serverTimestamp(),
-      // 구독 정보도 만료 처리
+      // 구독 상태 만료 처리
       'subscription.status': 'expired',
-      'subscription.canceledAt': now,
     });
 
     // 2. subscriptions 컬렉션 업데이트 (자동 결제 방지)
-    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
     if (subscriptionDoc.exists) {
       await db.collection('subscriptions').doc(tenantId).update({
         status: 'expired',
-        canceledAt: now,
-        cancelReason: '매장 삭제',
+        expiredAt: now,
+        nextBillingDate: null,
         // pending 플랜도 제거 (예약 결제 방지)
         pendingPlan: null,
         pendingAmount: null,
         pendingChangeAt: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: admin.adminId,
+        // currentPeriodEnd는 건드리지 않음 (구독 이벤트에서만 설정)
       });
     }
 
     // 3. 삭제 로그 기록
-    // users 컬렉션에서 userId 조회
+    // users 컬렉션에서 userId, name, phone 조회
     let userIdForLog = tenantData?.userId || '';
-    if (!userIdForLog && tenantData?.email) {
+    let userName = tenantData?.name || tenantData?.ownerName || '';
+    let userPhone = tenantData?.phone || '';
+    if (tenantData?.email) {
       const userDocForLog = await db.collection('users').doc(tenantData.email).get();
-      userIdForLog = userDocForLog.exists ? userDocForLog.data()?.userId : '';
+      if (userDocForLog.exists) {
+        const userData = userDocForLog.data();
+        if (!userIdForLog) userIdForLog = userData?.userId || '';
+        if (!userName) userName = userData?.name || '';
+        if (!userPhone) userPhone = userData?.phone || '';
+      }
     }
 
     await db.collection('tenant_deletions').add({
@@ -475,16 +504,21 @@ export async function DELETE(
       userId: userIdForLog || '',
       brandName: tenantData?.brandName,
       email: tenantData?.email,
+      name: userName,
+      phone: userPhone,
       deletedAt: now,
+      deletedBy: 'admin',
+      deletedByDetails: admin.adminId,
       permanentDeleteAt,
+      paymentDeleteAt,
       reason: 'admin_delete',
     });
 
     // 4. 관리자 로그 기록
     await db.collection('admin_logs').add({
       action: 'tenant_delete',
-      targetTenantId: tenantId,
-      targetUserId: userIdForLog || null,
+      tenantId,
+      userId: userIdForLog || null,
       deletedData: {
         brandName: tenantData?.brandName || '',
         email: tenantData?.email || '',

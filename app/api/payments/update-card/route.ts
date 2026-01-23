@@ -72,6 +72,10 @@ export async function GET(request: NextRequest) {
 
     console.log('New billing key issued:', newBillingKey?.slice(0, 10) + '...');
 
+    // users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(email!).get();
+    const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
     const now = new Date();
     let newCardId = '';
     const brandName = subscription?.brandName || '';
@@ -84,12 +88,14 @@ export async function GET(request: NextRequest) {
       let cards: CardItem[] = [];
       let docEmail = email!;
       let docBrandName = brandName;
+      let docUserId = userId;
 
       if (cardsDoc.exists) {
         const data = cardsDoc.data() as TenantCardsDocument;
         cards = data.cards || [];
         docEmail = data.email;
         docBrandName = data.brandName || brandName;
+        docUserId = data.userId || userId;
       }
 
       // 중복 카드 체크
@@ -124,6 +130,7 @@ export async function GET(request: NextRequest) {
       // 카드 문서 저장
       transaction.set(cardsDocRef, {
         tenantId,
+        userId: docUserId,
         email: docEmail,
         brandName: docBrandName,
         cards,

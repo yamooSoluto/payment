@@ -431,8 +431,8 @@ export async function PUT(
     if (Object.keys(changes).length > 0) {
       await db.collection('admin_logs').add({
         action: 'member_update',
-        targetEmail: oldEmail,
-        targetUserId: currentUserData?.userId || null,
+        email: oldEmail,
+        userId: currentUserData?.userId || null,
         changes,
         adminId: admin.adminId,
         adminLoginId: admin.loginId,

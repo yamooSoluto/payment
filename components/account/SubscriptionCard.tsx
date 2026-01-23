@@ -469,14 +469,10 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
 
   const isTrial = subscription.status === 'trial';
   const isActive = subscription.status === 'active';
-  const isCanceled = subscription.status === 'canceled';
+  const isPendingCancel = subscription.status === 'pending_cancel'; // 해지 예정 (서비스 이용 가능)
+  const isCanceled = subscription.status === 'canceled'; // 즉시 해지됨 (서비스 종료)
   const isPastDue = subscription.status === 'past_due';
   const isExpired = subscription.status === 'expired';
-
-  // 즉시 해지 여부 (해지가 이미 완료된 상태)
-  const isImmediateCanceled = isCanceled && subscription.cancelMode === 'immediate';
-  // 예정 해지 여부 (해지 예약만 된 상태, 아직 이용 가능)
-  const isScheduledCanceled = isCanceled && subscription.cancelMode !== 'immediate';
 
   // authParam 파싱 헬퍼
   const parseAuthParam = () => {
@@ -674,9 +670,9 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                 {(isTrial || subscription.plan === 'trial') ? '무료체험' : subscription.plan ? `${getPlanName(subscription.plan)} 플랜` : '구독 없음'}
               </h2>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                isImmediateCanceled ? 'text-gray-600 bg-gray-100' : getStatusColor(subscription.status)
+                isCanceled ? 'text-gray-600 bg-gray-100' : getStatusColor(subscription.status)
               }`}>
-                {isImmediateCanceled ? '해지됨' : getStatusText(subscription.status)}
+                {isCanceled ? '해지됨' : getStatusText(subscription.status)}
               </span>
             </div>
             {isActive && (subscription.baseAmount || subscription.amount) && (
@@ -707,7 +703,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         )}
 
         {/* Active/Canceled Subscription Info */}
-        {(isActive || isCanceled) && (
+        {(isActive || isPendingCancel) && (
           <div className="space-y-4 mb-6">
             <div className="flex items-center gap-3 text-gray-600">
               <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
@@ -822,20 +818,20 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         )}
 
         {/* Canceled Info - 예정 해지 (scheduled) */}
-        {isScheduledCanceled && subscription.currentPeriodEnd && (
+        {isPendingCancel && subscription.currentPeriodEnd && (
           <div className="bg-yellow-50 rounded-lg p-4 mb-6">
             <p className="text-sm text-yellow-800 font-medium mb-1">
               구독이 해지 예정입니다
             </p>
             <p className="text-sm text-yellow-700">
               {formatDate(subscription.currentPeriodEnd)}까지 이용 가능하며,
-              &apos;다시 이용하기&apos;를 누르면 해지가 취소되고 다음 결제일에 {(subscription.baseAmount || subscription.amount) ? `${formatPrice(subscription.baseAmount ?? subscription.amount ?? 0)}원이` : '요금이'} 결제됩니다.
+              &apos;다시 이용하기&apos;를 누르면 해지가 취소됩니다.
             </p>
           </div>
         )}
 
         {/* Canceled Info - 즉시 해지 (immediate) */}
-        {isImmediateCanceled && subscription.currentPeriodEnd && (
+        {isCanceled && subscription.currentPeriodEnd && (
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <p className="text-sm text-gray-800 font-medium mb-1">
               구독이 해지되었습니다
@@ -916,7 +912,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </>
           )}
           {/* 예정 해지: 다시 이용하기 (재활성화) */}
-          {isScheduledCanceled && (
+          {isPendingCancel && (
             <button
               onClick={handleReactivate}
               disabled={isLoading}
@@ -926,7 +922,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </button>
           )}
           {/* 즉시 해지: 새로 구독하기 */}
-          {isImmediateCanceled && (
+          {isCanceled && (
             <button
               onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
               className="btn-primary"

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Settings, Plus, Trash, ViewColumns3 } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Settings, Plus, Trash, ViewColumns3, HistoricShield, Menu } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
@@ -92,6 +92,9 @@ export default function TenantsPage() {
   const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState<string[]>([]);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [filterPosition, setFilterPosition] = useState<{ top: number; right: number } | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const [pagination, setPagination] = useState<Pagination>({
@@ -120,6 +123,13 @@ export default function TenantsPage() {
   const [addTenantForm, setAddTenantForm] = useState({ brandName: '', industry: '' });
   const [addingTenant, setAddingTenant] = useState(false);
   const [addTenantProgress, setAddTenantProgress] = useState(0);
+
+  // 선택 삭제 상태
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // 컬럼 선택 상태
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
@@ -374,6 +384,70 @@ export default function TenantsPage() {
     }
   };
 
+  // 선택된 매장 삭제
+  const handleDeleteSelected = async () => {
+    if (deleteConfirmText !== '매장 삭제') return;
+
+    setDeleting(true);
+    try {
+      const results = await Promise.all(
+        selectedTenants.map(async (tenantId) => {
+          const response = await fetch(`/api/admin/tenants/${tenantId}`, { method: 'DELETE' });
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            return { ok: false, tenantId, error: data.error || '삭제 실패' };
+          }
+          return { ok: true, tenantId };
+        })
+      );
+
+      const successResults = results.filter(r => r.ok);
+      const failResults = results.filter(r => !r.ok);
+
+      if (failResults.length > 0) {
+        const errorMessages = failResults.map(r => {
+          const tenant = tenants.find(t => t.tenantId === r.tenantId);
+          const brandName = tenant?.brandName || r.tenantId;
+          return `• ${brandName}: ${r.error}`;
+        }).join('\n');
+        alert(`${successResults.length}개 삭제 성공, ${failResults.length}개 삭제 실패\n\n실패 사유:\n${errorMessages}`);
+      } else {
+        alert(`${successResults.length}개 매장이 삭제되었습니다.`);
+      }
+
+      setShowDeleteModal(false);
+      setDeleteConfirmText('');
+      setSelectedTenants([]);
+      setIsSelectMode(false);
+      fetchTenants();
+    } catch (error) {
+      console.error('Delete failed:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // 전체 선택/해제
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // 삭제되지 않은 매장만 선택
+      const selectableIds = tenants.filter(t => !t.deleted).map(t => t.tenantId);
+      setSelectedTenants(selectableIds);
+    } else {
+      setSelectedTenants([]);
+    }
+  };
+
+  // 개별 선택/해제
+  const handleSelectTenant = (tenantId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedTenants(prev => [...prev, tenantId]);
+    } else {
+      setSelectedTenants(prev => prev.filter(id => id !== tenantId));
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('ko-KR');
@@ -432,7 +506,7 @@ export default function TenantsPage() {
     return CS_TONE_OPTIONS[tone] || tone || '-';
   };
 
-  // 외부 클릭 감지 (필터 팝업 닫기)
+  // 외부 클릭 감지 (팝업 닫기)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
@@ -442,6 +516,10 @@ export default function TenantsPage() {
       if (columnSettingsRef.current && !columnSettingsRef.current.contains(event.target as Node)) {
         setShowColumnSettings(false);
         setColumnSettingsPosition(null);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setShowMoreMenu(false);
+        setMoreMenuPosition(null);
       }
     };
 
@@ -453,27 +531,122 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
+      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0 z-50">
         <div className="flex items-center gap-3">
           <HomeSimpleDoor className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">매장 관리</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddTenantModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>매장 추가</span>
-          </button>
-          <button
-            onClick={() => setShowSchemaModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
-            title="커스텀 필드 설정"
-          >
-            <Settings className="w-4 h-4" />
-            <span>필드 설정</span>
-          </button>
+          {isSelectMode ? (
+            <>
+              <button
+                onClick={() => {
+                  setIsSelectMode(false);
+                  setSelectedTenants([]);
+                }}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                disabled={selectedTenants.length === 0}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash className="w-4 h-4" />
+                <span>삭제 ({selectedTenants.length})</span>
+              </button>
+            </>
+          ) : (
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                onClick={(e) => {
+                  if (showMoreMenu) {
+                    setShowMoreMenu(false);
+                    setMoreMenuPosition(null);
+                  } else {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setMoreMenuPosition({
+                      top: rect.bottom + 12,
+                      right: window.innerWidth - rect.right,
+                    });
+                    setShowMoreMenu(true);
+                  }
+                }}
+                className={`w-11 h-11 flex items-center justify-center rounded-2xl transition-all duration-300 ${
+                  showMoreMenu
+                    ? 'bg-gray-900 text-white shadow-xl'
+                    : 'bg-white/80 backdrop-blur-xl text-gray-700 shadow-lg border border-white/60 hover:bg-white hover:shadow-xl hover:scale-105'
+                }`}
+              >
+                {showMoreMenu ? (
+                  <Xmark className="w-5 h-5" />
+                ) : (
+                  <Menu className="w-5 h-5" />
+                )}
+              </button>
+              {showMoreMenu && moreMenuPosition && (
+                <div
+                  className="fixed w-52 backdrop-blur-xl bg-white/90 rounded-2xl shadow-2xl border border-white/60 py-2 overflow-hidden"
+                  style={{ top: moreMenuPosition.top, right: moreMenuPosition.right, zIndex: 9999 }}
+                >
+                  <button
+                    onClick={() => {
+                      setShowAddTenantModal(true);
+                      setShowMoreMenu(false);
+                      setMoreMenuPosition(null);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-500/10 hover:text-blue-600 transition-all"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                      <Plus className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <span>매장 추가</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsSelectMode(true);
+                      setShowMoreMenu(false);
+                      setMoreMenuPosition(null);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-red-500/10 hover:text-red-600 transition-all"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center">
+                      <Trash className="w-4 h-4 text-red-500" />
+                    </div>
+                    <span>선택 삭제</span>
+                  </button>
+                  <div className="border-t border-gray-200/50 my-2 mx-4" />
+                  <Link
+                    href="/admin/tenants/deleted-history"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setMoreMenuPosition(null);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-500/10 transition-all"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-gray-500/10 flex items-center justify-center">
+                      <HistoricShield className="w-4 h-4 text-gray-500" />
+                    </div>
+                    <span>삭제 내역</span>
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setShowSchemaModal(true);
+                      setShowMoreMenu(false);
+                      setMoreMenuPosition(null);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-500/10 transition-all"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-gray-500/10 flex items-center justify-center">
+                      <Settings className="w-4 h-4 text-gray-500" />
+                    </div>
+                    <span>필드 설정</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -518,11 +691,10 @@ export default function TenantsPage() {
                         setShowFilter(true);
                       }
                     }}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      hasActiveFilters
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`p-1.5 rounded-lg transition-colors ${hasActiveFilters
+                      ? 'bg-gray-700 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                      }`}
                     title="필터"
                   >
                     <Filter className="w-4 h-4" />
@@ -667,11 +839,7 @@ export default function TenantsPage() {
                         setShowColumnSettings(true);
                       }
                     }}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      visibleColumns.length < AVAILABLE_COLUMNS.length
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className="p-1.5 rounded-lg transition-colors bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
                     title="컬럼 설정"
                   >
                     <ViewColumns3 className="w-4 h-4" />
@@ -722,7 +890,7 @@ export default function TenantsPage() {
                 </div>
                 <button
                   onClick={handleFilter}
-                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   조회
                 </button>
@@ -744,10 +912,22 @@ export default function TenantsPage() {
             <table className="w-full min-w-max border-collapse">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  {/* 체크박스 컬럼 (선택 모드일 때만) */}
+                  {isSelectMode && (
+                    <th className="text-center px-2 py-3 w-10 sticky left-0 bg-gray-50 z-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedTenants.length > 0 && selectedTenants.length === tenants.filter(t => !t.deleted).length}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </th>
+                  )}
                   {/* 고정 컬럼: No. */}
-                  <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-12 sticky left-0 bg-gray-50 z-10">No.</th>
+                  <th className={`text-center px-2 py-3 text-sm font-medium text-gray-500 w-12 sticky ${isSelectMode ? 'left-10' : 'left-0'} bg-gray-50 z-10`}>No.</th>
                   {/* 고정 컬럼: 매장명 */}
-                  <th className="text-center px-3 py-3 text-sm font-medium text-gray-500 min-w-[120px] sticky left-12 bg-gray-50 z-10 border-r border-gray-200">매장명</th>
+                  <th className={`text-center px-3 py-3 text-sm font-medium text-gray-500 min-w-[120px] sticky ${isSelectMode ? 'left-[5.5rem]' : 'left-12'} bg-gray-50 z-10 border-r border-gray-200`}>매장명</th>
                   {/* 동적 컬럼 */}
                   {visibleColumns.includes('branchNo') && (
                     <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">지점번호</th>
@@ -791,15 +971,31 @@ export default function TenantsPage() {
                 {tenants.map((tenant, index) => (
                   <tr
                     key={tenant.id}
-                    onClick={() => router.push(`/admin/tenants/${tenant.tenantId}`)}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${tenant.deleted ? 'bg-red-50/50' : ''}`}
+                    onClick={() => !isSelectMode && router.push(`/admin/tenants/${tenant.tenantId}`)}
+                    className={`hover:bg-gray-50 transition-colors ${isSelectMode ? '' : 'cursor-pointer'} ${tenant.deleted ? 'bg-red-50/50' : ''}`}
                   >
+                    {/* 체크박스 컬럼 (선택 모드일 때만) */}
+                    {isSelectMode && (
+                      <td
+                        className={`px-2 py-3 text-center sticky left-0 z-10 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {!tenant.deleted && (
+                          <input
+                            type="checkbox"
+                            checked={selectedTenants.includes(tenant.tenantId)}
+                            onChange={(e) => handleSelectTenant(tenant.tenantId, e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        )}
+                      </td>
+                    )}
                     {/* 고정 컬럼: No. */}
-                    <td className={`px-2 py-3 text-sm text-gray-400 text-center sticky left-0 z-10 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
+                    <td className={`px-2 py-3 text-sm text-gray-400 text-center sticky ${isSelectMode ? 'left-10' : 'left-0'} z-10 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
                       {(pagination.page - 1) * pagination.limit + index + 1}
                     </td>
                     {/* 고정 컬럼: 매장명 */}
-                    <td className={`px-3 py-3 text-sm font-medium text-gray-900 text-center sticky left-12 z-10 border-r border-gray-200 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
+                    <td className={`px-3 py-3 text-sm font-medium text-gray-900 text-center sticky ${isSelectMode ? 'left-[5.5rem]' : 'left-12'} z-10 border-r border-gray-200 ${tenant.deleted ? 'bg-red-50/50' : 'bg-white'}`}>
                       <span className="whitespace-nowrap">{tenant.brandName}</span>
                       {tenant.deleted && (
                         <span className="ml-1 text-xs text-red-400">(삭제됨)</span>
@@ -1050,6 +1246,72 @@ export default function TenantsPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                <Trash className="w-5 h-5" />
+                매장 삭제
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  {selectedTenants.length}개의 매장을 삭제하시겠습니까?
+                </p>
+                <p className="text-xs text-red-600">
+                  • 삭제된 매장은 90일 후 영구 삭제됩니다.<br />
+                  • 삭제된 매장의 구독은 즉시 만료 처리됩니다.<br />
+                  • 이 작업은 취소할 수 없습니다.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  확인을 위해 <span className="font-bold text-red-600">&quot;매장 삭제&quot;</span>를 입력하세요
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="매장 삭제"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deleteConfirmText !== '매장 삭제' || deleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <Spinner size="sm" />
+                    삭제 중...
+                  </>
+                ) : (
+                  <>
+                    <Trash className="w-4 h-4" />
+                    삭제
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

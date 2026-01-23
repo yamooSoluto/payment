@@ -21,6 +21,7 @@ export interface CardItem {
 // 테넌트별 카드 문서 인터페이스
 export interface TenantCardsDocument {
   tenantId: string;
+  userId?: string;
   email: string;
   brandName?: string;
   cards: CardItem[];
@@ -144,9 +145,14 @@ export async function GET(request: NextRequest) {
 
         const firstDocData = oldCardsSnapshot.docs[0].data();
 
+        // users 컬렉션에서 userId 조회
+        const userDoc = await db.collection('users').doc(firstDocData.email).get();
+        const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
         // 새 구조로 저장
         await db.collection('cards').doc(tenantId).set({
           tenantId,
+          userId,
           email: firstDocData.email,
           cards: oldCards,
           updatedAt: now,
@@ -175,9 +181,14 @@ export async function GET(request: NextRequest) {
             const now = new Date();
             const cardId = generateCardId();
 
+            // users 컬렉션에서 userId 조회
+            const userDoc = await db.collection('users').doc(subscription.email).get();
+            const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
             // 새 구조로 저장
             await db.collection('cards').doc(tenantId).set({
               tenantId,
+              userId,
               email: subscription.email,
               cards: [{
                 id: cardId,
@@ -262,6 +273,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
+    // users 컬렉션에서 userId 조회
+    const userDoc = await db.collection('users').doc(email).get();
+    const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
     const now = new Date();
     let newCardId: string = '';
     let shouldSetPrimary = false;
@@ -275,12 +290,14 @@ export async function POST(request: NextRequest) {
       let cards: CardItem[] = [];
       let docEmail = email!;
       let docBrandName = brandName;
+      let docUserId = userId;
 
       if (cardsDoc.exists) {
         const data = cardsDoc.data() as TenantCardsDocument;
         cards = data.cards || [];
         docEmail = data.email;
         docBrandName = data.brandName || brandName;
+        docUserId = data.userId || userId;
       }
 
       // 중복 카드 체크
@@ -315,6 +332,7 @@ export async function POST(request: NextRequest) {
       // 카드 문서 저장
       transaction.set(cardsDocRef, {
         tenantId,
+        userId: docUserId,
         email: docEmail,
         brandName: docBrandName,
         cards,

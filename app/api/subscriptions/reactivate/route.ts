@@ -42,8 +42,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    if (subscription?.status !== 'canceled') {
-      return NextResponse.json({ error: 'Subscription is not canceled' }, { status: 400 });
+    // pending_cancel (해지 예정) 상태에서만 재활성화 가능
+    // canceled (즉시 해지)는 이미 서비스가 종료되어 재활성화 불가
+    if (subscription?.status !== 'pending_cancel') {
+      return NextResponse.json({ error: 'Subscription is not pending cancellation' }, { status: 400 });
     }
 
     // 만료일이 지났는지 확인

@@ -127,9 +127,10 @@ const PLAN_CONFIG: Record<string, { label: string; color: string }> = {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   active: { label: '구독 중', color: 'text-green-600 bg-green-50', icon: CheckCircle },
-  canceled: { label: '해지 예정', color: 'text-orange-600 bg-orange-50', icon: Clock },
+  pending_cancel: { label: '해지 예정', color: 'text-orange-600 bg-orange-50', icon: Clock },
+  canceled: { label: '해지됨', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
   past_due: { label: '결제 실패', color: 'text-red-600 bg-red-50', icon: WarningCircle },
-  trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock }, // "무료체험" 중복 방지
+  trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
   expired: { label: '미구독', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
 };
 
@@ -259,9 +260,9 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
           if (plan === 'trial' && status !== 'expired') {
             status = 'trial';
           }
-          // 즉시 해지(cancelMode === 'immediate')는 expired(미구독)로 처리
-          const isImmediateCanceled = status === 'canceled' && tenant.subscription?.cancelMode === 'immediate';
-          if (isImmediateCanceled) {
+          // canceled (즉시 해지)는 expired(미구독)로 처리
+          // pending_cancel (해지 예정)은 그대로 유지
+          if (status === 'canceled') {
             status = 'expired';
           }
           const statusConfig = STATUS_CONFIG[status];
@@ -301,7 +302,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                               <StatusIcon width={12} height={12} strokeWidth={2} />
                               {statusConfig.label}
                               {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
-                              {(status === 'canceled' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
+                              {(status === 'pending_cancel' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
                                 <span className="ml-0.5">
                                   (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Seoul' })})
                                 </span>

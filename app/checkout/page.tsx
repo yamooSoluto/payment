@@ -111,9 +111,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
 
   // 병렬로 데이터 조회 (성능 최적화)
-  // mode=immediate 또는 mode=reserve인 경우 특정 tenant의 구독 정보를 조회
+  // tenantId가 있으면 해당 tenant의 구독 정보 조회 (billingKey 확인용)
   const [subscription, tenantInfo, planInfo] = await Promise.all([
-    ((mode === 'immediate' || mode === 'reserve') && tenantId)
+    tenantId
       ? getSubscriptionByTenantId(tenantId, email)
       : getSubscription(email),
     tenantId ? getTenantInfo(tenantId) : Promise.resolve(null),

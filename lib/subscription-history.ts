@@ -143,8 +143,8 @@ export async function handleSubscriptionChange(
 }
 
 /**
- * 구독 히스토리 레코드 상태만 업데이트 (해지, 만료 등)
- * (active, trial 상태 모두 포함)
+ * 구독 히스토리 레코드 상태만 업데이트 (해지, 만료, 재활성화 등)
+ * (active, trial, pending_cancel 상태 모두 포함)
  */
 export async function updateCurrentHistoryStatus(
   db: Firestore,
@@ -154,9 +154,9 @@ export async function updateCurrentHistoryStatus(
 ): Promise<boolean> {
   const historyRef = db.collection('subscription_history').doc(tenantId).collection('records');
 
-  // 현재 활성 상태인 레코드 찾기 (active 또는 trial)
+  // 현재 활성/해지예정 상태인 레코드 찾기 (active, trial, pending_cancel)
   const activeRecords = await historyRef
-    .where('status', 'in', ['active', 'trial'])
+    .where('status', 'in', ['active', 'trial', 'pending_cancel'])
     .limit(1)
     .get();
 

@@ -216,8 +216,8 @@ export async function POST(request: NextRequest) {
         const adminLogRef = db.collection('admin_logs').doc();
         batch.set(adminLogRef, {
           action: 'member_delete',
-          targetEmail: email,
-          targetUserId: userId || null,
+          email,
+          userId: userId || null,
           deletedData: {
             name: userData?.name || '',
             phone: userData?.phone || '',

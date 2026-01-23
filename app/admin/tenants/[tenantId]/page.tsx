@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
@@ -192,6 +192,11 @@ export default function TenantDetailPage() {
     nextBillingDate: '',
   });
   const [savingSubscription, setSavingSubscription] = useState(false);
+
+  // 삭제 모달 상태
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingTenant, setDeletingTenant] = useState(false);
 
   // 커스텀 필드 스키마
   type CustomFieldType = 'string' | 'number' | 'boolean' | 'map' | 'array' | 'timestamp' | 'select';
@@ -423,6 +428,33 @@ export default function TenantDetailPage() {
     setIsEditMode(false);
   };
 
+  // 삭제 핸들러
+  const handleDeleteTenant = async () => {
+    if (deleteConfirmText !== '매장 삭제') return;
+
+    setDeletingTenant(true);
+    try {
+      const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert('매장이 삭제되었습니다.');
+        router.push('/admin/tenants');
+      } else {
+        const data = await response.json();
+        alert(data.error || '삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeletingTenant(false);
+      setShowDeleteModal(false);
+      setDeleteConfirmText('');
+    }
+  };
+
   // 커스텀 필드 변경 핸들러 (saveToFirestore에 따라 적절한 상태에 저장)
   const handleCustomFieldChange = (fieldName: string, value: unknown) => {
     const schema = customFieldSchema.find(s => s.name === fieldName);
@@ -623,6 +655,16 @@ export default function TenantDetailPage() {
                 {saving ? '저장 중...' : '저장'}
               </button>
             </>
+          )}
+
+          {/* 삭제 버튼 (삭제되지 않은 매장만) */}
+          {!tenant.deleted && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 border border-red-300 hover:border-red-400 rounded-lg transition-colors"
+            >
+              삭제
+            </button>
           )}
         </div>
       </div>
@@ -1310,6 +1352,72 @@ export default function TenantDetailPage() {
                 className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                <Trash className="w-5 h-5" />
+                매장 삭제
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  &quot;{tenant.brandName}&quot; 매장을 삭제하시겠습니까?
+                </p>
+                <p className="text-xs text-red-600">
+                  • 삭제된 매장은 90일 후 영구 삭제됩니다.<br />
+                  • 삭제된 매장의 구독은 즉시 만료 처리됩니다.<br />
+                  • 이 작업은 취소할 수 없습니다.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  확인을 위해 <span className="font-bold text-red-600">&quot;매장 삭제&quot;</span>를 입력하세요
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="매장 삭제"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteTenant}
+                disabled={deleteConfirmText !== '매장 삭제' || deletingTenant}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {deletingTenant ? (
+                  <>
+                    <RefreshDouble className="w-4 h-4 animate-spin" />
+                    삭제 중...
+                  </>
+                ) : (
+                  <>
+                    <Trash className="w-4 h-4" />
+                    삭제
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -7,6 +7,11 @@ import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
 
+// 카드 ID 생성
+function generateCardId(): string {
+  return `card_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 // 빌링키 발급 및 첫 결제 처리
 // 토스 카드 등록 성공 후 리다이렉트됨
 export async function GET(request: NextRequest) {
@@ -268,6 +273,39 @@ export async function GET(request: NextRequest) {
 
       console.log('✅ Billing key registered, pending plan set:', { plan, pendingChangeAt: pendingChangeAt.toISOString() });
 
+      // cards 컬렉션에 카드 정보 저장
+      try {
+        // users 컬렉션에서 userId 조회
+        const userDoc = await db.collection('users').doc(email).get();
+        const userId = userDoc.exists ? userDoc.data()?.userId : '';
+
+        const cardId = generateCardId();
+        await db.collection('cards').doc(validTenantId).set({
+          tenantId: validTenantId,
+          userId,
+          email,
+          brandName: brandName || null,
+          cards: [{
+            id: cardId,
+            billingKey,
+            cardInfo: billingResponse.card || null,
+            alias: null,
+            isPrimary: true,
+            createdAt: now,
+          }],
+          updatedAt: now,
+        });
+
+        // subscription에 primaryCardId 추가
+        await subscriptionRef.update({
+          primaryCardId: cardId,
+        });
+        console.log('✅ Card saved to cards collection (reserve mode):', validTenantId);
+      } catch (cardSaveError) {
+        console.error('Failed to save card (reserve mode):', cardSaveError);
+        // 카드 저장 실패해도 결제는 완료됨
+      }
+
       // 성공 페이지로 리다이렉트 (예약 모드)
       const authQuery = authParam ? `&${authParam}` : '';
       const tenantNameQuery = tenantName ? `&tenantName=${encodeURIComponent(tenantName)}` : '';
@@ -440,6 +478,35 @@ export async function GET(request: NextRequest) {
     } catch (userUpdateError) {
       console.error('Failed to update user trialApplied:', userUpdateError);
       // 실패해도 결제는 완료됨
+    }
+
+    // cards 컬렉션에 카드 정보 저장
+    try {
+      const cardId = generateCardId();
+      await db.collection('cards').doc(validTenantId).set({
+        tenantId: validTenantId,
+        userId: userIdForHistory || '',
+        email,
+        brandName: brandName || null,
+        cards: [{
+          id: cardId,
+          billingKey,
+          cardInfo: billingResponse.card || null,
+          alias: null,
+          isPrimary: true,
+          createdAt: now,
+        }],
+        updatedAt: now,
+      });
+
+      // subscription에 primaryCardId 추가
+      await db.collection('subscriptions').doc(validTenantId).update({
+        primaryCardId: cardId,
+      });
+      console.log('✅ Card saved to cards collection:', validTenantId);
+    } catch (cardSaveError) {
+      console.error('Failed to save card:', cardSaveError);
+      // 카드 저장 실패해도 결제는 완료됨
     }
 
     // n8n 웹훅 호출 (구독 성공 알림)

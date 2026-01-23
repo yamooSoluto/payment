@@ -406,8 +406,8 @@ export async function PUT(request: NextRequest) {
     if (Object.keys(changes).length > 0) {
       await db.collection('admin_logs').add({
         action: 'subscription_update',
-        targetTenantId: tenantId,
-        targetUserId: previousData?.userId || null,
+        tenantId,
+        userId: previousData?.userId || null,
         changes,
         adminId: admin.adminId,
         adminLoginId: admin.loginId,
