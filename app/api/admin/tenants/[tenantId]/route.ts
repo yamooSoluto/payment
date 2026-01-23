@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
+import { INDUSTRIES, IndustryCode } from '@/lib/constants';
 
 // Firestore Timestamp를 ISO 문자열로 변환하는 헬퍼 함수
 function convertTimestamps(data: Record<string, unknown>): Record<string, unknown> {
@@ -209,6 +210,9 @@ export async function PUT(
       // 날짜 문자열을 Date로 변환
       if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)) {
         updateData[key] = new Date(value);
+      } else if (key === 'industry' && typeof value === 'string') {
+        // 업종: 영어 코드를 한글 라벨로 변환해서 저장 (일관성 유지)
+        updateData[key] = INDUSTRIES[value as IndustryCode] || value;
       } else {
         updateData[key] = value;
       }
@@ -239,7 +243,8 @@ export async function PUT(
     // 구독 필드 업데이트 (subscriptions 컬렉션 + tenants.subscription 필드)
     if (Object.keys(subscriptionUpdateData).length > 0) {
       subscriptionUpdateData.updatedAt = FieldValue.serverTimestamp();
-      subscriptionUpdateData.updatedBy = admin.name;
+      subscriptionUpdateData.updatedBy = 'admin';
+      subscriptionUpdateData.updatedByAdminId = admin.adminId;
 
       // 1. subscriptions 컬렉션 업데이트
       const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
@@ -274,7 +279,8 @@ export async function PUT(
       }
       if (Object.keys(tenantSubscriptionUpdate).length > 0) {
         tenantSubscriptionUpdate.updatedAt = FieldValue.serverTimestamp();
-        tenantSubscriptionUpdate.updatedBy = admin.name;
+        tenantSubscriptionUpdate.updatedBy = 'admin';
+        tenantSubscriptionUpdate.updatedByAdminId = admin.adminId;
         await db.collection('tenants').doc(tenantId).update(tenantSubscriptionUpdate);
       }
     }
@@ -282,7 +288,8 @@ export async function PUT(
     // 테넌트 필드 업데이트 (tenants 컬렉션)
     if (Object.keys(updateData).length > 0) {
       updateData.updatedAt = FieldValue.serverTimestamp();
-      updateData.updatedBy = admin.name;
+      updateData.updatedBy = 'admin';
+      updateData.updatedByAdminId = admin.adminId;
       await db.collection('tenants').doc(tenantId).update(updateData);
     }
 
@@ -293,6 +300,8 @@ export async function PUT(
         await db.collection('subscriptions').doc(tenantId).update({
           brandName: body.brandName,
           updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: 'admin',
+          updatedByAdminId: admin.adminId,
         });
       }
     }
@@ -315,12 +324,22 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
-  const db = adminDb || initializeFirebaseAdmin();
-  if (!db) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(admin, 'tenants:write')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+    }
+
     const { tenantId } = await params;
     const body = await request.json();
     const { brandName, industry } = body;
@@ -335,6 +354,7 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: 'admin',
+      updatedByAdminId: admin.adminId,
     };
 
     if (brandName && typeof brandName === 'string' && brandName.trim() !== '') {
@@ -342,7 +362,9 @@ export async function PATCH(
     }
 
     if (industry && typeof industry === 'string') {
-      updateData.industry = industry;
+      // 영어 코드를 한글 라벨로 변환해서 저장 (일관성 유지)
+      const industryLabel = INDUSTRIES[industry as IndustryCode] || industry;
+      updateData.industry = industryLabel;
     }
 
     await db.collection('tenants').doc(tenantId).update(updateData);
@@ -354,6 +376,8 @@ export async function PATCH(
         await db.collection('subscriptions').doc(tenantId).update({
           brandName: updateData.brandName,
           updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: 'admin',
+          updatedByAdminId: admin.adminId,
         });
       }
     }

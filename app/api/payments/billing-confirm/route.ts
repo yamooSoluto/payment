@@ -211,64 +211,10 @@ export async function GET(request: NextRequest) {
 
       const now = new Date();
 
-      // 1. subscriptions 컬렉션에서 조회
+      // subscriptions 컬렉션에서 조회
       const subscriptionRef = db.collection('subscriptions').doc(validTenantId);
-      let subscriptionDoc = await subscriptionRef.get();
-      let subscriptionData = subscriptionDoc.exists ? subscriptionDoc.data() : null;
-
-      // 2. subscriptions 컬렉션에 없으면 tenants 컬렉션에서 조회 (폴백)
-      if (!subscriptionData) {
-        const tenantSnapshot = await db
-          .collection('tenants')
-          .where('tenantId', '==', validTenantId)
-          .limit(1)
-          .get();
-
-        if (!tenantSnapshot.empty) {
-          const tenantData = tenantSnapshot.docs[0].data();
-
-          if (tenantData.subscription) {
-            // tenants 컬렉션의 subscription을 subscriptions 형식으로 변환
-            let trialEndDate = tenantData.trialEndsAt || tenantData.subscription?.trial?.trialEndsAt;
-            let startDate = tenantData.subscription.startedAt;
-
-            // startDate를 Date 객체로 변환
-            if (startDate && startDate.toDate) {
-              startDate = startDate.toDate();
-            } else if (startDate && startDate._seconds) {
-              startDate = new Date(startDate._seconds * 1000);
-            }
-
-            // trialEndDate를 Date 객체로 변환
-            if (trialEndDate && trialEndDate.toDate) {
-              trialEndDate = trialEndDate.toDate();
-            } else if (trialEndDate && trialEndDate._seconds) {
-              trialEndDate = new Date(trialEndDate._seconds * 1000);
-            }
-
-            subscriptionData = {
-              tenantId: validTenantId,
-              userId: tenantData.userId || null, // userId 추가
-              email: tenantData.email || email,
-              brandName: tenantData.brandName,
-              name: tenantData.name,
-              phone: tenantData.phone,
-              plan: tenantData.subscription.plan || tenantData.plan || 'trial',
-              status: tenantData.subscription.status === 'trialing' ? 'trial' : tenantData.subscription.status,
-              trialEndDate,
-              currentPeriodStart: startDate,
-              currentPeriodEnd: trialEndDate || tenantData.subscription.renewsAt,
-              nextBillingDate: tenantData.subscription.renewsAt,
-              createdAt: tenantData.createdAt || now,
-              updatedAt: now,
-            };
-
-            // subscriptions 컬렉션에 문서 생성
-            await subscriptionRef.set(subscriptionData);
-            console.log('Created subscription document from tenants collection data');
-          }
-        }
-      }
+      const subscriptionDoc = await subscriptionRef.get();
+      const subscriptionData = subscriptionDoc.exists ? subscriptionDoc.data() : null;
 
       if (!subscriptionData) {
         const authQuery = authParam ? `&${authParam}` : '';

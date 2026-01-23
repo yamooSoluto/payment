@@ -134,18 +134,10 @@ export async function POST(request: NextRequest) {
     const tenantUpdateData: Record<string, unknown> = {};
     if (newStatus) {
       tenantUpdateData['subscription.status'] = newStatus;
-      tenantUpdateData['status'] = newStatus;
     }
     if (updates?.plan) {
       tenantUpdateData['subscription.plan'] = updates.plan;
       tenantUpdateData['plan'] = updates.plan;
-    }
-    if (updates?.currentPeriodStart) {
-      tenantUpdateData['subscription.startedAt'] = new Date(updates.currentPeriodStart);
-    }
-    // renewsAt은 nextBillingDate와 매핑됨 (currentPeriodEnd 아님)
-    if (updates?.nextBillingDate) {
-      tenantUpdateData['subscription.renewsAt'] = new Date(updates.nextBillingDate);
     }
 
     if (Object.keys(tenantUpdateData).length > 0) {

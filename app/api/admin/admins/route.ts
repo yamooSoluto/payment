@@ -88,8 +88,10 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해싱
     const passwordHash = await hashPassword(password);
 
-    // 운영진 생성
-    const docRef = await db.collection('admins').add({
+    // 운영진 생성 (문서 ID를 먼저 생성하여 adminId로도 저장)
+    const docRef = db.collection('admins').doc();
+    await docRef.set({
+      adminId: docRef.id,
       username,
       passwordHash,
       name,

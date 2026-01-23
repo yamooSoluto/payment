@@ -61,6 +61,8 @@ export async function PATCH(
     await db.collection('tenants').doc(tenantId).update({
       brandName: brandName.trim(),
       updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     // subscriptions 컬렉션에도 brandName 업데이트 (존재하는 경우)
@@ -69,6 +71,8 @@ export async function PATCH(
       await db.collection('subscriptions').doc(tenantId).update({
         brandName: brandName.trim(),
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'user',
+        updatedByAdminId: null,
       });
     }
 

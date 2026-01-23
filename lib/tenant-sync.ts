@@ -56,7 +56,6 @@ export async function syncSubscriptionToTenant(
     }
     if (subscription.status !== undefined) {
       updateData['subscription.status'] = subscription.status;
-      updateData['status'] = subscription.status; // 최상위 status 필드도 업데이트
     }
 
     await docRef.update(updateData);

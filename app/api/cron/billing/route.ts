@@ -45,170 +45,171 @@ export async function GET(request: NextRequest) {
       const subscription = doc.data();
       const tenantId = doc.id;
       const trialEndDate = subscription.trialEndDate?.toDate?.() || subscription.trialEndDate;
+      const pendingChangeAt = subscription.pendingChangeAt?.toDate?.() || subscription.pendingChangeAt;
 
-      if (trialEndDate && new Date(trialEndDate) <= today) {
-        // pendingPlan이 있으면 자동 전환
-        if (subscription.pendingPlan && subscription.billingKey) {
-          try {
-            const plan = subscription.pendingPlan;
-            const amount = subscription.pendingAmount || 0;
-            const billingKey = subscription.billingKey;
-            const email = subscription.email;
+      // 1. pendingPlan이 있고 pendingChangeAt이 오늘 이전이면: 예약된 플랜 결제
+      if (subscription.pendingPlan && subscription.billingKey && pendingChangeAt && new Date(pendingChangeAt) <= today) {
+        try {
+          const plan = subscription.pendingPlan;
+          const amount = subscription.pendingAmount || 0;
+          const billingKey = subscription.billingKey;
+          const email = subscription.email;
 
-            // 멱등성 키 생성 (날짜 기반)
-            const idempotencyKey = generateIdempotencyKey('TRIAL_CONVERT', tenantId);
+          // 멱등성 키 생성 (날짜 기반)
+          const idempotencyKey = generateIdempotencyKey('TRIAL_CONVERT', tenantId);
 
-            // 이미 오늘 처리된 결제가 있으면 스킵
-            const existingPayment = await findExistingPayment(db, idempotencyKey);
-            if (existingPayment) {
-              console.log(`Trial conversion already processed today for ${tenantId}, skipping`);
-              convertedTrials.push({ tenantId, plan });
-              continue;
-            }
+          // 이미 오늘 처리된 결제가 있으면 스킵
+          const existingPayment = await findExistingPayment(db, idempotencyKey);
+          if (existingPayment) {
+            console.log(`Trial conversion already processed today for ${tenantId}, skipping`);
+            convertedTrials.push({ tenantId, plan });
+            continue;
+          }
 
-            // 첫 결제 수행
-            const orderId = `SUB_${Date.now()}`;
-            const brandName = subscription.brandName || '';
-            const orderName = brandName
-              ? `YAMOO ${getPlanName(plan)} 플랜 (${brandName})`
-              : `YAMOO ${getPlanName(plan)} 플랜`;
+          // 첫 결제 수행
+          const orderId = `SUB_${Date.now()}`;
+          const brandName = subscription.brandName || '';
+          const orderName = brandName
+            ? `YAMOO ${getPlanName(plan)} 플랜 (${brandName})`
+            : `YAMOO ${getPlanName(plan)} 플랜`;
 
-            const paymentResponse = await payWithBillingKey(
-              billingKey,
-              email,
+          const paymentResponse = await payWithBillingKey(
+            billingKey,
+            email,
+            amount,
+            orderId,
+            orderName,
+            email
+          );
+
+          // 구독 업데이트
+          const now = new Date();
+          const nextBillingDate = new Date(now);
+          nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+          // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
+          const currentPeriodEnd = new Date(nextBillingDate);
+          currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
+
+          // 플랜 기본 가격 조회
+          const planInfo = await getPlanById(plan);
+          const baseAmount = planInfo?.price || amount;
+
+          await db.runTransaction(async (transaction) => {
+            // 구독 상태 변경
+            transaction.update(doc.ref, {
+              plan,
+              status: 'active',
               amount,
-              orderId,
-              orderName,
-              email
-            );
-
-            // 구독 업데이트
-            const now = new Date();
-            const nextBillingDate = new Date(now);
-            nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-
-            // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
-            const currentPeriodEnd = new Date(nextBillingDate);
-            currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
-
-            // 플랜 기본 가격 조회
-            const planInfo = await getPlanById(plan);
-            const baseAmount = planInfo?.price || amount;
-
-            await db.runTransaction(async (transaction) => {
-              // 구독 상태 변경
-              transaction.update(doc.ref, {
-                plan,
-                status: 'active',
-                amount,
-                baseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
-                currentPeriodStart: now,
-                currentPeriodEnd,
-                nextBillingDate,
-                pendingPlan: null,
-                pendingAmount: null,
-                pendingChangeAt: null,
-                updatedAt: now,
-              });
-
-              // 결제 내역 저장 (멱등성 키 포함)
-              const paymentRef = db.collection('payments').doc(`${orderId}_${Date.now()}`);
-              transaction.set(paymentRef, {
-                tenantId,
-                userId: subscription.userId || '',
-                email,
-                orderId,
-                orderName,
-                paymentKey: paymentResponse.paymentKey,
-                amount,
-                plan,
-                category: 'subscription',
-                type: 'trial_convert',
-                transactionType: 'charge',
-                initiatedBy: 'system',
-                status: 'done',
-                method: paymentResponse.method,
-                cardInfo: paymentResponse.card || null,
-                receiptUrl: paymentResponse.receipt?.url || null,
-                idempotencyKey,
-                paidAt: now,
-                createdAt: now,
-              });
+              baseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
+              currentPeriodStart: now,
+              currentPeriodEnd,
+              nextBillingDate,
+              pendingPlan: null,
+              pendingAmount: null,
+              pendingChangeAt: null,
+              updatedAt: now,
             });
 
-            // tenants 컬렉션 동기화
-            const { syncNewSubscription } = await import('@/lib/tenant-sync');
-            await syncNewSubscription(tenantId, plan, nextBillingDate);
-
-            // subscription_history에 기록 추가
-            try {
-              await handleSubscriptionChange(db, {
-                tenantId,
-                userId: subscription.userId || '',
-                email,
-                brandName,
-                newPlan: plan,
-                newStatus: 'active',
-                amount,
-                periodStart: now,
-                periodEnd: currentPeriodEnd,
-                billingDate: now,
-                changeType: 'new',
-                changedBy: 'system',
-                previousPlan: 'trial',
-                previousStatus: 'trial',
-              });
-            } catch (historyError) {
-              console.error('Failed to record subscription history:', historyError);
-            }
-
-            convertedTrials.push({ tenantId, plan });
-            console.log(`✅ Trial converted to ${plan}: ${tenantId}`);
-          } catch (error) {
-            console.error(`Trial conversion failed for ${tenantId}:`, error);
-          }
-        } else {
-          // pendingPlan 없으면 expired 상태로 변경
-          await db.collection('subscriptions').doc(tenantId).update({
-            status: 'expired',
-            expiredAt: new Date(),
-            updatedAt: new Date(),
+            // 결제 내역 저장 (멱등성 키 포함)
+            const paymentRef = db.collection('payments').doc(`${orderId}_${Date.now()}`);
+            transaction.set(paymentRef, {
+              tenantId,
+              userId: subscription.userId || '',
+              email,
+              orderId,
+              orderName,
+              paymentKey: paymentResponse.paymentKey,
+              amount,
+              plan,
+              category: 'subscription',
+              type: 'trial_convert',
+              transactionType: 'charge',
+              initiatedBy: 'system',
+              status: 'done',
+              method: paymentResponse.method,
+              cardInfo: paymentResponse.card || null,
+              receiptUrl: paymentResponse.receipt?.url || null,
+              idempotencyKey,
+              paidAt: now,
+              createdAt: now,
+            });
           });
 
           // tenants 컬렉션 동기화
-          await syncTrialExpired(tenantId);
+          const { syncNewSubscription } = await import('@/lib/tenant-sync');
+          await syncNewSubscription(tenantId, plan, nextBillingDate);
 
-          // subscription_history 상태 업데이트
+          // subscription_history에 기록 추가
           try {
-            await updateCurrentHistoryStatus(db, tenantId, 'expired', {
-              periodEnd: new Date(),
-              note: 'Trial expired without conversion',
+            await handleSubscriptionChange(db, {
+              tenantId,
+              userId: subscription.userId || '',
+              email,
+              brandName,
+              newPlan: plan,
+              newStatus: 'active',
+              amount,
+              periodStart: now,
+              periodEnd: currentPeriodEnd,
+              billingDate: now,
+              changeType: 'new',
+              changedBy: 'system',
+              previousPlan: 'trial',
+              previousStatus: 'trial',
             });
           } catch (historyError) {
-            console.error('Failed to update subscription history:', historyError);
+            console.error('Failed to record subscription history:', historyError);
           }
 
-          // N8N 웹훅 알림
-          if (isN8NNotificationEnabled()) {
-            try {
-              await fetch(process.env.N8N_WEBHOOK_URL!, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  event: 'trial_expired',
-                  tenantId,
-                  email: subscription.email,
-                  trialEndDate: trialEndDate,
-                }),
-              });
-            } catch {
-              // 웹훅 실패 무시
-            }
-          }
-
-          expiredTrials.push({ tenantId, email: subscription.email });
-          console.log(`⏸️ Trial expired without pending plan: ${tenantId}`);
+          convertedTrials.push({ tenantId, plan });
+          console.log(`✅ Trial converted to ${plan}: ${tenantId}`);
+        } catch (error) {
+          console.error(`Trial conversion failed for ${tenantId}:`, error);
         }
+      }
+      // 2. pendingPlan이 없고 trialEndDate가 오늘 이전이면: 만료 처리
+      else if (trialEndDate && new Date(trialEndDate) < today) {
+        // expired 상태로 변경
+        await db.collection('subscriptions').doc(tenantId).update({
+          status: 'expired',
+          expiredAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        // tenants 컬렉션 동기화
+        await syncTrialExpired(tenantId);
+
+        // subscription_history 상태 업데이트
+        try {
+          await updateCurrentHistoryStatus(db, tenantId, 'expired', {
+            periodEnd: new Date(),
+            note: 'Trial expired without conversion',
+          });
+        } catch (historyError) {
+          console.error('Failed to update subscription history:', historyError);
+        }
+
+        // N8N 웹훅 알림
+        if (isN8NNotificationEnabled()) {
+          try {
+            await fetch(process.env.N8N_WEBHOOK_URL!, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'trial_expired',
+                tenantId,
+                email: subscription.email,
+                trialEndDate: trialEndDate,
+              }),
+            });
+          } catch {
+            // 웹훅 실패 무시
+          }
+        }
+
+        expiredTrials.push({ tenantId, email: subscription.email });
+        console.log(`⏸️ Trial expired without pending plan: ${tenantId}`);
       }
     }
 

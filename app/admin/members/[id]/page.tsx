@@ -1241,10 +1241,19 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         return;
       }
 
-      // 구독 정보가 있거나 상태가 설정된 경우 구독 정보도 업데이트
+      // 구독 정보가 실제로 변경되었는지 확인
       currentProgress = 60;
       setSaveTenantProgress(currentProgress);
-      if (tenantDetailForm.status) {
+      const originalSub = tenantDetailModal.tenant.subscription;
+      const subscriptionChanged =
+        tenantDetailForm.plan !== (originalSub?.plan || 'basic') ||
+        tenantDetailForm.status !== (originalSub?.status || '') ||
+        tenantDetailForm.currentPeriodStart !== (originalSub?.currentPeriodStart?.split('T')[0] || '') ||
+        tenantDetailForm.currentPeriodEnd !== (originalSub?.currentPeriodEnd?.split('T')[0] || '') ||
+        tenantDetailForm.nextBillingDate !== (originalSub?.nextBillingDate?.split('T')[0] || '');
+
+      // 구독 정보가 변경된 경우에만 구독 API 호출 (불필요한 히스토리 기록 방지)
+      if (tenantDetailForm.status && subscriptionChanged) {
         const subResponse = await fetch(`/api/admin/subscriptions/${tenantDetailModal.tenant.tenantId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

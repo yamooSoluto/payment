@@ -114,9 +114,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 회원 정보 추가
+    // 매장 정보 조회 (최신 brandName 가져오기)
+    const uniqueTenantIds = [...new Set(allRecords.map(r => r.tenantId).filter(Boolean))];
+    const tenantMap = new Map<string, { brandName: string }>();
+
+    if (uniqueTenantIds.length > 0) {
+      const batchSize = 30;
+      for (let i = 0; i < uniqueTenantIds.length; i += batchSize) {
+        const batch = uniqueTenantIds.slice(i, i + batchSize);
+        const tenantRefs = batch.map(tenantId => db.collection('tenants').doc(tenantId));
+        const tenantDocs = await db.getAll(...tenantRefs);
+
+        tenantDocs.forEach((doc, index) => {
+          if (doc.exists) {
+            const tenantData = doc.data();
+            tenantMap.set(batch[index], {
+              brandName: tenantData?.brandName || '',
+            });
+          }
+        });
+      }
+    }
+
+    // 회원 정보 + 최신 매장명 추가
     const recordsWithMember = allRecords.map(record => ({
       ...record,
+      brandName: tenantMap.get(record.tenantId)?.brandName || record.brandName,
       memberName: userMap.get(record.email)?.name || '',
       memberPhone: userMap.get(record.email)?.phone || '',
     }));

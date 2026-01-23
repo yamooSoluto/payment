@@ -468,14 +468,13 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-      // tenants 컬렉션에 필수 필드만 동기화 (userId, plan, status)
+      // tenants 컬렉션에 필수 필드만 동기화 (userId, plan, subscription.status)
       try {
         await db.collection('tenants').doc(tenantId).update({
           userId,
           'subscription.plan': 'trial',
           'subscription.status': 'trial',
           plan: 'trial',
-          status: 'trial',
           updatedAt: now,
         });
       } catch (syncError) {

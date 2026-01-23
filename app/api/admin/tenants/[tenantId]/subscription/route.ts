@@ -57,18 +57,10 @@ export async function PATCH(
     const existingData = subscriptionDoc.data();
     await subscriptionRef.update(updateData);
 
-    // tenants 컬렉션에 변경사항 동기화
+    // tenants 컬렉션에 필수 필드만 동기화 (subscription.status)
     const tenantUpdateData: Record<string, unknown> = {};
     if (status !== undefined) {
       tenantUpdateData['subscription.status'] = status;
-      tenantUpdateData['status'] = status;
-    }
-    if (currentPeriodStart !== undefined) {
-      tenantUpdateData['subscription.startedAt'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
-    }
-    // renewsAt은 nextBillingDate와 매핑됨 (currentPeriodEnd 아님)
-    if (nextBillingDate !== undefined) {
-      tenantUpdateData['subscription.renewsAt'] = nextBillingDate ? new Date(nextBillingDate) : null;
     }
 
     if (Object.keys(tenantUpdateData).length > 0) {

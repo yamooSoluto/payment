@@ -182,9 +182,8 @@ export async function POST(request: Request) {
             periodEnd = parseDate(subData?.currentPeriodEnd) || parseDate(subData?.trialEndDate);
           }
 
-          if (!periodStart && tData.subscription) {
-            periodStart = parseDate(tData.subscription.startedAt) || parseDate(tData.createdAt);
-            periodEnd = parseDate(tData.subscription.trialEndsAt) || parseDate(tData.trialEndsAt);
+          if (!periodStart) {
+            periodStart = parseDate(tData.createdAt);
           }
 
           trialHistoryInfo = {
@@ -271,16 +270,12 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    // tenant에도 subscription 정보 + userId 업데이트
+    // tenant에도 subscription 정보 + userId 업데이트 (최소화된 필드만)
     await db.collection('tenants').doc(tenantSnapshot.docs[0].id).update({
-      userId, // userId 추가
-      subscription: {
-        plan: 'trial',
-        status: 'trial',
-        startedAt: now,
-        trialEndsAt: trialEndDate,
-      },
-      trialEndsAt: trialEndDate,
+      userId,
+      'subscription.plan': 'trial',
+      'subscription.status': 'trial',
+      plan: 'trial',
       updatedAt: now,
     });
 
