@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { StatsUpSquare, Calendar, CreditCards, Timer, Group, HomeSimpleDoor, ChatBubble } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import {
@@ -140,11 +141,27 @@ function StatCard({
 }
 
 export default function StatsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('revenue');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const validTabs: TabType[] = ['revenue', 'subscription', 'member', 'tenant', 'cs'];
+  const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'revenue';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [period, setPeriod] = useState<PeriodType>('thisMonth');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
 
   // 각 탭별 데이터
   const [revenueData, setRevenueData] = useState<RevenueStats | null>(null);
@@ -626,7 +643,7 @@ export default function StatsPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2 px-4 sm:px-6 py-4 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex-none ${activeTab === tab.id
                     ? 'text-blue-600 border-blue-600'
                     : 'text-gray-500 border-transparent hover:text-gray-700'

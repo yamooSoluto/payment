@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Package, Plus, EditPencil, Trash, RefreshDouble, Xmark, Check, Menu, ViewGrid, Eye, Link as LinkIcon, Copy, Search, User } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import {
@@ -259,8 +260,23 @@ function SortablePlanCard({
 }
 
 export default function PlansPage() {
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState<'plans' | 'links'>('plans');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  type TabType = 'plans' | 'links';
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const initialTab = tabFromUrl === 'links' ? 'links' : 'plans';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
 
   // 플랜 관련 상태
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -871,7 +887,7 @@ export default function PlansPage() {
       <div className="border-b border-gray-200">
         <nav className="flex gap-4">
           <button
-            onClick={() => setActiveTab('plans')}
+            onClick={() => handleTabChange('plans')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'plans'
                 ? 'border-blue-600 text-blue-600'
@@ -885,7 +901,7 @@ export default function PlansPage() {
           </button>
           <button
             onClick={() => {
-              setActiveTab('links');
+              handleTabChange('links');
               if (customLinks.length === 0 && !linksLoading) {
                 fetchCustomLinks(showDisabledLinks);
               }

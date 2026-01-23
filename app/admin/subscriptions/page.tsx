@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Timer, NavArrowLeft, NavArrowRight, Edit, Xmark, Check, Search, Filter, Download, Calendar, PageFlip, Spark, RefreshDouble, SortUp, SortDown } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
@@ -56,7 +57,22 @@ interface Pagination {
 }
 
 export default function SubscriptionsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('active');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(
+    tabFromUrl === 'history' ? 'history' : 'active'
+  );
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
 
   // === 활성 탭 상태 ===
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -445,7 +461,7 @@ export default function SubscriptionsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 sticky left-0">
         <div className="flex border-b border-gray-100">
           <button
-            onClick={() => setActiveTab('active')}
+            onClick={() => handleTabChange('active')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
               activeTab === 'active'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
@@ -456,7 +472,7 @@ export default function SubscriptionsPage() {
             활성
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => handleTabChange('history')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
               activeTab === 'history'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'

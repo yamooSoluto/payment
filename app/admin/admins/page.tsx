@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 
@@ -73,9 +74,25 @@ interface RolePermissions {
 }
 
 export default function AdminsPage() {
-  const [activeTab, setActiveTab] = useState<'list' | 'permissions'>('list');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  type TabType = 'list' | 'permissions';
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const initialTab = tabFromUrl === 'permissions' ? 'permissions' : 'list';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
   const [showModal, setShowModal] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
   const [saving, setSaving] = useState(false);
@@ -318,7 +335,7 @@ export default function AdminsPage() {
       {/* 탭 */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('list')}
+          onClick={() => handleTabChange('list')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'list'
               ? 'text-blue-600 border-blue-600'
@@ -329,7 +346,7 @@ export default function AdminsPage() {
           관리자 목록
         </button>
         <button
-          onClick={() => setActiveTab('permissions')}
+          onClick={() => handleTabChange('permissions')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'permissions'
               ? 'text-blue-600 border-blue-600'

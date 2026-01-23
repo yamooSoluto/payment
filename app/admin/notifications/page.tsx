@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Mail, Plus, EditPencil, Trash, RefreshDouble, Xmark, Flash, Send, Clock, NavArrowLeft, NavArrowRight, Search } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import { MEMBER_GROUP_OPTIONS, MEMBER_GROUPS, MemberGroupCode } from '@/lib/constants';
@@ -59,8 +60,23 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
 ];
 
 export default function NotificationsPage() {
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState<'sms' | 'alimtalk'>('sms');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  type TabType = 'sms' | 'alimtalk';
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const initialTab = tabFromUrl === 'alimtalk' ? 'alimtalk' : 'sms';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
 
   // ===== SMS 관련 상태 =====
   const [smsHistory, setSmsHistory] = useState<SmsHistory[]>([]);
@@ -456,7 +472,7 @@ export default function NotificationsPage() {
       <div className="border-b border-gray-200">
         <nav className="flex gap-8">
           <button
-            onClick={() => setActiveTab('sms')}
+            onClick={() => handleTabChange('sms')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'sms'
                 ? 'border-blue-600 text-blue-600'
@@ -466,7 +482,7 @@ export default function NotificationsPage() {
             SMS
           </button>
           <button
-            onClick={() => setActiveTab('alimtalk')}
+            onClick={() => handleTabChange('alimtalk')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'alimtalk'
                 ? 'border-blue-600 text-blue-600'

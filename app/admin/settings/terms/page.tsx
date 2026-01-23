@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Page, Check, Eye, Xmark, Clock, Calendar, Trash } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -298,8 +299,23 @@ function HistoryModal({
 }
 
 export default function TermsSettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('terms');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URL에서 탭 상태 읽기
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const initialTab = tabFromUrl === 'privacy' ? 'privacy' : 'terms';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [showPreview, setShowPreview] = useState(false);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
   const [showHistory, setShowHistory] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [termsContent, setTermsContent] = useState('');
@@ -617,7 +633,7 @@ export default function TermsSettingsPage() {
         {/* 탭 */}
         <div className="flex flex-col sm:flex-row border-b border-gray-200">
           <button
-            onClick={() => setActiveTab('terms')}
+            onClick={() => handleTabChange('terms')}
             className={`flex-1 px-4 sm:px-6 py-3 sm:py-4 font-medium transition-colors flex items-center justify-between ${activeTab === 'terms'
                 ? 'text-blue-600 border-l-4 sm:border-l-0 sm:border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'
@@ -639,7 +655,7 @@ export default function TermsSettingsPage() {
             </button>
           </button>
           <button
-            onClick={() => setActiveTab('privacy')}
+            onClick={() => handleTabChange('privacy')}
             className={`flex-1 px-4 sm:px-6 py-3 sm:py-4 font-medium transition-colors flex items-center justify-between ${activeTab === 'privacy'
                 ? 'text-blue-600 border-l-4 sm:border-l-0 sm:border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-500 hover:text-gray-700'

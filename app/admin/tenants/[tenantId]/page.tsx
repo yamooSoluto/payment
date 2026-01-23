@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
@@ -139,11 +139,25 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
 export default function TenantDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const tenantId = params.tenantId as string;
+
+  // URL에서 탭 상태 읽기
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const validTabs: TabType[] = ['basic', 'ai', 'integrations', 'payments', 'subscription'];
+  const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'basic';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('basic');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
   const [tenant, setTenant] = useState<Record<string, unknown>>({});
   const [subscription, setSubscription] = useState<Record<string, unknown> | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -617,7 +631,7 @@ export default function TenantDetailPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="flex border-b border-gray-100 overflow-x-auto">
           <button
-            onClick={() => setActiveTab('basic')}
+            onClick={() => handleTabChange('basic')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'basic'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
@@ -628,7 +642,7 @@ export default function TenantDetailPage() {
             기본 정보
           </button>
           <button
-            onClick={() => setActiveTab('ai')}
+            onClick={() => handleTabChange('ai')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'ai'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
@@ -639,7 +653,7 @@ export default function TenantDetailPage() {
             AI 설정
           </button>
           <button
-            onClick={() => setActiveTab('integrations')}
+            onClick={() => handleTabChange('integrations')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'integrations'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
@@ -650,7 +664,7 @@ export default function TenantDetailPage() {
             연동 설정
           </button>
           <button
-            onClick={() => setActiveTab('payments')}
+            onClick={() => handleTabChange('payments')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'payments'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
@@ -661,7 +675,7 @@ export default function TenantDetailPage() {
             결제
           </button>
           <button
-            onClick={() => setActiveTab('subscription')}
+            onClick={() => handleTabChange('subscription')}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'subscription'
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
