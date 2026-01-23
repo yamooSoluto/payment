@@ -2,11 +2,10 @@ import { adminDb, initializeFirebaseAdmin } from './firebase-admin';
 
 /**
  * tenants 컬렉션의 subscription 필드 구조
+ * 최소 필드만 동기화 (상세 정보는 subscriptions 컬렉션에서 조회)
  */
 export interface TenantSubscription {
   plan: string;        // 'trial' | 'basic' | 'business'
-  renewsAt: Date;      // 다음 결제일
-  startedAt: Date;     // 구독 시작일
   status: string;      // 'active' | 'canceled' | 'past_due' | 'trial' | 'expired' | 'suspended'
 }
 
@@ -47,17 +46,13 @@ export async function syncSubscriptionToTenant(
       docRef = snapshot.docs[0].ref;
     }
 
+    // 최소 필드만 동기화 (plan, status)
+    // 상세 정보(startedAt, renewsAt, currentPeriod 등)는 subscriptions 컬렉션에서 조회
     const updateData: Record<string, unknown> = {};
 
     if (subscription.plan !== undefined) {
       updateData['subscription.plan'] = subscription.plan;
       updateData['plan'] = subscription.plan; // 최상위 plan 필드도 업데이트
-    }
-    if (subscription.renewsAt !== undefined) {
-      updateData['subscription.renewsAt'] = subscription.renewsAt;
-    }
-    if (subscription.startedAt !== undefined) {
-      updateData['subscription.startedAt'] = subscription.startedAt;
     }
     if (subscription.status !== undefined) {
       updateData['subscription.status'] = subscription.status;
@@ -75,38 +70,35 @@ export async function syncSubscriptionToTenant(
 }
 
 /**
- * 신규 구독 생성 시 tenants에 반영
+ * 신규 구독 생성 시 tenants에 반영 (plan, status만 동기화)
  */
 export async function syncNewSubscription(
   tenantId: string,
   plan: string,
-  nextBillingDate: Date
+  _nextBillingDate: Date // 미사용 (subscriptions에서 조회)
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
     status: 'active',
-    startedAt: new Date(),
-    renewsAt: nextBillingDate,
   });
 }
 
 /**
- * 플랜 변경 시 tenants에 반영
+ * 플랜 변경 시 tenants에 반영 (plan, status 동기화)
  */
 export async function syncPlanChange(
   tenantId: string,
   newPlan: string,
-  renewsAt?: Date
+  _renewsAt?: Date // 미사용 (subscriptions에서 조회)
 ): Promise<boolean> {
   if (!tenantId) return false;
 
-  const update: Partial<TenantSubscription> = { plan: newPlan };
-  if (renewsAt) {
-    update.renewsAt = renewsAt;
-  }
-  return syncSubscriptionToTenant(tenantId, update);
+  return syncSubscriptionToTenant(tenantId, {
+    plan: newPlan,
+    status: 'active',
+  });
 }
 
 /**
@@ -136,34 +128,34 @@ export async function syncSubscriptionPendingCancel(
 }
 
 /**
- * 구독 재활성화 시 tenants에 반영
+ * 구독 재활성화 시 tenants에 반영 (plan, status만 동기화)
  */
 export async function syncSubscriptionReactivation(
   tenantId: string,
   plan: string,
-  renewsAt: Date
+  _renewsAt: Date // 미사용 (subscriptions에서 조회)
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
     status: 'active',
-    renewsAt,
   });
 }
 
 /**
- * 정기 결제 성공 시 tenants에 반영
+ * 정기 결제 성공 시 tenants에 반영 (plan, status 동기화)
  */
 export async function syncPaymentSuccess(
   tenantId: string,
-  nextBillingDate: Date
+  plan: string,
+  _nextBillingDate?: Date // 미사용 (subscriptions에서 조회)
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
+    plan,
     status: 'active',
-    renewsAt: nextBillingDate,
   });
 }
 

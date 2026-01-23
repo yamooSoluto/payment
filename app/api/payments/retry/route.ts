@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       });
 
       // tenants 컬렉션에 결제 성공 동기화
-      await syncPaymentSuccess(tenantId, nextBillingDate);
+      await syncPaymentSuccess(tenantId, subscription.plan, nextBillingDate);
 
       // n8n 웹훅 호출 (재결제 성공 알림)
       if (isN8NNotificationEnabled()) {

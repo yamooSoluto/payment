@@ -608,7 +608,7 @@ export async function GET(request: NextRequest) {
           }
 
           // tenants 컬렉션에 결제 성공 동기화
-          await syncPaymentSuccess(tenantId, nextBillingDate);
+          await syncPaymentSuccess(tenantId, subscription.plan, nextBillingDate);
 
           // subscription_history에 갱신 기록 추가
           try {

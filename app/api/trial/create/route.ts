@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-a
 import { sendAlimtalk } from '@/lib/bizm';
 import crypto from 'crypto';
 import { generateUniqueUserId } from '@/lib/user-utils';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -444,7 +445,8 @@ export async function POST(request: Request) {
     if (tenantId) {
       const now = new Date();
       const trialEndDate = new Date(now);
-      trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
+      trialEndDate.setMonth(trialEndDate.getMonth() + 1); // +1개월
+      trialEndDate.setDate(trialEndDate.getDate() - 1);   // -1일
 
       // currentPeriodEnd는 trialEndDate와 동일
       const currentPeriodEnd = new Date(trialEndDate);
@@ -466,21 +468,39 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-      // tenants 컬렉션에 trial 구독 정보 및 userId 동기화
+      // tenants 컬렉션에 필수 필드만 동기화 (userId, plan, status)
       try {
         await db.collection('tenants').doc(tenantId).update({
-          userId, // userId 추가
+          userId,
           'subscription.plan': 'trial',
           'subscription.status': 'trial',
-          'subscription.startedAt': now,
-          'subscription.trialEndsAt': trialEndDate,
           plan: 'trial',
           status: 'trial',
-          trialEndsAt: trialEndDate,
           updatedAt: now,
         });
       } catch (syncError) {
         console.error('Failed to sync tenant subscription:', syncError);
+      }
+
+      // subscription_history에 기록
+      try {
+        await handleSubscriptionChange(db, {
+          tenantId,
+          userId,
+          email,
+          brandName,
+          newPlan: 'trial',
+          newStatus: 'trial',
+          amount: 0,
+          periodStart: now,
+          periodEnd: trialEndDate,
+          changeType: 'new',
+          changedBy: 'user',
+        });
+        console.log('✅ Subscription history recorded for trial');
+      } catch (historyError) {
+        console.error('Failed to record subscription history:', historyError);
+        // 히스토리 기록 실패해도 신청은 완료됨
       }
 
       console.log(`Trial subscription 생성됨: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);

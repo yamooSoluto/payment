@@ -111,6 +111,16 @@ export default function TenantsPage() {
   const [newFieldSaveToFirestore, setNewFieldSaveToFirestore] = useState(false);
   const [savingSchema, setSavingSchema] = useState(false);
 
+  // 매장 추가 모달 상태
+  const [showAddTenantModal, setShowAddTenantModal] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState<{ email: string; name: string; phone: string }[]>([]);
+  const [searchingMembers, setSearchingMembers] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<{ email: string; name: string; phone: string } | null>(null);
+  const [addTenantForm, setAddTenantForm] = useState({ brandName: '', industry: '' });
+  const [addingTenant, setAddingTenant] = useState(false);
+  const [addTenantProgress, setAddTenantProgress] = useState(0);
+
   // 컬럼 선택 상태
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     // 기본값 설정 (localStorage는 클라이언트에서만 접근)
@@ -275,6 +285,95 @@ export default function TenantsPage() {
     }
   };
 
+  // 회원 검색
+  const handleMemberSearch = async (searchValue: string) => {
+    setMemberSearch(searchValue);
+    if (!searchValue.trim()) {
+      setMemberSearchResults([]);
+      return;
+    }
+
+    setSearchingMembers(true);
+    try {
+      const response = await fetch(`/api/admin/members?search=${encodeURIComponent(searchValue)}&limit=10`);
+      if (response.ok) {
+        const data = await response.json();
+        setMemberSearchResults(data.members.map((m: { email: string; name: string; phone: string }) => ({
+          email: m.email,
+          name: m.name,
+          phone: m.phone,
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to search members:', error);
+    } finally {
+      setSearchingMembers(false);
+    }
+  };
+
+  // 매장 추가
+  const handleAddTenant = async () => {
+    if (!selectedMember) {
+      alert('회원을 선택해주세요.');
+      return;
+    }
+    if (!addTenantForm.brandName.trim() || !addTenantForm.industry) {
+      alert('매장명과 업종을 입력해주세요.');
+      return;
+    }
+
+    setAddingTenant(true);
+    setAddTenantProgress(0);
+
+    // 진행률 시뮬레이션
+    const progressInterval = setInterval(() => {
+      setAddTenantProgress(prev => {
+        if (prev >= 90) return 90;
+        const next = prev + 5 + Math.random() * 10;
+        return Math.min(next, 90);
+      });
+    }, 400);
+
+    try {
+      const response = await fetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: selectedMember.email,
+          brandName: addTenantForm.brandName.trim(),
+          industry: addTenantForm.industry,
+        }),
+      });
+
+      clearInterval(progressInterval);
+      setAddTenantProgress(100);
+
+      const data = await response.json();
+      if (response.ok) {
+        setTimeout(() => {
+          alert('매장이 추가되었습니다.');
+          setShowAddTenantModal(false);
+          setSelectedMember(null);
+          setMemberSearch('');
+          setMemberSearchResults([]);
+          setAddTenantForm({ brandName: '', industry: '' });
+          setAddTenantProgress(0);
+          fetchTenants();
+        }, 300);
+      } else {
+        alert(data.error || '매장 추가에 실패했습니다.');
+        setAddTenantProgress(0);
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      console.error('Failed to add tenant:', error);
+      alert('오류가 발생했습니다.');
+      setAddTenantProgress(0);
+    } finally {
+      setAddingTenant(false);
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('ko-KR');
@@ -359,14 +458,23 @@ export default function TenantsPage() {
           <HomeSimpleDoor className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">매장 관리</h1>
         </div>
-        <button
-          onClick={() => setShowSchemaModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
-          title="커스텀 필드 설정"
-        >
-          <Settings className="w-4 h-4" />
-          <span>필드 설정</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddTenantModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>매장 추가</span>
+          </button>
+          <button
+            onClick={() => setShowSchemaModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors"
+            title="커스텀 필드 설정"
+          >
+            <Settings className="w-4 h-4" />
+            <span>필드 설정</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -794,6 +902,157 @@ export default function TenantsPage() {
           </div>
         )}
       </div>
+
+      {/* 매장 추가 모달 */}
+      {showAddTenantModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">새 매장 추가</h3>
+              <p className="text-sm text-gray-500 mt-1">회원을 선택하고 매장 정보를 입력하세요</p>
+            </div>
+            {addingTenant ? (
+              <div className="p-8">
+                <div className="flex flex-col items-center gap-4">
+                  <Spinner size="lg" />
+                  <div className="w-full">
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>매장 생성 중...</span>
+                      <span>{Math.round(addTenantProgress)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${addTenantProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3 text-center">
+                      매장을 생성하고 있습니다
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="p-6 space-y-4">
+                  {/* 회원 선택 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      회원 <span className="text-red-500">*</span>
+                    </label>
+                    {selectedMember ? (
+                      <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-900">{selectedMember.name || '-'}</p>
+                          <p className="text-sm text-gray-500">{selectedMember.phone || '-'} · {selectedMember.email}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedMember(null);
+                            setMemberSearch('');
+                            setMemberSearchResults([]);
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                        >
+                          <Xmark className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={memberSearch}
+                          onChange={(e) => handleMemberSearch(e.target.value)}
+                          placeholder="이름, 연락처, 이메일로 검색..."
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchingMembers && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Spinner size="sm" />
+                          </div>
+                        )}
+                        {memberSearchResults.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                            {memberSearchResults.map((member) => (
+                              <button
+                                key={member.email}
+                                onClick={() => {
+                                  setSelectedMember(member);
+                                  setMemberSearch('');
+                                  setMemberSearchResults([]);
+                                }}
+                                className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                              >
+                                <p className="font-medium text-gray-900">{member.name || '-'}</p>
+                                <p className="text-sm text-gray-500">{member.phone || '-'} · {member.email}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 매장명 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      매장명 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={addTenantForm.brandName}
+                      onChange={(e) => setAddTenantForm({ ...addTenantForm, brandName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="매장 이름을 입력하세요"
+                      disabled={!selectedMember}
+                    />
+                  </div>
+
+                  {/* 업종 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      업종 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={addTenantForm.industry}
+                      onChange={(e) => setAddTenantForm({ ...addTenantForm, industry: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      disabled={!selectedMember}
+                    >
+                      <option value="">업종 선택</option>
+                      {Object.entries(INDUSTRIES).map(([code, label]) => (
+                        <option key={code} value={code}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-3 p-6 border-t border-gray-100">
+                  <button
+                    onClick={() => {
+                      setShowAddTenantModal(false);
+                      setSelectedMember(null);
+                      setMemberSearch('');
+                      setMemberSearchResults([]);
+                      setAddTenantForm({ brandName: '', industry: '' });
+                    }}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleAddTenant}
+                    disabled={!selectedMember || !addTenantForm.brandName.trim() || !addTenantForm.industry}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    매장 추가
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 커스텀 필드 스키마 관리 모달 */}
       {showSchemaModal && (

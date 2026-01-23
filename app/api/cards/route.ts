@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
 
             // tenants 컬렉션 동기화
             const { syncPaymentSuccess } = await import('@/lib/tenant-sync');
-            await syncPaymentSuccess(tenantId, nextBillingDate);
+            await syncPaymentSuccess(tenantId, subscription.plan, nextBillingDate);
 
             // N8N 웹훅 알림
             if (isN8NNotificationEnabled()) {
