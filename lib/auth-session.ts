@@ -49,20 +49,16 @@ export async function createAuthSession(data: {
 
   await db.collection('auth_sessions').doc(sessionId).set(sessionData);
 
-  // 사용자 마지막 로그인 정보 업데이트
-  try {
-    const userRef = db.collection('users').doc(data.email);
-    const userDoc = await userRef.get();
+  // 사용자 마지막 로그인 정보 업데이트 (비동기 - 세션 생성 완료를 기다리지 않음)
+  const userRef = db.collection('users').doc(data.email);
+  userRef.get().then(userDoc => {
     if (userDoc.exists) {
-      await userRef.update({
+      userRef.update({
         lastLoginAt: now,
         ...(data.ip && { lastLoginIP: data.ip }),
-      });
+      }).catch(err => console.error('Failed to update last login info:', err));
     }
-  } catch (error) {
-    // 로그인 정보 업데이트 실패해도 세션 생성은 계속
-    console.error('Failed to update last login info:', error);
-  }
+  }).catch(err => console.error('Failed to get user for login update:', err));
 
   return sessionId;
 }
@@ -87,8 +83,9 @@ export async function getAuthSession(sessionId: string): Promise<AuthSessionData
     : (data.expiresAt as { toDate: () => Date }).toDate?.() || new Date(data.expiresAt as unknown as string);
 
   if (expiresAt < new Date()) {
-    // 만료된 세션 삭제
-    await db.collection('auth_sessions').doc(sessionId).delete();
+    // 만료된 세션 삭제 (비동기 - 삭제 완료를 기다리지 않음)
+    db.collection('auth_sessions').doc(sessionId).delete()
+      .catch(err => console.error('Failed to delete expired session:', err));
     return null;
   }
 
