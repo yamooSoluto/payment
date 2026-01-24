@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash, ArrowsUpFromLine, Calendar, WarningCircle, Settings, Plus } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
+import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription, isSubscriptionActive } from '@/components/admin/subscription';
 
 type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription';
 
@@ -182,16 +183,9 @@ export default function TenantDetailPage() {
   const [historySortOrder, setHistorySortOrder] = useState<'desc' | 'asc'>('desc');
 
 
-  // 구독 수정 모달
-  const [subscriptionEditModal, setSubscriptionEditModal] = useState(false);
-  const [subscriptionEditData, setSubscriptionEditData] = useState({
-    plan: '',
-    status: '',
-    currentPeriodStart: '',
-    currentPeriodEnd: '',
-    nextBillingDate: '',
-  });
-  const [savingSubscription, setSavingSubscription] = useState(false);
+  // 구독 액션 모달
+  const [subscriptionActionModal, setSubscriptionActionModal] = useState(false);
+  const [subscriptionInitialAction, setSubscriptionInitialAction] = useState<SubscriptionActionType | undefined>(undefined);
 
   // 삭제 모달 상태
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -1040,26 +1034,82 @@ export default function TenantDetailPage() {
               {/* 현재 구독 정보 - 카드 UI */}
               {subscription ? (
                 <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-                  {/* 상단: 플랜명 + 가격 */}
+                  {/* 상단: 플랜명 + 가격 + 액션 버튼 */}
                   <div className="px-6 py-5 border-b border-gray-100">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-bold text-gray-900">{getPlanName(subscription.plan)}</h3>
-                      {getSubscriptionStatusBadge(subscription.status)}
-                      <button
-                        onClick={() => {
-                          setSubscriptionEditData({
-                            plan: String(subscription.plan || ''),
-                            status: String(subscription.status || ''),
-                            currentPeriodStart: subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart as string).toISOString().split('T')[0] : '',
-                            currentPeriodEnd: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd as string).toISOString().split('T')[0] : '',
-                            nextBillingDate: subscription.nextBillingDate ? new Date(subscription.nextBillingDate as string).toISOString().split('T')[0] : '',
-                          });
-                          setSubscriptionEditModal(true);
-                        }}
-                        className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                      >
-                        수정
-                      </button>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-bold text-gray-900">{getPlanName(subscription.plan)}</h3>
+                        {getSubscriptionStatusBadge(subscription.status)}
+                      </div>
+                      {/* 액션 버튼들 */}
+                      <div className="flex items-center gap-2">
+                        {isSubscriptionActive(subscription.status as SubscriptionInfo['status']) ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSubscriptionInitialAction('change_plan');
+                                setSubscriptionActionModal(true);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <ArrowsUpFromLine className="w-3.5 h-3.5" />
+                              플랜 변경
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSubscriptionInitialAction('adjust_period');
+                                setSubscriptionActionModal(true);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <Calendar className="w-3.5 h-3.5" />
+                              기간 조정
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSubscriptionInitialAction('cancel');
+                                setSubscriptionActionModal(true);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              <WarningCircle className="w-3.5 h-3.5" />
+                              해지
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSubscriptionInitialAction('advanced');
+                                setSubscriptionActionModal(true);
+                              }}
+                              className="p-1.5 text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                              title="고급 설정"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : canStartSubscription(subscription.status as SubscriptionInfo['status']) ? (
+                          <button
+                            onClick={() => {
+                              setSubscriptionInitialAction('start');
+                              setSubscriptionActionModal(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            구독 시작
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setSubscriptionInitialAction('advanced');
+                              setSubscriptionActionModal(true);
+                            }}
+                            className="p-1.5 text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            title="고급 설정"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-baseline gap-2">
                       {subscription.baseAmount && (subscription.baseAmount as number) !== (subscription.amount as number) ? (
@@ -1131,7 +1181,17 @@ export default function TenantDetailPage() {
                 <div className="border border-gray-200 rounded-xl p-8 text-center bg-gray-50">
                   <RefreshDouble className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-500 font-medium">구독 정보가 없습니다</p>
-                  <p className="text-sm text-gray-400 mt-1">이 매장은 아직 구독을 시작하지 않았습니다.</p>
+                  <p className="text-sm text-gray-400 mt-1 mb-4">이 매장은 아직 구독을 시작하지 않았습니다.</p>
+                  <button
+                    onClick={() => {
+                      setSubscriptionInitialAction('start');
+                      setSubscriptionActionModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    구독 시작
+                  </button>
                 </div>
               )}
 
@@ -1424,142 +1484,23 @@ export default function TenantDetailPage() {
         </div>
       )}
 
-      {/* 구독 수정 모달 */}
-      {subscriptionEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold">구독 정보 수정</h3>
-              <button
-                onClick={() => setSubscriptionEditModal(false)}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <Xmark className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* 플랜 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">플랜</label>
-                <select
-                  value={subscriptionEditData.plan}
-                  onChange={(e) => setSubscriptionEditData(prev => ({ ...prev, plan: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">선택...</option>
-                  <option value="trial">Trial</option>
-                  <option value="basic">Basic</option>
-                  <option value="business">Business</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-
-              {/* 상태 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
-                <select
-                  value={subscriptionEditData.status}
-                  onChange={(e) => setSubscriptionEditData(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">선택...</option>
-                  <option value="active">구독중</option>
-                  <option value="trial">체험</option>
-                  <option value="trialing">체험</option>
-                  <option value="pending_cancel">해지 예정</option>
-                  <option value="canceled">해지</option>
-                  <option value="expired">만료</option>
-                </select>
-              </div>
-
-              {/* 시작일 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">구독 시작일</label>
-                <input
-                  type="date"
-                  value={subscriptionEditData.currentPeriodStart}
-                  onChange={(e) => setSubscriptionEditData(prev => ({ ...prev, currentPeriodStart: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* 종료일 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">구독 종료일</label>
-                <input
-                  type="date"
-                  value={subscriptionEditData.currentPeriodEnd}
-                  onChange={(e) => setSubscriptionEditData(prev => ({ ...prev, currentPeriodEnd: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* 다음 결제일 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">다음 결제일</label>
-                <input
-                  type="date"
-                  value={subscriptionEditData.nextBillingDate}
-                  onChange={(e) => setSubscriptionEditData(prev => ({ ...prev, nextBillingDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={() => setSubscriptionEditModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={async () => {
-                  setSavingSubscription(true);
-                  try {
-                    const response = await fetch(`/api/admin/tenants/${tenantId}`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        'subscription.plan': subscriptionEditData.plan,
-                        'subscription.status': subscriptionEditData.status,
-                        'subscription.currentPeriodStart': subscriptionEditData.currentPeriodStart ? new Date(subscriptionEditData.currentPeriodStart).toISOString() : null,
-                        'subscription.currentPeriodEnd': subscriptionEditData.currentPeriodEnd ? new Date(subscriptionEditData.currentPeriodEnd).toISOString() : null,
-                        'subscription.nextBillingDate': subscriptionEditData.nextBillingDate ? new Date(subscriptionEditData.nextBillingDate).toISOString() : null,
-                      }),
-                    });
-
-                    if (response.ok) {
-                      alert('저장되었습니다.');
-                      setSubscriptionEditModal(false);
-                      await fetchTenantDetail();
-                    } else {
-                      const data = await response.json();
-                      alert(data.error || '저장에 실패했습니다.');
-                    }
-                  } catch {
-                    alert('오류가 발생했습니다.');
-                  } finally {
-                    setSavingSubscription(false);
-                  }
-                }}
-                disabled={savingSubscription}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {savingSubscription ? (
-                  <>
-                    <RefreshDouble className="w-4 h-4 animate-spin" />
-                    저장 중...
-                  </>
-                ) : (
-                  '저장'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 구독 액션 모달 */}
+      <SubscriptionActionModal
+        isOpen={subscriptionActionModal}
+        onClose={() => {
+          setSubscriptionActionModal(false);
+          setSubscriptionInitialAction(undefined);
+        }}
+        tenantId={tenantId}
+        subscription={subscription as SubscriptionInfo | null}
+        tenant={{
+          tenantId,
+          brandName: String(tenant.brandName || ''),
+          email: String(tenant.email || ''),
+        }}
+        initialAction={subscriptionInitialAction}
+        onSuccess={() => fetchTenantDetail(true)}
+      />
 
     </div>
   );

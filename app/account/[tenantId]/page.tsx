@@ -95,25 +95,27 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
     redirect('/error?message=database_unavailable');
   }
 
-  // tenant 정보 조회
-  const tenantSnapshot = await db
-    .collection('tenants')
-    .where('tenantId', '==', tenantId)
-    .get();
+  // 모든 쿼리 병렬 실행 (성능 최적화)
+  const [tenantSnapshot, subscriptionDoc, paymentsSnapshot, rawHistoryData] = await Promise.all([
+    db.collection('tenants').where('tenantId', '==', tenantId).get(),
+    db.collection('subscriptions').doc(tenantId).get(),
+    db.collection('payments').where('tenantId', '==', tenantId).get(),
+    getSubscriptionHistory(db, tenantId),
+  ]);
 
+  // tenant 존재 확인
   if (tenantSnapshot.empty) {
     redirect('/account?error=tenant_not_found');
   }
 
   const tenantData = tenantSnapshot.docs[0].data();
 
-  // 해당 사용자의 매장인지 확인
+  // 해당 사용자의 매장인지 확인 (권한 체크)
   if (tenantData.email !== email) {
     redirect('/account?error=unauthorized');
   }
 
-  // 구독 정보 조회 (subscriptions 컬렉션 우선, 없으면 tenants 컬렉션의 subscription 사용)
-  const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
+  // 구독 정보 처리 (subscriptions 컬렉션 우선, 없으면 tenants 컬렉션의 subscription 사용)
   let rawSubscription = subscriptionDoc.exists ? subscriptionDoc.data() : null;
 
   // subscriptions 컬렉션에 없으면 tenants의 subscription 정보 사용
@@ -158,12 +160,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
     };
   }
 
-  // 결제 내역 조회 (인덱스 없이 클라이언트에서 정렬)
-  const paymentsSnapshot = await db
-    .collection('payments')
-    .where('tenantId', '==', tenantId)
-    .get();
-
+  // 결제 내역 처리
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawPayments = paymentsSnapshot.docs.map((doc) => ({
     id: doc.id,
@@ -178,9 +175,6 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   });
   const limitedPayments = rawPayments.slice(0, 10);
 
-  // 구독 히스토리 조회 (subscription_history 컬렉션)
-  const rawHistoryData = await getSubscriptionHistory(db, tenantId);
-
   // 직렬화
   const subscription = rawSubscription ? serializeData(rawSubscription) : null;
   const payments = serializeData(limitedPayments);
@@ -194,8 +188,12 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   let userPhone: string | undefined;
 
   if (!subscription) {
-    // users 컬렉션에서 사용자 정보 조회
-    const userDoc = await db.collection('users').doc(email).get();
+    // users와 tenants 병렬 조회
+    const [userDoc, tenantsForTrialCheck] = await Promise.all([
+      db.collection('users').doc(email).get(),
+      db.collection('tenants').where('email', '==', email).get(),
+    ]);
+
     if (userDoc.exists) {
       const userData = userDoc.data();
       hasTrialHistory = userData?.trialApplied === true;
@@ -205,26 +203,31 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
 
     // 해당 이메일로 등록된 다른 tenant들 중 trial 이력이 있는지 확인
     if (!hasTrialHistory) {
-      const tenantsSnapshot = await db.collection('tenants')
-        .where('email', '==', email)
-        .get();
-
-      for (const doc of tenantsSnapshot.docs) {
+      // 먼저 tenants 데이터에서 trial 이력 확인
+      for (const doc of tenantsForTrialCheck.docs) {
         const tData = doc.data();
-        // trial 상태였던 이력이 있거나 subscription이 있으면 무료체험 이력으로 간주
         if (tData.subscription?.status === 'trial' ||
             tData.subscription?.plan === 'trial' ||
             tData.trial?.trialEndsAt) {
           hasTrialHistory = true;
           break;
         }
-        // subscriptions 컬렉션도 확인
-        const subDoc = await db.collection('subscriptions').doc(tData.tenantId || doc.id).get();
-        if (subDoc.exists) {
-          const subData = subDoc.data();
-          if (subData?.status === 'trial' || subData?.plan === 'trial' || subData?.trialEndDate) {
-            hasTrialHistory = true;
-            break;
+      }
+
+      // tenants에서 못 찾았으면 subscriptions 컬렉션 일괄 조회
+      if (!hasTrialHistory && tenantsForTrialCheck.docs.length > 0) {
+        const tenantIds = tenantsForTrialCheck.docs.map(doc => doc.data().tenantId || doc.id);
+        const subDocs = await db.getAll(
+          ...tenantIds.map(id => db.collection('subscriptions').doc(id))
+        );
+
+        for (const subDoc of subDocs) {
+          if (subDoc.exists) {
+            const subData = subDoc.data();
+            if (subData?.status === 'trial' || subData?.plan === 'trial' || subData?.trialEndDate) {
+              hasTrialHistory = true;
+              break;
+            }
           }
         }
       }

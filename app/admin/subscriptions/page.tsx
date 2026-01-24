@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Timer, NavArrowLeft, NavArrowRight, Edit, Xmark, Check, Search, Filter, Download, Calendar, PageFlip, Spark, RefreshDouble, SortUp, SortDown } from 'iconoir-react';
+import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreVert, Eye, ArrowsUpFromLine, WarningCircle, Plus } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
+import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
 
 type TabType = 'active' | 'history';
 
@@ -149,18 +150,15 @@ export default function SubscriptionsPage() {
     }
   });
 
-  // 편집 모달 상태
-  const [editModal, setEditModal] = useState(false);
-  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
-  const [editForm, setEditForm] = useState({
-    brandName: '',
-    plan: '',
-    status: '',
-    currentPeriodStart: '',
-    currentPeriodEnd: '',
-    nextBillingDate: '',
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  // 드롭다운 메뉴 상태
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 액션 모달 상태
+  const [actionModal, setActionModal] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
+  const [initialAction, setInitialAction] = useState<SubscriptionActionType | undefined>(undefined);
 
   // === 활성 구독 데이터 fetch ===
   const fetchSubscriptions = useCallback(async () => {
@@ -322,54 +320,33 @@ export default function SubscriptionsPage() {
     return labels[changedBy] || changedBy || '-';
   };
 
-  // 편집 모달
-  const openEditModal = (subscription: Subscription) => {
-    setEditingSubscription(subscription);
-    setEditForm({
-      brandName: subscription.brandName || '',
-      plan: subscription.plan || '',
-      status: subscription.status || '',
-      currentPeriodStart: formatDateForInput(subscription.currentPeriodStart),
-      currentPeriodEnd: formatDateForInput(subscription.currentPeriodEnd),
-      nextBillingDate: formatDateForInput(subscription.nextBillingDate),
+  // 드롭다운 메뉴 열기
+  const openDropdown = (subscription: Subscription, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + 4,
+      left: rect.left - 100, // 메뉴가 왼쪽으로 정렬되도록
     });
-    setEditModal(true);
+    setOpenDropdownId(subscription.id);
+    setSelectedSubscription(subscription);
   };
 
-  const handleSave = async () => {
-    if (!editingSubscription) return;
+  // 액션 모달 열기
+  const openActionModal = (subscription: Subscription, action: SubscriptionActionType) => {
+    setSelectedSubscription(subscription);
+    setInitialAction(action);
+    setActionModal(true);
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+  };
 
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/admin/subscriptions/list', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantId: editingSubscription.tenantId,
-          brandName: editForm.brandName || null,
-          plan: editForm.plan,
-          status: editForm.status,
-          currentPeriodStart: editForm.currentPeriodStart || null,
-          currentPeriodEnd: editForm.currentPeriodEnd || null,
-          nextBillingDate: editForm.nextBillingDate || null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('구독 정보가 수정되었습니다.');
-        setEditModal(false);
-        setEditingSubscription(null);
-        fetchSubscriptions();
-      } else {
-        alert(data.error || '수정에 실패했습니다.');
-      }
-    } catch {
-      alert('오류가 발생했습니다.');
-    } finally {
-      setIsSaving(false);
-    }
+  // 액션 성공 처리
+  const handleActionSuccess = () => {
+    fetchSubscriptions();
+    setActionModal(false);
+    setSelectedSubscription(null);
+    setInitialAction(undefined);
   };
 
   // 히스토리 날짜 필터 모달
@@ -431,7 +408,7 @@ export default function SubscriptionsPage() {
     XLSX.writeFile(workbook, fileName);
   };
 
-  // 외부 클릭 감지 (필터 팝업 닫기)
+  // 외부 클릭 감지 (필터 팝업, 드롭다운 닫기)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (activeFilterRef.current && !activeFilterRef.current.contains(event.target as Node)) {
@@ -441,6 +418,10 @@ export default function SubscriptionsPage() {
       if (historyFilterRef.current && !historyFilterRef.current.contains(event.target as Node)) {
         setShowHistoryFilter(false);
         setHistoryFilterPosition(null);
+      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+        setDropdownPosition(null);
       }
     };
 
@@ -676,7 +657,7 @@ export default function SubscriptionsPage() {
                           )}
                         </span>
                       </th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">수정</th>
+                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">관리</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -709,13 +690,13 @@ export default function SubscriptionsPage() {
                         <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                           {formatBillingDate(subscription)}
                         </td>
-                        <td className="px-2 py-3 text-center">
+                        <td className="px-2 py-3 text-center relative">
                           <button
-                            onClick={() => openEditModal(subscription)}
+                            onClick={(e) => openDropdown(subscription, e)}
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="수정"
+                            title="관리"
                           >
-                            <Edit className="w-4 h-4 text-gray-600" />
+                            <MoreVert className="w-4 h-4 text-gray-600" />
                           </button>
                         </td>
                       </tr>
@@ -1028,176 +1009,87 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      {/* 편집 모달 */}
-      {editModal && editingSubscription && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setEditModal(false)}
-          />
-          <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6">
+      {/* 드롭다운 메뉴 */}
+      {openDropdownId && dropdownPosition && selectedSubscription && (
+        <div
+          ref={dropdownRef}
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px] z-50"
+          style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+        >
+          <button
+            onClick={() => {
+              router.push(`/admin/tenants/${selectedSubscription.tenantId}?tab=subscription`);
+              setOpenDropdownId(null);
+              setDropdownPosition(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            상세보기
+          </button>
+          {canStartSubscription(selectedSubscription.status as SubscriptionInfo['status']) ? (
             <button
-              onClick={() => setEditModal(false)}
-              className="sticky top-0 float-right p-2 hover:bg-gray-100 rounded-full z-10"
+              onClick={() => openActionModal(selectedSubscription, 'start')}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
             >
-              <Xmark className="w-5 h-5 text-gray-500" />
+              <Plus className="w-4 h-4" />
+              구독 시작
             </button>
-
-            <h3 className="text-lg font-bold text-gray-900 mb-4">구독 정보 수정</h3>
-
-            {/* 회원 정보 (읽기 전용) */}
-            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm space-y-1">
-              <div>
-                <span className="text-gray-500">이메일: </span>
-                <span className="font-medium">{editingSubscription.email || '-'}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">이름: </span>
-                <span className="font-medium">{editingSubscription.memberName || '-'}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">연락처: </span>
-                <span className="font-medium">{editingSubscription.phone || '-'}</span>
-              </div>
-              <div className="pt-1 border-t border-gray-200 mt-1">
-                <span className="text-gray-500">빌링키: </span>
-                {editingSubscription.hasBillingKey ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                    <Check className="w-3 h-3" />
-                    등록됨
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 text-gray-600 text-xs font-medium rounded-full">
-                    <Xmark className="w-3 h-3" />
-                    없음
-                  </span>
-                )}
-                {!editingSubscription.hasBillingKey && editForm.status === 'active' && (
-                  <span className="block text-xs text-amber-600 mt-1">
-                    ⚠️ 빌링키 없이 구독중 상태로 변경해도 자동 결제는 되지 않습니다.
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* 매장 정보 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                매장명
-              </label>
-              <input
-                type="text"
-                value={editForm.brandName}
-                onChange={(e) => setEditForm(prev => ({ ...prev, brandName: e.target.value }))}
-                placeholder="매장명 입력"
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 플랜 선택 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                플랜
-              </label>
-              <select
-                value={editForm.plan}
-                onChange={(e) => setEditForm(prev => ({ ...prev, plan: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">선택</option>
-                <option value="trial">Trial</option>
-                <option value="basic">Basic</option>
-                <option value="business">Business</option>
-              </select>
-            </div>
-
-            {/* 상태 선택 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                상태
-              </label>
-              <select
-                value={editForm.status}
-                onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">선택</option>
-                <option value="none">미구독</option>
-                <option value="trialing">체험</option>
-                <option value="active">구독중</option>
-                <option value="canceled">해지</option>
-                <option value="expired">만료</option>
-                <option value="deleted">삭제</option>
-              </select>
-            </div>
-
-            {/* 시작일 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                시작일
-              </label>
-              <input
-                type="date"
-                value={editForm.currentPeriodStart}
-                onChange={(e) => setEditForm(prev => ({ ...prev, currentPeriodStart: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 종료일 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                종료일
-              </label>
-              <input
-                type="date"
-                value={editForm.currentPeriodEnd}
-                onChange={(e) => setEditForm(prev => ({ ...prev, currentPeriodEnd: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 다음 결제일 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                다음 결제일
-              </label>
-              <input
-                type="date"
-                value={editForm.nextBillingDate}
-                onChange={(e) => setEditForm(prev => ({ ...prev, nextBillingDate: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 버튼 */}
-            <div className="flex gap-3">
+          ) : (
+            <>
               <button
-                onClick={() => setEditModal(false)}
-                className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                onClick={() => openActionModal(selectedSubscription, 'change_plan')}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                취소
+                <ArrowsUpFromLine className="w-4 h-4" />
+                플랜 변경
               </button>
               <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                onClick={() => openActionModal(selectedSubscription, 'adjust_period')}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                {isSaving ? (
-                  <>
-                    <RefreshDouble className="w-4 h-4 animate-spin" />
-                    저장 중...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    저장
-                  </>
-                )}
+                <Calendar className="w-4 h-4" />
+                기간 조정
               </button>
-            </div>
-          </div>
+              <button
+                onClick={() => openActionModal(selectedSubscription, 'cancel')}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <WarningCircle className="w-4 h-4" />
+                구독 해지
+              </button>
+            </>
+          )}
         </div>
+      )}
+
+      {/* 구독 액션 모달 */}
+      {actionModal && selectedSubscription && (
+        <SubscriptionActionModal
+          isOpen={actionModal}
+          onClose={() => {
+            setActionModal(false);
+            setSelectedSubscription(null);
+            setInitialAction(undefined);
+          }}
+          tenantId={selectedSubscription.tenantId}
+          subscription={{
+            tenantId: selectedSubscription.tenantId,
+            plan: selectedSubscription.plan as SubscriptionInfo['plan'],
+            status: selectedSubscription.status as SubscriptionInfo['status'],
+            amount: selectedSubscription.amount,
+            currentPeriodStart: selectedSubscription.currentPeriodStart,
+            currentPeriodEnd: selectedSubscription.currentPeriodEnd,
+            nextBillingDate: selectedSubscription.nextBillingDate,
+          }}
+          tenant={{
+            tenantId: selectedSubscription.tenantId,
+            brandName: selectedSubscription.brandName || '',
+            email: selectedSubscription.email || '',
+          }}
+          initialAction={initialAction}
+          onSuccess={handleActionSuccess}
+        />
       )}
 
       {/* 구독 내역 기간 선택 모달 */}
