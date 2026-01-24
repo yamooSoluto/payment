@@ -17,7 +17,8 @@ export type SubscriptionActionType =
   | 'start'          // 구독 시작
   | 'change_plan'    // 플랜 변경
   | 'adjust_period'  // 기간 조정
-  | 'cancel';        // 해지
+  | 'cancel'         // 해지
+  | 'advanced';      // 고급 설정
 
 // 구독 정보 인터페이스
 export interface SubscriptionInfo {
