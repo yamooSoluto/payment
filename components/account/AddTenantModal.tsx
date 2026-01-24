@@ -90,7 +90,7 @@ export default function AddTenantModal({ onClose, onSuccess, authParam }: AddTen
         queryParam = `email=${encodeURIComponent(email || '')}`;
       }
 
-      const response = await fetch(`/api/tenants?${queryParam}`, { headers });
+      const response = await fetch(`/api/tenants?${queryParam}&skipSubscription=true`, { headers });
       if (response.ok) {
         const data = await response.json();
         return data.tenants?.some((t: { tenantId: string }) => t.tenantId === tenantId) || false;

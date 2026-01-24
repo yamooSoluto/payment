@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Xmark, Plus, ArrowsUpFromLine, Calendar, WarningCircle, Settings } from 'iconoir-react';
+import { Xmark, Plus, ArrowsUpFromLine, Calendar, WarningCircle } from 'iconoir-react';
 import {
   SubscriptionActionModalProps,
   SubscriptionActionType,
@@ -13,14 +13,12 @@ import StartSubscriptionForm from './StartSubscriptionForm';
 import PlanChangeForm from './PlanChangeForm';
 import PeriodAdjustForm from './PeriodAdjustForm';
 import CancelSubscriptionForm from './CancelSubscriptionForm';
-import AdvancedSettingsForm from './AdvancedSettingsForm';
 
 const ACTION_LABELS: Record<SubscriptionActionType, string> = {
   start: '구독 시작',
   change_plan: '플랜 변경',
   adjust_period: '기간 조정',
   cancel: '해지',
-  advanced: '고급 설정',
 };
 
 export default function SubscriptionActionModal({
@@ -62,7 +60,6 @@ export default function SubscriptionActionModal({
     { action: 'change_plan', icon: ArrowsUpFromLine, show: hasActiveSubscription },
     { action: 'adjust_period', icon: Calendar, show: hasActiveSubscription },
     { action: 'cancel', icon: WarningCircle, show: hasActiveSubscription },
-    { action: 'advanced', icon: Settings, show: true },
   ];
 
   const renderActionForm = () => {
@@ -83,8 +80,6 @@ export default function SubscriptionActionModal({
         return <PeriodAdjustForm {...commonProps} />;
       case 'cancel':
         return <CancelSubscriptionForm {...commonProps} />;
-      case 'advanced':
-        return <AdvancedSettingsForm {...commonProps} />;
       default:
         return null;
     }
@@ -107,25 +102,27 @@ export default function SubscriptionActionModal({
           </button>
         </div>
 
-        {/* 액션 선택 탭 */}
-        <div className="flex gap-1 px-4 py-2 border-b border-gray-100 overflow-x-auto">
-          {actionButtons
-            .filter((btn) => btn.show)
-            .map(({ action, icon: Icon }) => (
-              <button
-                key={action}
-                onClick={() => setCurrentAction(action)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentAction === action
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {ACTION_LABELS[action]}
-              </button>
-            ))}
-        </div>
+        {/* 액션 선택 탭 (활성 구독이 있을 때만 표시) */}
+        {hasActiveSubscription && (
+          <div className="flex gap-1 px-4 py-2 border-b border-gray-100 overflow-x-auto">
+            {actionButtons
+              .filter((btn) => btn.show)
+              .map(({ action, icon: Icon }) => (
+                <button
+                  key={action}
+                  onClick={() => setCurrentAction(action)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                    currentAction === action
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {ACTION_LABELS[action]}
+                </button>
+              ))}
+          </div>
+        )}
 
         {/* 컨텐츠 */}
         <div className="flex-1 overflow-y-auto p-4">

@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchTenants = useCallback(async (firebaseUser: User) => {
     try {
       const idToken = await firebaseUser.getIdToken();
-      const res = await fetch(`/api/tenants?email=${encodeURIComponent(firebaseUser.email || '')}`, {
+      const res = await fetch(`/api/tenants?email=${encodeURIComponent(firebaseUser.email || '')}&skipSubscription=true`, {
         headers: { 'Authorization': `Bearer ${idToken}` },
       });
       if (res.ok) {

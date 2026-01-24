@@ -1,16 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshDouble, Check, ArrowRight } from 'iconoir-react';
 import {
   SubscriptionFormProps,
   PlanType,
-  PLAN_LABELS,
-  PLAN_PRICES,
 } from './types';
 
-// 플랜 변경 가능한 플랜 목록 (trial은 제외)
-const CHANGEABLE_PLANS: PlanType[] = ['basic', 'business', 'enterprise'];
+// DB에서 가져오는 플랜 인터페이스
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  minPrice?: number;
+  maxPrice?: number;
+  isNegotiable?: boolean;
+  isActive?: boolean;
+  order?: number;
+}
 
 export default function PlanChangeForm({
   tenantId,
@@ -19,6 +26,8 @@ export default function PlanChangeForm({
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const currentPlan = subscription?.plan as PlanType | null;
   // 기본 선택: 현재 플랜이 basic이면 business, 아니면 basic
   const [newPlan, setNewPlan] = useState<PlanType>(
@@ -30,7 +39,32 @@ export default function PlanChangeForm({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const isUpgrade = currentPlan && newPlan && PLAN_PRICES[newPlan] > PLAN_PRICES[currentPlan];
+  // 플랜 목록 가져오기
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const response = await fetch('/api/admin/plans');
+        if (response.ok) {
+          const data = await response.json();
+          setPlans(data.plans || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch plans:', error);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+    fetchPlans();
+  }, []);
+
+  // 변경 가능한 플랜 (trial 제외)
+  const changeablePlans = plans.filter(p => p.id !== 'trial');
+  const currentPlanData = plans.find(p => p.id === currentPlan);
+  const newPlanData = plans.find(p => p.id === newPlan);
+
+  const isUpgrade = currentPlanData && newPlanData &&
+    !currentPlanData.isNegotiable && !newPlanData.isNegotiable &&
+    newPlanData.price > currentPlanData.price;
 
   const handleSubmit = async () => {
     setError('');
@@ -78,20 +112,28 @@ export default function PlanChangeForm({
         <div className="text-center">
           <div className="text-xs text-gray-500 mb-1">현재</div>
           <div className="text-lg font-bold text-gray-700">
-            {currentPlan ? PLAN_LABELS[currentPlan] : '-'}
+            {currentPlanData?.name || '-'}
           </div>
           <div className="text-xs text-gray-500">
-            {currentPlan ? `${PLAN_PRICES[currentPlan].toLocaleString()}원/월` : '-'}
+            {currentPlanData
+              ? currentPlanData.isNegotiable
+                ? '협의'
+                : `${currentPlanData.price.toLocaleString()}원/월`
+              : '-'}
           </div>
         </div>
         <ArrowRight className="w-5 h-5 text-gray-400" />
         <div className="text-center">
           <div className="text-xs text-gray-500 mb-1">변경</div>
           <div className={`text-lg font-bold ${isUpgrade ? 'text-blue-600' : 'text-orange-600'}`}>
-            {PLAN_LABELS[newPlan]}
+            {newPlanData?.name || '-'}
           </div>
           <div className="text-xs text-gray-500">
-            {PLAN_PRICES[newPlan].toLocaleString()}원/월
+            {newPlanData
+              ? newPlanData.isNegotiable
+                ? '협의'
+                : `${newPlanData.price.toLocaleString()}원/월`
+              : '-'}
           </div>
         </div>
       </div>
@@ -99,26 +141,22 @@ export default function PlanChangeForm({
       {/* 플랜 선택 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">변경할 플랜</label>
-        <div className="grid grid-cols-3 gap-2">
-          {CHANGEABLE_PLANS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setNewPlan(p)}
-              disabled={p === currentPlan}
-              className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                newPlan === p
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : p === currentPlan
-                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div>{PLAN_LABELS[p]}</div>
-              <div className="text-xs opacity-80">{PLAN_PRICES[p].toLocaleString()}원/월</div>
-            </button>
-          ))}
-        </div>
+        {loadingPlans ? (
+          <div className="text-sm text-gray-500">플랜 로딩 중...</div>
+        ) : (
+          <select
+            value={newPlan}
+            onChange={(e) => setNewPlan(e.target.value as PlanType)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            {changeablePlans.map((p) => (
+              <option key={p.id} value={p.id} disabled={p.id === currentPlan}>
+                {p.name} - {p.isNegotiable ? '협의' : `${p.price.toLocaleString()}원/월`}
+                {p.id === currentPlan ? ' (현재)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* 적용 시점 */}

@@ -17,8 +17,7 @@ export type SubscriptionActionType =
   | 'start'          // 구독 시작
   | 'change_plan'    // 플랜 변경
   | 'adjust_period'  // 기간 조정
-  | 'cancel'         // 해지
-  | 'advanced';      // 고급 설정
+  | 'cancel';        // 해지
 
 // 구독 정보 인터페이스
 export interface SubscriptionInfo {
@@ -71,17 +70,6 @@ export interface AdjustPeriodRequest {
 // 구독 해지 요청
 export interface CancelSubscriptionRequest {
   cancelMode: 'scheduled' | 'immediate';
-  reason: string;
-}
-
-// 고급 설정 요청 (필드 직접 수정)
-export interface AdvancedSettingsRequest {
-  plan?: PlanType;
-  status?: SubscriptionStatus;
-  amount?: number;
-  currentPeriodStart?: string | null;
-  currentPeriodEnd?: string | null;
-  nextBillingDate?: string | null;
   reason: string;
 }
 

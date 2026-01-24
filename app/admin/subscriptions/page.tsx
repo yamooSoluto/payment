@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreVert, Eye, ArrowsUpFromLine, WarningCircle, Plus } from 'iconoir-react';
+import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreHoriz, ArrowsUpFromLine, WarningCircle, Plus } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
@@ -325,8 +325,8 @@ export default function SubscriptionsPage() {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     setDropdownPosition({
-      top: rect.bottom + 4,
-      left: rect.left - 100, // 메뉴가 왼쪽으로 정렬되도록
+      top: rect.top + rect.height + 4,
+      left: rect.right - 160, // 메뉴가 왼쪽으로 정렬되도록
     });
     setOpenDropdownId(subscription.id);
     setSelectedSubscription(subscription);
@@ -696,7 +696,7 @@ export default function SubscriptionsPage() {
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             title="관리"
                           >
-                            <MoreVert className="w-4 h-4 text-gray-600" />
+                            <MoreHoriz className="w-4 h-4 text-gray-600" />
                           </button>
                         </td>
                       </tr>
@@ -1016,17 +1016,6 @@ export default function SubscriptionsPage() {
           className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px] z-50"
           style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
         >
-          <button
-            onClick={() => {
-              router.push(`/admin/tenants/${selectedSubscription.tenantId}?tab=subscription`);
-              setOpenDropdownId(null);
-              setDropdownPosition(null);
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-            상세보기
-          </button>
           {canStartSubscription(selectedSubscription.status as SubscriptionInfo['status']) ? (
             <button
               onClick={() => openActionModal(selectedSubscription, 'start')}

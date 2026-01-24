@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get('token');
     const emailParam = searchParams.get('email');
+    const skipSubscription = searchParams.get('skipSubscription') === 'true';
 
     let email: string | null = null;
 
@@ -82,6 +83,15 @@ export async function GET(request: NextRequest) {
           createdAt: serializeTimestamp(data.createdAt),
         };
       });
+
+    // skipSubscription=true면 구독 정보 조회 스킵
+    if (skipSubscription) {
+      const tenants = tenantDataList.map((tenant) => ({
+        ...tenant,
+        subscription: null,
+      }));
+      return NextResponse.json({ tenants });
+    }
 
     // 구독 정보 한 번에 조회 (getAll 사용으로 N+1 문제 해결)
     const subscriptionRefs = tenantDataList.map((t) =>

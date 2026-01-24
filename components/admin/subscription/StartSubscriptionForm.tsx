@@ -5,12 +5,22 @@ import { RefreshDouble, Check } from 'iconoir-react';
 import {
   SubscriptionFormProps,
   PlanType,
-  PLAN_LABELS,
-  PLAN_PRICES,
   formatDateForInput,
   calculatePeriodEnd,
   calculateNextBillingDate,
 } from './types';
+
+// DB에서 가져오는 플랜 인터페이스
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  minPrice?: number;
+  maxPrice?: number;
+  isNegotiable?: boolean;
+  isActive?: boolean;
+  order?: number;
+}
 
 export default function StartSubscriptionForm({
   tenantId,
@@ -18,6 +28,8 @@ export default function StartSubscriptionForm({
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [plan, setPlan] = useState<PlanType>('trial');
   const [currentPeriodStart, setCurrentPeriodStart] = useState('');
   const [currentPeriodEnd, setCurrentPeriodEnd] = useState('');
@@ -27,6 +39,25 @@ export default function StartSubscriptionForm({
   const [error, setError] = useState('');
 
   const isTrial = plan === 'trial';
+  const selectedPlan = plans.find(p => p.id === plan);
+
+  // 플랜 목록 가져오기
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const response = await fetch('/api/admin/plans');
+        if (response.ok) {
+          const data = await response.json();
+          setPlans(data.plans || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch plans:', error);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+    fetchPlans();
+  }, []);
 
   // 초기 날짜 설정
   useEffect(() => {
@@ -108,25 +139,30 @@ export default function StartSubscriptionForm({
       {/* 플랜 선택 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">플랜</label>
-        <div className="grid grid-cols-2 gap-2">
-          {(['trial', 'basic', 'business', 'enterprise'] as PlanType[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => handlePlanChange(p)}
-              className={`py-3 px-4 rounded-lg border text-sm font-medium transition-colors ${
-                plan === p
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div>{PLAN_LABELS[p]}</div>
-              <div className="text-xs opacity-80">
-                {PLAN_PRICES[p] === 0 ? '무료' : `${PLAN_PRICES[p].toLocaleString()}원/월`}
-              </div>
-            </button>
-          ))}
-        </div>
+        {loadingPlans ? (
+          <div className="text-sm text-gray-500">플랜 로딩 중...</div>
+        ) : (
+          <select
+            value={plan}
+            onChange={(e) => handlePlanChange(e.target.value as PlanType)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} - {p.isNegotiable ? '협의' : p.price === 0 ? '무료' : `${p.price.toLocaleString()}원/월`}
+              </option>
+            ))}
+          </select>
+        )}
+        {selectedPlan && (
+          <div className="mt-2 text-sm text-gray-600">
+            {selectedPlan.isNegotiable
+              ? '가격 협의 플랜입니다.'
+              : selectedPlan.price === 0
+                ? '무료 플랜입니다.'
+                : `월 ${selectedPlan.price.toLocaleString()}원`}
+          </div>
+        )}
       </div>
 
       {/* 날짜 설정 */}
