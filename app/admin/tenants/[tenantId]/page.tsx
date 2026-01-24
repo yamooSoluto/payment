@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash, ArrowsUpFromLine, Calendar, WarningCircle, Settings, Plus } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash, ArrowsUpFromLine, Calendar, WarningCircle, Plus } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
@@ -1075,16 +1075,6 @@ export default function TenantDetailPage() {
                               <WarningCircle className="w-3.5 h-3.5" />
                               해지
                             </button>
-                            <button
-                              onClick={() => {
-                                setSubscriptionInitialAction('advanced');
-                                setSubscriptionActionModal(true);
-                              }}
-                              className="p-1.5 text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                              title="고급 설정"
-                            >
-                              <Settings className="w-3.5 h-3.5" />
-                            </button>
                           </>
                         ) : canStartSubscription(subscription.status as SubscriptionInfo['status']) ? (
                           <button
@@ -1097,18 +1087,7 @@ export default function TenantDetailPage() {
                             <Plus className="w-3.5 h-3.5" />
                             구독 시작
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setSubscriptionInitialAction('advanced');
-                              setSubscriptionActionModal(true);
-                            }}
-                            className="p-1.5 text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                            title="고급 설정"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-baseline gap-2">

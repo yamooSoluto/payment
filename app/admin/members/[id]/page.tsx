@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz, ArrowsUpFromLine, WarningCircle, Settings } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz, ArrowsUpFromLine, WarningCircle } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import { INDUSTRY_OPTIONS, INDUSTRY_LABEL_TO_CODE, MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
@@ -3366,16 +3366,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                               <WarningCircle className="w-4 h-4" />
                               해지
                             </button>
-                            <button
-                              onClick={() => {
-                                setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                                setSubscriptionInitialAction('advanced');
-                              }}
-                              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                              <Settings className="w-4 h-4" />
-                              고급 설정
-                            </button>
                           </div>
                         );
                       } else if (canStart) {
@@ -3392,18 +3382,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                           </button>
                         );
                       } else {
-                        return (
-                          <button
-                            onClick={() => {
-                              setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                              setSubscriptionInitialAction('advanced');
-                            }}
-                            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                          >
-                            <Settings className="w-4 h-4" />
-                            고급 설정
-                          </button>
-                        );
+                        return null;
                       }
                     })()}
                   </div>

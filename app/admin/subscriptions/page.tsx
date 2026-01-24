@@ -152,7 +152,7 @@ export default function SubscriptionsPage() {
 
   // 드롭다운 메뉴 상태
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 액션 모달 상태
@@ -324,10 +324,23 @@ export default function SubscriptionsPage() {
   const openDropdown = (subscription: Subscription, e: React.MouseEvent) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    setDropdownPosition({
-      top: rect.top + rect.height + 4,
-      left: rect.right - 160, // 메뉴가 왼쪽으로 정렬되도록
-    });
+    const windowHeight = window.innerHeight;
+    const spaceBelow = windowHeight - rect.bottom;
+    const MENU_HEIGHT = 160; // 예상 메뉴 높이
+
+    if (spaceBelow < MENU_HEIGHT) {
+      // 아래 공간이 부족하면 위로 띄움
+      setDropdownPosition({
+        bottom: windowHeight - rect.top + 4,
+        left: rect.right - 160,
+      });
+    } else {
+      // 충분하면 아래로 띄움
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 160,
+      });
+    }
     setOpenDropdownId(subscription.id);
     setSelectedSubscription(subscription);
   };
@@ -443,22 +456,20 @@ export default function SubscriptionsPage() {
         <div className="flex border-b border-gray-100">
           <button
             onClick={() => handleTabChange('active')}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
-              activeTab === 'active'
-                ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${activeTab === 'active'
+              ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
+              : 'text-gray-500 hover:text-gray-700'
+              }`}
           >
             <Spark className="w-4 h-4" />
             활성
           </button>
           <button
             onClick={() => handleTabChange('history')}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
-              activeTab === 'history'
-                ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${activeTab === 'history'
+              ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
+              : 'text-gray-500 hover:text-gray-700'
+              }`}
           >
             <PageFlip className="w-4 h-4" />
             전체
@@ -508,11 +519,10 @@ export default function SubscriptionsPage() {
                           setShowActiveFilter(true);
                         }
                       }}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        (planFilterActive.length > 0 || statusFilterActive.length > 0)
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                      className={`p-1.5 rounded-lg transition-colors ${(planFilterActive.length > 0 || statusFilterActive.length > 0)
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
                       title="필터"
                     >
                       <Filter className="w-4 h-4" />
@@ -605,135 +615,135 @@ export default function SubscriptionsPage() {
               </div>
             </div>
           </div>
-            {loadingActive ? (
-              <div className="flex items-center justify-center py-20">
-                <Spinner size="md" />
-              </div>
-            ) : subscriptions.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">
-                구독 정보가 없습니다.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-max">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">회원</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">이메일</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">매장</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">플랜</th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">상태</th>
-                      <th
-                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
-                        onClick={() => handleActiveSort('currentPeriodStart')}
-                      >
-                        <span className="inline-flex items-center gap-1 justify-center">
-                          시작일
-                          {activeSortField === 'currentPeriodStart' && (
-                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
-                          )}
-                        </span>
-                      </th>
-                      <th
-                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
-                        onClick={() => handleActiveSort('currentPeriodEnd')}
-                      >
-                        <span className="inline-flex items-center gap-1 justify-center">
-                          종료일
-                          {activeSortField === 'currentPeriodEnd' && (
-                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
-                          )}
-                        </span>
-                      </th>
-                      <th
-                        className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
-                        onClick={() => handleActiveSort('nextBillingDate')}
-                      >
-                        <span className="inline-flex items-center gap-1 justify-center">
-                          결제일
-                          {activeSortField === 'nextBillingDate' && (
-                            activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
-                          )}
-                        </span>
-                      </th>
-                      <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">관리</th>
+          {loadingActive ? (
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="md" />
+            </div>
+          ) : subscriptions.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              구독 정보가 없습니다.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500 w-10">No.</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">회원</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">이메일</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">매장</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">플랜</th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">상태</th>
+                    <th
+                      className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleActiveSort('currentPeriodStart')}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-center">
+                        시작일
+                        {activeSortField === 'currentPeriodStart' && (
+                          activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                        )}
+                      </span>
+                    </th>
+                    <th
+                      className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleActiveSort('currentPeriodEnd')}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-center">
+                        종료일
+                        {activeSortField === 'currentPeriodEnd' && (
+                          activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                        )}
+                      </span>
+                    </th>
+                    <th
+                      className="text-center px-2 py-3 text-sm font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleActiveSort('nextBillingDate')}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-center">
+                        결제일
+                        {activeSortField === 'nextBillingDate' && (
+                          activeSortOrder === 'asc' ? <SortUp className="w-3 h-3" /> : <SortDown className="w-3 h-3" />
+                        )}
+                      </span>
+                    </th>
+                    <th className="text-center px-2 py-3 text-sm font-medium text-gray-500">관리</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sortedSubscriptions.map((subscription, index) => (
+                    <tr key={subscription.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-2 py-3 text-sm text-gray-400 text-center">
+                        {(paginationActive.page - 1) * paginationActive.limit + index + 1}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                        {subscription.memberName || '-'}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                        {subscription.email || '-'}
+                      </td>
+                      <td className="px-2 py-3 text-sm font-medium text-gray-900 text-center">
+                        {subscription.brandName}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center">
+                        {getPlanName(subscription.plan)}
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        {getStatusBadge(subscription.status)}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {formatDate(subscription.currentPeriodStart)}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {formatDate(subscription.currentPeriodEnd)}
+                      </td>
+                      <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                        {formatBillingDate(subscription)}
+                      </td>
+                      <td className="px-2 py-3 text-center relative">
+                        <button
+                          onClick={(e) => openDropdown(subscription, e)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="관리"
+                        >
+                          <MoreHoriz className="w-4 h-4 text-gray-600" />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {sortedSubscriptions.map((subscription, index) => (
-                      <tr key={subscription.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-2 py-3 text-sm text-gray-400 text-center">
-                          {(paginationActive.page - 1) * paginationActive.limit + index + 1}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                          {subscription.memberName || '-'}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                          {subscription.email || '-'}
-                        </td>
-                        <td className="px-2 py-3 text-sm font-medium text-gray-900 text-center">
-                          {subscription.brandName}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center">
-                          {getPlanName(subscription.plan)}
-                        </td>
-                        <td className="px-2 py-3 text-center">
-                          {getStatusBadge(subscription.status)}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                          {formatDate(subscription.currentPeriodStart)}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                          {formatDate(subscription.currentPeriodEnd)}
-                        </td>
-                        <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                          {formatBillingDate(subscription)}
-                        </td>
-                        <td className="px-2 py-3 text-center relative">
-                          <button
-                            onClick={(e) => openDropdown(subscription, e)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="관리"
-                          >
-                            <MoreHoriz className="w-4 h-4 text-gray-600" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-            {/* 페이지네이션 */}
-            {paginationActive.totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 sticky left-0">
-                <p className="text-sm text-gray-500">
-                  {paginationActive.total}개 중 {(paginationActive.page - 1) * paginationActive.limit + 1}-
-                  {Math.min(paginationActive.page * paginationActive.limit, paginationActive.total)}개 표시
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page - 1 }))}
-                    disabled={paginationActive.page === 1}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <NavArrowLeft className="w-5 h-5" />
-                  </button>
-                  <span className="text-sm text-gray-600">
-                    {paginationActive.page} / {paginationActive.totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page + 1 }))}
-                    disabled={paginationActive.page === paginationActive.totalPages}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <NavArrowRight className="w-5 h-5" />
-                  </button>
-                </div>
+          {/* 페이지네이션 */}
+          {paginationActive.totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 sticky left-0">
+              <p className="text-sm text-gray-500">
+                {paginationActive.total}개 중 {(paginationActive.page - 1) * paginationActive.limit + 1}-
+                {Math.min(paginationActive.page * paginationActive.limit, paginationActive.total)}개 표시
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={paginationActive.page === 1}
+                  className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <NavArrowLeft className="w-5 h-5" />
+                </button>
+                <span className="text-sm text-gray-600">
+                  {paginationActive.page} / {paginationActive.totalPages}
+                </span>
+                <button
+                  onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={paginationActive.page === paginationActive.totalPages}
+                  className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <NavArrowRight className="w-5 h-5" />
+                </button>
               </div>
-            )}
+            </div>
+          )}
         </div>
       )}
 
@@ -766,21 +776,19 @@ export default function SubscriptionsPage() {
                   </div>
                   <button
                     onClick={() => { setHistoryFilterType('all'); setHistoryDateRange({ start: '', end: '' }); setPaginationHistory(prev => ({ ...prev, page: 1 })); }}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                      historyFilterType === 'all'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${historyFilterType === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     전체
                   </button>
                   <button
                     onClick={handleOpenHistoryDatePicker}
-                    className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${
-                      historyFilterType === 'custom' && historyDateRange.start
-                        ? 'px-3 py-1.5 bg-blue-600 text-white'
-                        : 'p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`text-xs rounded-lg transition-colors flex items-center gap-1 ${historyFilterType === 'custom' && historyDateRange.start
+                      ? 'px-3 py-1.5 bg-blue-600 text-white'
+                      : 'p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                     title="기간 선택"
                   >
                     <Calendar className="w-4 h-4" />
@@ -803,11 +811,10 @@ export default function SubscriptionsPage() {
                           setShowHistoryFilter(true);
                         }
                       }}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        (planFilterHistory.length > 0 || statusFilterHistory.length > 0)
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                      className={`p-1.5 rounded-lg transition-colors ${(planFilterHistory.length > 0 || statusFilterHistory.length > 0)
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
                       title="필터"
                     >
                       <Filter className="w-4 h-4" />
@@ -1013,8 +1020,13 @@ export default function SubscriptionsPage() {
       {openDropdownId && dropdownPosition && selectedSubscription && (
         <div
           ref={dropdownRef}
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px] z-50"
-          style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+          style={{
+            top: dropdownPosition.top,
+            bottom: dropdownPosition.bottom,
+            left: dropdownPosition.left,
+            zIndex: 9999
+          }}
         >
           {canStartSubscription(selectedSubscription.status as SubscriptionInfo['status']) ? (
             <button

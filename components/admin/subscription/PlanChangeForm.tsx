@@ -43,7 +43,9 @@ export default function PlanChangeForm({
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const response = await fetch('/api/admin/plans');
+        const response = await fetch('/api/admin/plans', {
+          credentials: 'include',
+        });
         if (response.ok) {
           const data = await response.json();
           setPlans(data.plans || []);
