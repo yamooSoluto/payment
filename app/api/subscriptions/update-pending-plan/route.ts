@@ -69,16 +69,16 @@ export async function POST(request: NextRequest) {
       return null;
     };
 
-    const trialEndDate = toDate(subscription.trialEndDate);
+    const currentPeriodEnd = toDate(subscription.currentPeriodEnd);
     const nextBillingDate = toDate(subscription.nextBillingDate);
     const isTrial = subscription.status === 'trial';
 
     // pendingChangeAt 계산:
-    // - Trial 사용자: trialEndDate + 1 (무료체험 마지막 날 다음날)
+    // - Trial 사용자: currentPeriodEnd + 1 (무료체험 마지막 날 다음날)
     // - Active 사용자: nextBillingDate 그대로 (다음 결제일이 곧 새 플랜 시작일)
     let pendingChangeAt: Date;
-    if (isTrial && trialEndDate) {
-      pendingChangeAt = new Date(trialEndDate);
+    if (isTrial && currentPeriodEnd) {
+      pendingChangeAt = new Date(currentPeriodEnd);
       pendingChangeAt.setDate(pendingChangeAt.getDate() + 1);
     } else if (nextBillingDate) {
       pendingChangeAt = new Date(nextBillingDate);

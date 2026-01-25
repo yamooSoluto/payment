@@ -32,7 +32,6 @@ export async function PUT(
       currentPeriodStart,
       currentPeriodEnd,
       nextBillingDate,
-      trialEndDate,
     } = body;
 
     // 매장 존재 여부 확인
@@ -88,10 +87,6 @@ export async function PUT(
       updateData.nextBillingDate = nextBillingDate ? new Date(nextBillingDate) : null;
     }
 
-    if (trialEndDate !== undefined) {
-      updateData.trialEndDate = trialEndDate ? new Date(trialEndDate) : null;
-    }
-
     // 구독 문서가 없으면 생성, 있으면 업데이트
     const tenantData = tenantDoc.data();
 
@@ -136,26 +131,13 @@ export async function PUT(
       await db.collection('subscriptions').doc(tenantId).update(updateData);
     }
 
-    // tenants 컬렉션의 subscription 필드도 함께 업데이트
+    // tenants 컬렉션의 subscription 필드도 함께 업데이트 (plan, status만)
     const tenantSubscriptionUpdate: Record<string, unknown> = {};
     if (plan !== undefined) {
       tenantSubscriptionUpdate['subscription.plan'] = plan;
-      // 플랜 변경 시 금액도 함께 업데이트
-      tenantSubscriptionUpdate['subscription.amount'] = amount !== undefined ? amount : PLAN_PRICES[plan] || 0;
     }
-    if (status !== undefined) tenantSubscriptionUpdate['subscription.status'] = status;
-    if (amount !== undefined && plan === undefined) {
-      // 금액만 별도로 변경하는 경우
-      tenantSubscriptionUpdate['subscription.amount'] = amount;
-    }
-    if (currentPeriodStart !== undefined) {
-      tenantSubscriptionUpdate['subscription.currentPeriodStart'] = currentPeriodStart ? new Date(currentPeriodStart) : null;
-    }
-    if (currentPeriodEnd !== undefined) {
-      tenantSubscriptionUpdate['subscription.currentPeriodEnd'] = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
-    }
-    if (nextBillingDate !== undefined) {
-      tenantSubscriptionUpdate['subscription.nextBillingDate'] = nextBillingDate ? new Date(nextBillingDate) : null;
+    if (status !== undefined) {
+      tenantSubscriptionUpdate['subscription.status'] = status;
     }
 
     if (Object.keys(tenantSubscriptionUpdate).length > 0) {

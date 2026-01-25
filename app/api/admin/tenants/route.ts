@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       status: string;
       amount: number;
       hasBillingKey: boolean;
+      pendingPlan: string | null;
     }>();
 
     subscriptionsSnapshot.docs.forEach(doc => {
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
         status: data.status || '',
         amount: data.amount || 0,
         hasBillingKey: !!data.billingKey,
+        pendingPlan: data.pendingPlan || null,
       });
     });
 
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
       csTone: string;
       botName: string;
       reviewCode: string;
+      pendingPlan: string | null;
     }
 
     let tenants: TenantData[] = tenantsSnapshot.docs
@@ -109,6 +112,7 @@ export async function GET(request: NextRequest) {
           csTone: data.csTone || '',
           botName: tenantItem.BotName || tenantItem.botName || '',
           reviewCode: tenantItem.reviewCode || '',
+          pendingPlan: subscription?.pendingPlan || null,
         };
       });
 

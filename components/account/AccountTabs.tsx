@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { CreditCard, Journal, Calendar, Settings } from 'iconoir-react';
 
 interface Tab {
@@ -21,6 +21,7 @@ interface AccountTabsProps {
   cardsContent: ReactNode;
   paymentsContent: ReactNode;
   historyContent: ReactNode;
+  initialTab?: string;
 }
 
 export default function AccountTabs({
@@ -28,8 +29,26 @@ export default function AccountTabs({
   cardsContent,
   paymentsContent,
   historyContent,
+  initialTab,
 }: AccountTabsProps) {
-  const [activeTab, setActiveTab] = useState('subscription');
+  const [activeTab, setActiveTab] = useState(initialTab || 'subscription');
+
+  // URL hash로 탭 이동 지원
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1); // Remove #
+      if (hash && tabs.some(t => t.id === hash)) {
+        setActiveTab(hash);
+      }
+    };
+
+    // 초기 로드 시 hash 확인
+    handleHashChange();
+
+    // hash 변경 이벤트 리스닝
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const getContent = () => {
     switch (activeTab) {

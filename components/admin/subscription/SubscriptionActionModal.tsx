@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Xmark, Plus, ArrowsUpFromLine, Calendar, WarningCircle } from 'iconoir-react';
+import { useState, useEffect } from 'react';
+import { Xmark, Plus, FastRightCircle, Calendar, WarningCircle } from 'iconoir-react';
 import {
   SubscriptionActionModalProps,
   SubscriptionActionType,
   isSubscriptionActive,
   canStartSubscription,
+  PLAN_LABELS,
+  PlanType,
 } from './types';
 import SubscriptionStatusCard from './SubscriptionStatusCard';
 import StartSubscriptionForm from './StartSubscriptionForm';
@@ -38,6 +40,14 @@ export default function SubscriptionActionModal({
   };
 
   const [currentAction, setCurrentAction] = useState<SubscriptionActionType>(getDefaultAction());
+  const [cancelingPending, setCancelingPending] = useState(false);
+
+  // initialAction이 변경되거나 모달이 열릴 때 currentAction 업데이트
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentAction(getDefaultAction());
+    }
+  }, [isOpen, initialAction]);
 
   if (!isOpen) return null;
 
@@ -50,16 +60,42 @@ export default function SubscriptionActionModal({
     onClose();
   };
 
+  // 예약 상태 확인
+  const hasPendingPlan = !!subscription?.pendingPlan;
+  const hasPendingCancel = subscription?.status === 'pending_cancel';
+  const hasPendingAction = hasPendingPlan || hasPendingCancel;
+
+  // 예약 취소 핸들러
+  const handleCancelPending = async (type: 'plan' | 'cancel') => {
+    setCancelingPending(true);
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${tenantId}/pending?type=${type}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || '예약 취소에 실패했습니다.');
+        return;
+      }
+      alert(data.message);
+      onSuccess(); // 데이터 새로고침
+    } catch {
+      alert('예약 취소에 실패했습니다.');
+    } finally {
+      setCancelingPending(false);
+    }
+  };
+
   // 사용 가능한 액션 결정
   const hasActiveSubscription = isSubscriptionActive(subscription?.status);
   const canStart = canStartSubscription(subscription?.status);
 
   // 액션 버튼 목록
-  const actionButtons: { action: SubscriptionActionType; icon: typeof Plus; show: boolean }[] = [
-    { action: 'start', icon: Plus, show: canStart },
-    { action: 'change_plan', icon: ArrowsUpFromLine, show: hasActiveSubscription },
-    { action: 'adjust_period', icon: Calendar, show: hasActiveSubscription },
-    { action: 'cancel', icon: WarningCircle, show: hasActiveSubscription },
+  const actionButtons: { action: SubscriptionActionType; icon: typeof Plus; show: boolean; disabled: boolean }[] = [
+    { action: 'start', icon: Plus, show: canStart, disabled: false },
+    { action: 'change_plan', icon: FastRightCircle, show: hasActiveSubscription, disabled: hasPendingAction },
+    { action: 'adjust_period', icon: Calendar, show: hasActiveSubscription, disabled: hasPendingAction },
+    { action: 'cancel', icon: WarningCircle, show: hasActiveSubscription && !hasPendingCancel, disabled: hasPendingPlan },
   ];
 
   const renderActionForm = () => {
@@ -70,6 +106,36 @@ export default function SubscriptionActionModal({
       onSuccess: handleSuccess,
       onCancel: handleCancel,
     };
+
+    // 예약이 있으면 해당 액션 비활성화
+    const isActionBlocked = (action: SubscriptionActionType): boolean => {
+      if (action === 'start') return false;
+      if (hasPendingPlan) return true;
+      if (hasPendingCancel && action !== 'cancel') return true;
+      return false;
+    };
+
+    if (isActionBlocked(currentAction)) {
+      const pendingType = hasPendingPlan ? 'plan' : 'cancel';
+      const pendingLabel = hasPendingPlan
+        ? `플랜 변경 예약: ${PLAN_LABELS[subscription?.plan as PlanType] || '-'} → ${PLAN_LABELS[subscription?.pendingPlan as PlanType]}`
+        : '해지 예약됨';
+
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <WarningCircle className="w-12 h-12 mx-auto mb-3 text-amber-400" />
+          <p className="font-medium text-gray-700">{pendingLabel}</p>
+          <p className="text-sm mt-1 mb-4">다른 작업을 하려면 먼저 예약을 취소해주세요.</p>
+          <button
+            onClick={() => handleCancelPending(pendingType)}
+            disabled={cancelingPending}
+            className="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {cancelingPending ? '취소 중...' : '예약 취소'}
+          </button>
+        </div>
+      );
+    }
 
     switch (currentAction) {
       case 'start':
@@ -91,9 +157,12 @@ export default function SubscriptionActionModal({
       <div className="relative bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900">
-            {ACTION_LABELS[currentAction]}
-          </h3>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">
+              {ACTION_LABELS[currentAction]}
+            </h3>
+            <p className="text-sm text-gray-500">{tenant.brandName}</p>
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -107,13 +176,16 @@ export default function SubscriptionActionModal({
           <div className="flex gap-1 px-4 py-2 border-b border-gray-100 overflow-x-auto">
             {actionButtons
               .filter((btn) => btn.show)
-              .map(({ action, icon: Icon }) => (
+              .map(({ action, icon: Icon, disabled }) => (
                 <button
                   key={action}
-                  onClick={() => setCurrentAction(action)}
+                  onClick={() => !disabled && setCurrentAction(action)}
+                  disabled={disabled}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                     currentAction === action
                       ? 'bg-blue-600 text-white'
+                      : disabled
+                      ? 'text-gray-300 cursor-not-allowed'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >

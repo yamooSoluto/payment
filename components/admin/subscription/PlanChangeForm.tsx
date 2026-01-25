@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RefreshDouble, Check, ArrowRight } from 'iconoir-react';
+import { RefreshDouble, Check } from 'iconoir-react';
 import {
   SubscriptionFormProps,
   PlanType,
@@ -22,10 +22,11 @@ interface Plan {
 export default function PlanChangeForm({
   tenantId,
   subscription,
-  tenant,
+  tenant: _tenant,
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  void _tenant; // Props interface 호환성 유지
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const currentPlan = subscription?.plan as PlanType | null;
@@ -61,12 +62,6 @@ export default function PlanChangeForm({
 
   // 변경 가능한 플랜 (trial 제외)
   const changeablePlans = plans.filter(p => p.id !== 'trial');
-  const currentPlanData = plans.find(p => p.id === currentPlan);
-  const newPlanData = plans.find(p => p.id === newPlan);
-
-  const isUpgrade = currentPlanData && newPlanData &&
-    !currentPlanData.isNegotiable && !newPlanData.isNegotiable &&
-    newPlanData.price > currentPlanData.price;
 
   const handleSubmit = async () => {
     setError('');
@@ -104,42 +99,6 @@ export default function PlanChangeForm({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 rounded-lg p-3 text-sm">
-        <div className="font-medium text-gray-900">{tenant.brandName}</div>
-        <div className="text-gray-500">{tenant.email}</div>
-      </div>
-
-      {/* 현재 플랜 → 변경 플랜 */}
-      <div className="flex items-center justify-center gap-4 py-4 bg-gradient-to-r from-gray-50 via-white to-gray-50 rounded-lg">
-        <div className="text-center">
-          <div className="text-xs text-gray-500 mb-1">현재</div>
-          <div className="text-lg font-bold text-gray-700">
-            {currentPlanData?.name || '-'}
-          </div>
-          <div className="text-xs text-gray-500">
-            {currentPlanData
-              ? currentPlanData.isNegotiable
-                ? '협의'
-                : `${currentPlanData.price.toLocaleString()}원/월`
-              : '-'}
-          </div>
-        </div>
-        <ArrowRight className="w-5 h-5 text-gray-400" />
-        <div className="text-center">
-          <div className="text-xs text-gray-500 mb-1">변경</div>
-          <div className={`text-lg font-bold ${isUpgrade ? 'text-blue-600' : 'text-orange-600'}`}>
-            {newPlanData?.name || '-'}
-          </div>
-          <div className="text-xs text-gray-500">
-            {newPlanData
-              ? newPlanData.isNegotiable
-                ? '협의'
-                : `${newPlanData.price.toLocaleString()}원/월`
-              : '-'}
-          </div>
-        </div>
-      </div>
-
       {/* 플랜 선택 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">변경할 플랜</label>
@@ -194,13 +153,6 @@ export default function PlanChangeForm({
           </p>
         )}
       </div>
-
-      {/* 안내 메시지 */}
-      {isUpgrade && applyNow && (
-        <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg">
-          업그레이드 차액 결제가 필요한 경우, 별도로 커스텀 결제 링크를 발송해주세요.
-        </div>
-      )}
 
       {/* 메모 */}
       <div>

@@ -2,17 +2,18 @@
 
 import { useState } from 'react';
 import { RefreshDouble, WarningTriangle } from 'iconoir-react';
-import { SubscriptionFormProps, STATUS_LABELS, formatDateForInput } from './types';
+import { SubscriptionFormProps, formatDateForInput } from './types';
 
 type CancelMode = 'scheduled' | 'immediate';
 
 export default function CancelSubscriptionForm({
   tenantId,
   subscription,
-  tenant,
+  tenant: _tenant,
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  void _tenant; // Props interface 호환성 유지
   const [cancelMode, setCancelMode] = useState<CancelMode>('scheduled');
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -32,12 +33,6 @@ export default function CancelSubscriptionForm({
 
   const handleSubmit = async () => {
     setError('');
-
-    if (!reason.trim()) {
-      setError('해지 사유를 입력해주세요.');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const response = await fetch(`/api/admin/subscriptions/${tenantId}/cancel`, {
@@ -65,17 +60,6 @@ export default function CancelSubscriptionForm({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 rounded-lg p-3 text-sm">
-        <div className="font-medium text-gray-900">{tenant.brandName}</div>
-        <div className="text-gray-500">{tenant.email}</div>
-        {subscription && (
-          <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">
-            현재 상태: {STATUS_LABELS[subscription.status] || subscription.status}
-            {periodEndDate !== '-' && ` · 종료일: ${periodEndDate}`}
-          </div>
-        )}
-      </div>
-
       {/* 해지 방식 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">해지 방식</label>
@@ -96,7 +80,7 @@ export default function CancelSubscriptionForm({
               className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
             />
             <div>
-              <div className="font-medium text-gray-900 text-sm">예약 해지</div>
+              <div className="font-medium text-gray-900 text-sm">해지 예약</div>
               <div className="text-xs text-gray-500 mt-0.5">
                 현재 이용기간 종료 후 해지됩니다.
                 {periodEndDate !== '-' && ` (${periodEndDate})`}
@@ -129,30 +113,14 @@ export default function CancelSubscriptionForm({
         </div>
       </div>
 
-      {/* 즉시 해지 경고 */}
-      {cancelMode === 'immediate' && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg">
-          <WarningTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-red-700">
-            <p className="font-medium">즉시 해지 시 주의사항</p>
-            <ul className="mt-1 space-y-0.5 list-disc list-inside">
-              <li>서비스 이용이 즉시 중단됩니다</li>
-              <li>남은 기간에 대한 환불이 필요한 경우 별도로 처리해주세요</li>
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* 해지 사유 */}
+      {/* 메모 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          해지 사유 <span className="text-red-500">*</span>
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">메모 (선택)</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="해지 사유를 입력하세요 (필수)"
-          rows={3}
+          placeholder="해지 사유를 입력하세요"
+          rows={2}
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>

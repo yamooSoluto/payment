@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
 
 // 플랜별 금액
 const PLAN_PRICES: Record<string, number> = {
@@ -31,6 +32,7 @@ export async function POST(
       currentPeriodEnd,        // ISO date string (optional)
       nextBillingDate,         // ISO date string | null (optional)
       reason,
+      adminId,                 // 관리자 ID (optional)
     } = body;
 
     // 필수 필드 검증
@@ -96,15 +98,20 @@ export async function POST(
     // 상태 및 금액 결정
     const status = isTrial ? 'trial' : 'active';
     const amount = PLAN_PRICES[plan] || 0;
+    const baseAmount = amount; // 플랜 기본 가격 (정기결제 금액, UI 표시용)
 
     // 구독 데이터 생성/업데이트
     const subscriptionData = {
       tenantId,
+      userId: tenantData?.userId || null,
       brandName: tenantData?.brandName || '',
+      name: tenantData?.name || null,
+      phone: tenantData?.phone || null,
       email: tenantData?.email || '',
       plan,
       status,
       amount,
+      baseAmount,
       currentPeriodStart: startDate,
       currentPeriodEnd: endDate,
       nextBillingDate: billingDate,
@@ -119,6 +126,7 @@ export async function POST(
       // 메타데이터
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: 'admin',
+      updatedByAdminId: adminId || null,
     };
 
     // subscriptions 컬렉션 업데이트
@@ -133,30 +141,30 @@ export async function POST(
 
     // tenants 컬렉션의 subscription 필드도 업데이트
     await db.collection('tenants').doc(tenantId).update({
+      plan,
       'subscription.plan': plan,
       'subscription.status': status,
-      'subscription.currentPeriodStart': startDate,
-      'subscription.currentPeriodEnd': endDate,
-      'subscription.nextBillingDate': billingDate,
       updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'admin',
     });
 
-    // subscription_history에 기록
-    await db.collection('subscription_history').add({
+    // subscription_history에 기록 (서브컬렉션 구조 사용)
+    await addSubscriptionHistoryRecord(db, {
       tenantId,
-      brandName: tenantData?.brandName || '',
+      userId: tenantData?.userId || '',
       email: tenantData?.email || '',
+      brandName: tenantData?.brandName || '',
       plan,
       status,
       amount,
       periodStart: startDate,
       periodEnd: endDate,
       billingDate,
-      changeType: isTrial ? 'trial_start' : 'new',
+      changeType: 'new',
+      changedAt: new Date(),
+      changedBy: 'admin',
       previousPlan: existingSubscription?.plan || null,
       previousStatus: existingSubscription?.status || null,
-      changedAt: FieldValue.serverTimestamp(),
-      changedBy: 'admin',
       note: reason || `관리자에 의해 ${isTrial ? 'Trial' : plan} 구독 시작`,
     });
 

@@ -60,6 +60,7 @@ interface Tenant {
   csTone: string;
   botName: string;
   reviewCode: string;
+  pendingPlan: string | null;
 }
 
 interface Pagination {
@@ -479,18 +480,26 @@ export default function TenantsPage() {
     }
   };
 
-  const getSubscriptionStatusBadge = (status: string, deleted?: boolean) => {
+  const getSubscriptionStatusBadge = (status: string, deleted?: boolean, pendingPlan?: string | null) => {
     const baseClass = "px-2 py-1 text-xs font-medium rounded-full";
     // 삭제된 매장은 '삭제'로 표시
     if (deleted) {
       return <span className={`${baseClass} bg-red-50 text-red-400`}>삭제</span>;
     }
+
+    // 플랜 변경 예약 인디케이터 (→B, →E 등)
+    const pendingIndicator = pendingPlan ? (
+      <span className="text-blue-500 ml-0.5">→{pendingPlan.charAt(0).toUpperCase()}</span>
+    ) : null;
+
     switch (status) {
       case 'active':
-        return <span className={`${baseClass} bg-green-100 text-green-700`}>구독중</span>;
+        return <span className={`${baseClass} bg-green-100 text-green-700`}>구독중{pendingIndicator}</span>;
       case 'trial':
       case 'trialing':
-        return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험</span>;
+        return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험{pendingIndicator}</span>;
+      case 'pending_cancel':
+        return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':
@@ -531,7 +540,7 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0 z-50">
+      <div className="flex items-center justify-between flex-wrap gap-4 sticky left-0">
         <div className="flex items-center gap-3">
           <HomeSimpleDoor className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">매장 관리</h1>
@@ -1034,7 +1043,7 @@ export default function TenantsPage() {
                     )}
                     {visibleColumns.includes('subscriptionStatus') && (
                       <td className="px-2 py-3 text-center whitespace-nowrap">
-                        {getSubscriptionStatusBadge(tenant.subscriptionStatus, tenant.deleted)}
+                        {getSubscriptionStatusBadge(tenant.subscriptionStatus, tenant.deleted, tenant.pendingPlan)}
                       </td>
                     )}
                     {visibleColumns.includes('createdAt') && (

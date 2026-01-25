@@ -241,11 +241,10 @@ export async function POST(request: Request) {
 
     // Trial subscription 생성
     const now = new Date();
-    const trialEndDate = new Date(now);
-    trialEndDate.setDate(trialEndDate.getDate() + 30); // 30일 무료체험
-
-    // currentPeriodEnd는 trialEndDate와 동일
-    const currentPeriodEnd = new Date(trialEndDate);
+    // currentPeriodEnd: 시작일 + 1개월 - 1일
+    const currentPeriodEnd = new Date(now);
+    currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+    currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
     // userId 조회 또는 생성
     const existingUser = await db.collection('users').doc(email).get();
@@ -256,27 +255,38 @@ export async function POST(request: Request) {
 
     await db.collection('subscriptions').doc(tenantId).set({
       tenantId,
-      userId, // userId 추가
+      userId,
       brandName,
       name,
       phone,
       email,
       plan: 'trial',
       status: 'trial',
-      trialEndDate,
+      amount: 0,
       currentPeriodStart: now,
       currentPeriodEnd,
+      nextBillingDate: null,
+      // pending 필드 초기화
+      pendingPlan: null,
+      pendingAmount: null,
+      pendingChangeAt: null,
+      // 해지 관련 필드 초기화
+      cancelAt: null,
+      canceledAt: null,
+      cancelReason: null,
       createdAt: now,
       updatedAt: now,
+      updatedBy: 'user',
     });
 
     // tenant에도 subscription 정보 + userId 업데이트 (최소화된 필드만)
     await db.collection('tenants').doc(tenantSnapshot.docs[0].id).update({
       userId,
+      plan: 'trial',
       'subscription.plan': 'trial',
       'subscription.status': 'trial',
-      plan: 'trial',
       updatedAt: now,
+      updatedBy: 'user',
     });
 
     // users 컬렉션 업데이트 (trialApplied 플래그 + userId)
@@ -306,13 +316,13 @@ export async function POST(request: Request) {
       });
     }
 
-    console.log(`Trial applied to existing tenant: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);
+    console.log(`Trial applied to existing tenant: ${tenantId}, 종료일: ${currentPeriodEnd.toISOString()}`);
 
     return NextResponse.json({
       success: true,
       message: '무료체험이 시작되었습니다.',
       tenantId,
-      trialEndDate: trialEndDate.toISOString(),
+      currentPeriodEnd: currentPeriodEnd.toISOString(),
     });
 
   } catch (error) {

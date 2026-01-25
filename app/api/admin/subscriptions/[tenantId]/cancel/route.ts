@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
 
 // 구독 해지 API
 export async function POST(
@@ -17,7 +18,7 @@ export async function POST(
     const body = await request.json();
     const {
       cancelMode,  // 'scheduled' | 'immediate'
-      reason,      // 필수
+      reason,      // 선택
     } = body;
 
     // 필수 필드 검증
@@ -25,9 +26,7 @@ export async function POST(
       return NextResponse.json({ error: '해지 방식을 선택해주세요.' }, { status: 400 });
     }
 
-    if (!reason || typeof reason !== 'string' || reason.trim() === '') {
-      return NextResponse.json({ error: '해지 사유를 입력해주세요.' }, { status: 400 });
-    }
+    const reasonText = reason?.trim() || '';
 
     // 매장 존재 여부 확인
     const tenantDoc = await db.collection('tenants').doc(tenantId).get();
@@ -76,13 +75,15 @@ export async function POST(
       await db.collection('subscriptions').doc(tenantId).update({
         status: 'pending_cancel',
         cancelAt,
-        cancelReason: reason,
+        cancelReason: reasonText,
         cancelRequestedAt: now,
         cancelRequestedBy: 'admin',
         // pending 필드 초기화
         pendingPlan: null,
         pendingAmount: null,
         pendingChangeAt: null,
+        // 원래 결제일 저장 (취소 시 복구용)
+        previousNextBillingDate: existingSubscription.nextBillingDate || null,
         // 다음 결제일 제거 (자동 결제 방지)
         nextBillingDate: null,
         updatedAt: FieldValue.serverTimestamp(),
@@ -92,27 +93,27 @@ export async function POST(
       // tenants 컬렉션 업데이트
       await db.collection('tenants').doc(tenantId).update({
         'subscription.status': 'pending_cancel',
-        'subscription.nextBillingDate': null,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // subscription_history에 기록
-      await db.collection('subscription_history').add({
+      // subscription_history에 기록 (서브컬렉션 구조)
+      await addSubscriptionHistoryRecord(db, {
         tenantId,
-        brandName: tenantData?.brandName || '',
+        userId: tenantData?.userId || existingSubscription.userId || '',
         email: tenantData?.email || '',
+        brandName: tenantData?.brandName || '',
         plan: existingSubscription.plan,
         status: 'pending_cancel',
         amount: existingSubscription.amount,
-        periodStart: existingSubscription.currentPeriodStart,
-        periodEnd: existingSubscription.currentPeriodEnd,
+        periodStart: existingSubscription.currentPeriodStart?.toDate?.() || existingSubscription.currentPeriodStart || new Date(),
+        periodEnd: existingSubscription.currentPeriodEnd?.toDate?.() || existingSubscription.currentPeriodEnd || null,
         billingDate: null,
-        changeType: 'cancel_scheduled',
+        changeType: 'cancel',
+        changedAt: new Date(),
+        changedBy: 'admin',
         previousPlan: existingSubscription.plan,
         previousStatus: currentStatus,
-        changedAt: FieldValue.serverTimestamp(),
-        changedBy: 'admin',
-        note: `관리자에 의해 해지 예약. 해지 예정일: ${cancelAt.toISOString().split('T')[0]}. 사유: ${reason}`,
+        note: `관리자에 의해 해지 예약. 해지 예정일: ${cancelAt.toISOString().split('T')[0]}${reasonText ? `. 사유: ${reasonText}` : ''}`,
       });
 
       return NextResponse.json({
@@ -127,7 +128,7 @@ export async function POST(
         status: 'canceled',
         cancelAt: null,
         canceledAt: now,
-        cancelReason: reason,
+        cancelReason: reasonText,
         cancelRequestedAt: now,
         cancelRequestedBy: 'admin',
         // pending 필드 초기화
@@ -143,27 +144,27 @@ export async function POST(
       // tenants 컬렉션 업데이트
       await db.collection('tenants').doc(tenantId).update({
         'subscription.status': 'canceled',
-        'subscription.nextBillingDate': null,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // subscription_history에 기록
-      await db.collection('subscription_history').add({
+      // subscription_history에 기록 (서브컬렉션 구조)
+      await addSubscriptionHistoryRecord(db, {
         tenantId,
-        brandName: tenantData?.brandName || '',
+        userId: tenantData?.userId || existingSubscription.userId || '',
         email: tenantData?.email || '',
+        brandName: tenantData?.brandName || '',
         plan: existingSubscription.plan,
         status: 'canceled',
         amount: existingSubscription.amount,
-        periodStart: existingSubscription.currentPeriodStart,
-        periodEnd: existingSubscription.currentPeriodEnd,
+        periodStart: existingSubscription.currentPeriodStart?.toDate?.() || existingSubscription.currentPeriodStart || new Date(),
+        periodEnd: existingSubscription.currentPeriodEnd?.toDate?.() || existingSubscription.currentPeriodEnd || null,
         billingDate: null,
         changeType: 'cancel',
+        changedAt: new Date(),
+        changedBy: 'admin',
         previousPlan: existingSubscription.plan,
         previousStatus: currentStatus,
-        changedAt: FieldValue.serverTimestamp(),
-        changedBy: 'admin',
-        note: `관리자에 의해 즉시 해지. 사유: ${reason}`,
+        note: `관리자에 의해 즉시 해지${reasonText ? `. 사유: ${reasonText}` : ''}`,
       });
 
       return NextResponse.json({

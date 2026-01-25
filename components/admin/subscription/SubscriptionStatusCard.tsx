@@ -80,7 +80,7 @@ export default function SubscriptionStatusCard({
           </span>
           {getStatusBadge(subscription.status)}
         </div>
-        {plan && (
+        {plan && plan !== 'enterprise' && (
           <span className="text-sm text-gray-500">
             {PLAN_PRICES[plan].toLocaleString()}원/월
           </span>
@@ -127,7 +127,7 @@ export default function SubscriptionStatusCard({
       {/* 예약된 플랜 변경 알림 */}
       {subscription.pendingPlan && (
         <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-          다음 결제일부터 {PLAN_LABELS[subscription.pendingPlan as PlanType]} 플랜으로 변경 예정
+          다음 구독부터 {PLAN_LABELS[subscription.pendingPlan as PlanType]} 플랜으로 변경 예정
         </div>
       )}
     </div>

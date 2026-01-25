@@ -9,12 +9,15 @@ export interface TenantSubscription {
   status: string;      // 'active' | 'canceled' | 'past_due' | 'trial' | 'expired' | 'suspended'
 }
 
+export type UpdatedBy = 'admin' | 'user' | 'system';
+
 /**
  * tenantId로 특정 매장의 구독 정보를 동기화
  */
 export async function syncSubscriptionToTenant(
   tenantId: string,
-  subscription: Partial<TenantSubscription>
+  subscription: Partial<TenantSubscription>,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -57,6 +60,10 @@ export async function syncSubscriptionToTenant(
     if (subscription.status !== undefined) {
       updateData['subscription.status'] = subscription.status;
     }
+    if (updatedBy) {
+      updateData['updatedBy'] = updatedBy;
+      updateData['updatedAt'] = new Date();
+    }
 
     await docRef.update(updateData);
 
@@ -74,14 +81,15 @@ export async function syncSubscriptionToTenant(
 export async function syncNewSubscription(
   tenantId: string,
   plan: string,
-  _nextBillingDate: Date // 미사용 (subscriptions에서 조회)
+  _nextBillingDate: Date, // 미사용 (subscriptions에서 조회)
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
     status: 'active',
-  });
+  }, updatedBy);
 }
 
 /**
@@ -90,40 +98,43 @@ export async function syncNewSubscription(
 export async function syncPlanChange(
   tenantId: string,
   newPlan: string,
-  _renewsAt?: Date // 미사용 (subscriptions에서 조회)
+  _renewsAt?: Date, // 미사용 (subscriptions에서 조회)
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan: newPlan,
     status: 'active',
-  });
+  }, updatedBy);
 }
 
 /**
  * 구독 취소 시 tenants에 반영
  */
 export async function syncSubscriptionCancellation(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'canceled',
-  });
+  }, updatedBy);
 }
 
 /**
  * 예약 해지 시 tenants에 반영 (pending_cancel 상태)
  */
 export async function syncSubscriptionPendingCancel(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'pending_cancel',
-  });
+  }, updatedBy);
 }
 
 /**
@@ -132,14 +143,15 @@ export async function syncSubscriptionPendingCancel(
 export async function syncSubscriptionReactivation(
   tenantId: string,
   plan: string,
-  _renewsAt: Date // 미사용 (subscriptions에서 조회)
+  _renewsAt: Date, // 미사용 (subscriptions에서 조회)
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
     status: 'active',
-  });
+  }, updatedBy);
 }
 
 /**
@@ -148,64 +160,69 @@ export async function syncSubscriptionReactivation(
 export async function syncPaymentSuccess(
   tenantId: string,
   plan: string,
-  _nextBillingDate?: Date // 미사용 (subscriptions에서 조회)
+  _nextBillingDate?: Date, // 미사용 (subscriptions에서 조회)
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
     status: 'active',
-  });
+  }, updatedBy);
 }
 
 /**
  * 결제 실패 시 tenants에 반영
  */
 export async function syncPaymentFailure(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'past_due',
-  });
+  }, updatedBy);
 }
 
 /**
  * Trial 만료 시 tenants에 반영
  */
 export async function syncTrialExpired(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'expired',
-  });
+  }, updatedBy);
 }
 
 /**
  * 구독 즉시 만료 시 tenants에 반영 (즉시 취소 등)
  */
 export async function syncSubscriptionExpired(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'expired',
-  });
+  }, updatedBy);
 }
 
 /**
  * 구독 정지 시 tenants에 반영 (유예 기간 만료 후)
  */
 export async function syncSubscriptionSuspended(
-  tenantId: string
+  tenantId: string,
+  updatedBy?: UpdatedBy
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     status: 'suspended',
-  });
+  }, updatedBy);
 }

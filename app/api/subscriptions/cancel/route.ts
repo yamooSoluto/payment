@@ -296,6 +296,10 @@ export async function POST(request: NextRequest) {
         pendingAmount: FieldValue.delete(),
         pendingMode: FieldValue.delete(),
         pendingChangeAt: FieldValue.delete(),
+        // 원래 결제일 저장 (취소 시 복구용)
+        previousNextBillingDate: subscription.nextBillingDate || null,
+        // 다음 결제일 제거 (자동 결제 방지)
+        nextBillingDate: null,
         updatedAt: now,
       });
 

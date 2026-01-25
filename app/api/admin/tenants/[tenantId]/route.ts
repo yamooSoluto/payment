@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
+import { getSubscriptionHistory } from '@/lib/subscription-history';
 
 // Firestore Timestamp를 ISO 문자열로 변환하는 헬퍼 함수
 function convertTimestamps(data: Record<string, unknown>): Record<string, unknown> {
@@ -99,28 +100,19 @@ export async function GET(
       console.error('Failed to fetch payments:', paymentError);
     }
 
-    // 구독 히스토리 조회 - 인덱스 없이 조회 후 정렬
+    // 구독 히스토리 조회 - 서브컬렉션 구조 사용 (subscription_history/{tenantId}/records)
     let subscriptionHistory: Array<{ recordId: string; [key: string]: unknown }> = [];
     try {
-      const historySnapshot = await db.collection('subscription_history')
-        .doc(tenantId)
-        .collection('records')
-        .get();
-
-      subscriptionHistory = historySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          recordId: doc.id,
-          ...convertTimestamps(data),
-        };
-      });
-
-      // 클라이언트 사이드에서 changedAt 내림차순 정렬
-      subscriptionHistory.sort((a, b) => {
-        const dateA = a.changedAt ? new Date(a.changedAt as string).getTime() : 0;
-        const dateB = b.changedAt ? new Date(b.changedAt as string).getTime() : 0;
-        return dateB - dateA;
-      });
+      const historyRecords = await getSubscriptionHistory(db, tenantId, 50);
+      subscriptionHistory = historyRecords.map((record, index) => ({
+        recordId: `record_${index}`,
+        ...record,
+        // Date를 ISO 문자열로 변환
+        periodStart: record.periodStart instanceof Date ? record.periodStart.toISOString() : record.periodStart,
+        periodEnd: record.periodEnd instanceof Date ? record.periodEnd.toISOString() : record.periodEnd,
+        billingDate: record.billingDate instanceof Date ? record.billingDate.toISOString() : record.billingDate,
+        changedAt: record.changedAt instanceof Date ? record.changedAt.toISOString() : record.changedAt,
+      }));
     } catch (historyError) {
       console.error('Failed to fetch subscription history:', historyError);
     }

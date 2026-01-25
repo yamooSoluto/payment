@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
 
 // 기간 조정 API
 export async function PATCH(
@@ -19,14 +20,10 @@ export async function PATCH(
       currentPeriodStart,  // ISO date string (optional)
       currentPeriodEnd,    // ISO date string (optional)
       nextBillingDate,     // ISO date string | null (optional)
-      syncNextBilling,     // boolean: 종료일 변경 시 결제일도 동기화
-      reason,              // 필수
+      reason,              // 선택
     } = body;
 
-    // 필수 필드 검증
-    if (!reason || typeof reason !== 'string' || reason.trim() === '') {
-      return NextResponse.json({ error: '변경 사유를 입력해주세요.' }, { status: 400 });
-    }
+    const reasonText = reason?.trim() || '';
 
     // 최소 하나의 날짜 변경 필요
     if (!currentPeriodStart && !currentPeriodEnd && nextBillingDate === undefined) {
@@ -58,10 +55,6 @@ export async function PATCH(
       updatedBy: 'admin',
     };
 
-    const tenantUpdateData: Record<string, unknown> = {
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
     // 변경 내역 추적
     const changes: string[] = [];
 
@@ -69,68 +62,52 @@ export async function PATCH(
     if (currentPeriodStart) {
       const newStart = new Date(currentPeriodStart);
       updateData.currentPeriodStart = newStart;
-      tenantUpdateData['subscription.currentPeriodStart'] = newStart;
       changes.push(`시작일: ${currentPeriodStart}`);
     }
 
     // 종료일 변경
-    let newEndDate: Date | null = null;
     if (currentPeriodEnd) {
-      newEndDate = new Date(currentPeriodEnd);
+      const newEndDate = new Date(currentPeriodEnd);
       updateData.currentPeriodEnd = newEndDate;
-      tenantUpdateData['subscription.currentPeriodEnd'] = newEndDate;
       changes.push(`종료일: ${currentPeriodEnd}`);
-
-      // syncNextBilling이 true이면 결제일도 종료일 + 1일로 동기화
-      if (syncNextBilling) {
-        const syncedBillingDate = new Date(newEndDate);
-        syncedBillingDate.setDate(syncedBillingDate.getDate() + 1);
-        updateData.nextBillingDate = syncedBillingDate;
-        tenantUpdateData['subscription.nextBillingDate'] = syncedBillingDate;
-        changes.push(`결제일: ${syncedBillingDate.toISOString().split('T')[0]} (동기화)`);
-      }
     }
 
-    // 결제일 변경 (명시적으로 지정된 경우, syncNextBilling보다 우선)
-    if (nextBillingDate !== undefined && !syncNextBilling) {
+    // 결제일 변경
+    if (nextBillingDate !== undefined) {
       if (nextBillingDate === null) {
         updateData.nextBillingDate = null;
-        tenantUpdateData['subscription.nextBillingDate'] = null;
         changes.push('결제일: 없음');
       } else {
         const newBillingDate = new Date(nextBillingDate);
         updateData.nextBillingDate = newBillingDate;
-        tenantUpdateData['subscription.nextBillingDate'] = newBillingDate;
         changes.push(`결제일: ${nextBillingDate}`);
       }
     }
 
-    // subscriptions 컬렉션 업데이트
+    // subscriptions 컬렉션만 업데이트 (tenants는 subscription 필드 없음)
     await db.collection('subscriptions').doc(tenantId).update(updateData);
 
-    // tenants 컬렉션 업데이트
-    await db.collection('tenants').doc(tenantId).update(tenantUpdateData);
+    // subscription_history에서 현재 활성 레코드의 기간 정보만 업데이트 (새 레코드 생성 안함)
+    const historyUpdateData: Record<string, unknown> = {
+      note: `관리자에 의해 기간 조정: ${changes.join(', ')}${reasonText ? `. 사유: ${reasonText}` : ''}`,
+    };
 
-    // subscription_history에 기록
-    await db.collection('subscription_history').add({
+    if (updateData.currentPeriodStart) {
+      historyUpdateData.periodStart = updateData.currentPeriodStart;
+    }
+    if (updateData.currentPeriodEnd) {
+      historyUpdateData.periodEnd = updateData.currentPeriodEnd;
+    }
+    if (updateData.nextBillingDate !== undefined) {
+      historyUpdateData.billingDate = updateData.nextBillingDate;
+    }
+
+    await updateCurrentHistoryStatus(
+      db,
       tenantId,
-      brandName: tenantData?.brandName || '',
-      email: tenantData?.email || '',
-      plan: existingSubscription.plan,
-      status: existingSubscription.status,
-      amount: existingSubscription.amount,
-      periodStart: updateData.currentPeriodStart || existingSubscription.currentPeriodStart,
-      periodEnd: updateData.currentPeriodEnd || existingSubscription.currentPeriodEnd,
-      billingDate: updateData.nextBillingDate !== undefined
-        ? updateData.nextBillingDate
-        : existingSubscription.nextBillingDate,
-      changeType: 'admin_period_adjust',
-      previousPlan: existingSubscription.plan,
-      previousStatus: existingSubscription.status,
-      changedAt: FieldValue.serverTimestamp(),
-      changedBy: 'admin',
-      note: `관리자에 의해 기간 조정: ${changes.join(', ')}. 사유: ${reason}`,
-    });
+      existingSubscription.status, // 상태는 그대로 유지
+      historyUpdateData
+    );
 
     return NextResponse.json({
       success: true,

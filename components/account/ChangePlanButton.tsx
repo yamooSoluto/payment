@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Flash, Calendar, Xmark, CheckCircle, WarningCircle } from 'iconoir-react';
 import { getPlanName } from '@/lib/toss';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChangePlanButtonProps {
   newPlan: string;
@@ -46,6 +47,7 @@ export default function ChangePlanButton({
   totalDaysInPeriod = 30,
   tenantId,
 }: ChangePlanButtonProps) {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedMode, setSelectedMode] = useState<'immediate' | 'scheduled' | null>(null);
@@ -82,78 +84,102 @@ export default function ChangePlanButton({
       const token = params.get('token');
       const email = params.get('email');
 
-      // 즉시 다운그레이드 시 환불 금액 계산
-      // 다운그레이드: immediatePayment가 음수 (환불해야 함)
-      const actualRefundAmount = mode === 'immediate' && immediatePayment < 0
-        ? Math.abs(immediatePayment)
-        : 0;
-
       // 멱등성 키 생성
       const idempotencyKey = generateIdempotencyKey(mode === 'immediate' ? 'IMMEDIATE_CHANGE' : 'SCHEDULED_CHANGE');
 
-      const response = await fetch('/api/subscriptions/change-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          email,
-          tenantId,
-          newPlan,
-          newAmount,
-          mode,
-          refundAmount: actualRefundAmount, // 즉시 다운그레이드 시 환불 금액
-          idempotencyKey,  // 멱등성 키 전달
-        }),
-      });
+      // Firebase ID 토큰 가져오기
+      let idToken = '';
+      if (user) {
+        idToken = await user.getIdToken();
+      }
+      const authHeader = idToken ? `Bearer ${idToken}` : token || '';
 
-      const data = await response.json();
+      if (mode === 'immediate') {
+        // 즉시 변경: /api/payments/change-plan 직접 호출 (업그레이드/다운그레이드 모두)
+        const response = await fetch('/api/payments/change-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
+          body: JSON.stringify({
+            tenantId,
+            newPlan,
+            idempotencyKey,
+          }),
+        });
 
-      if (response.ok) {
-        if (mode === 'immediate' && data.requiresPayment) {
-          // 업그레이드: 결제 페이지로 이동 (URLSearchParams로 올바른 URL 구성)
-          // 보안: token은 URL에 노출하지 않음 (세션 쿠키로 인증)
-          const checkoutParams = new URLSearchParams();
-          checkoutParams.set('plan', newPlan);
-          if (authParam) {
-            const authParams = new URLSearchParams(authParam);
-            authParams.forEach((value, key) => {
-              if (key !== 'token') {
-                checkoutParams.set(key, value);
-              }
-            });
-          }
-          if (tenantId) checkoutParams.set('tenantId', tenantId);
-          checkoutParams.set('mode', 'immediate');
-          checkoutParams.set('refund', refundAmount.toString());
-          window.location.href = `/checkout?${checkoutParams.toString()}`;
-        } else {
-          // 다운그레이드 또는 예약 변경: 완료 모달
+        const data = await response.json();
+
+        if (response.ok) {
           setShowModal(false);
-          if (mode === 'immediate') {
-            setResultModal({
-              isOpen: true,
-              type: 'success',
-              title: '플랜이 변경되었습니다',
-              message: `${newPlanName} 플랜으로 즉시 변경되었습니다.`,
-              refundAmount: data.refundProcessed ? data.refundAmount : undefined,
-            });
-          } else {
-            setResultModal({
-              isOpen: true,
-              type: 'success',
-              title: '플랜 변경이 예약되었습니다',
-              message: `${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 ${newPlanName} 플랜이 적용됩니다.`,
-            });
+          // 환불만 있는 경우 (다운그레이드), 결제만 있는 경우 (업그레이드), 둘 다 있는 경우
+          const hasRefund = data.refundAmount > 0;
+          const hasPaid = data.paidAmount > 0;
+
+          let resultMessage = `${newPlanName} 플랜으로 즉시 변경되었습니다.`;
+          if (hasRefund && hasPaid) {
+            resultMessage = `${newPlanName} 플랜으로 변경되었습니다.\n환불: ${data.refundAmount.toLocaleString()}원 / 결제: ${data.paidAmount.toLocaleString()}원`;
+          } else if (hasRefund) {
+            resultMessage = `${newPlanName} 플랜으로 변경되었습니다.\n${data.refundAmount.toLocaleString()}원이 환불됩니다.`;
+          } else if (hasPaid) {
+            resultMessage = `${newPlanName} 플랜으로 변경되었습니다.\n${data.paidAmount.toLocaleString()}원이 결제되었습니다.`;
           }
+
+          setResultModal({
+            isOpen: true,
+            type: 'success',
+            title: '플랜이 변경되었습니다',
+            message: resultMessage,
+            refundAmount: hasRefund ? data.refundAmount : undefined,
+          });
+        } else {
+          setShowModal(false);
+          setResultModal({
+            isOpen: true,
+            type: 'error',
+            title: '플랜 변경 실패',
+            message: data.error || '플랜 변경에 실패했습니다.',
+          });
         }
       } else {
-        setShowModal(false);
-        setResultModal({
-          isOpen: true,
-          type: 'error',
-          title: '플랜 변경 실패',
-          message: data.error || '플랜 변경에 실패했습니다.',
+        // 예약 변경: /api/subscriptions/change-plan 호출
+        const response = await fetch('/api/subscriptions/change-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader && { 'Authorization': authHeader }),
+          },
+          body: JSON.stringify({
+            token,
+            email,
+            tenantId,
+            newPlan,
+            newAmount,
+            mode,
+            idempotencyKey,
+          }),
         });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setShowModal(false);
+          setResultModal({
+            isOpen: true,
+            type: 'success',
+            title: '플랜 변경이 예약되었습니다',
+            message: `${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 ${newPlanName} 플랜이 적용됩니다.`,
+          });
+        } else {
+          setShowModal(false);
+          setResultModal({
+            isOpen: true,
+            type: 'error',
+            title: '플랜 변경 실패',
+            message: data.error || '플랜 변경에 실패했습니다.',
+          });
+        }
       }
     } catch {
       setShowModal(false);

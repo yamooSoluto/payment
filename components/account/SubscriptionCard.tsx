@@ -397,7 +397,7 @@ function CancelReservationModal({ isOpen, onClose, onConfirm, isLoading, pending
                 <span className="text-gray-500">예약된 플랜</span>
                 <span className="font-semibold text-gray-900">{getPlanName(pendingPlan)}</span>
               </div>
-              {pendingAmount && (
+              {pendingPlan !== 'enterprise' && pendingAmount && (
                 <div className="flex justify-between items-center text-sm mt-2">
                   <span className="text-gray-500">예정 금액</span>
                   <span className="font-semibold text-gray-900">{formatPrice(pendingAmount)}원/월</span>
@@ -730,13 +730,31 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </div>
             {/* 예약된 플랜이 없고 active 상태일 때만 다음 결제일 표시 */}
             {isActive && !subscription.pendingPlan && (
-              <div className="flex items-center gap-3 text-gray-600">
-                <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">다음 결제일</p>
-                  <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
+              <>
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-500">다음 결제일</p>
+                    <p className="font-medium">{subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-'}</p>
+                  </div>
                 </div>
-              </div>
+                {/* 결제 카드 미등록 경고 */}
+                {subscription.nextBillingDate && !subscription.billingKey && (
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <WarningCircle width={20} height={20} strokeWidth={1.5} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-amber-800">결제 카드가 등록되지 않았습니다</p>
+                      <p className="text-xs text-amber-600 mt-0.5">다음 결제일에 자동결제가 진행되지 않습니다.</p>
+                      <a
+                        href="#cards"
+                        className="inline-block mt-2 text-sm font-medium text-amber-700 hover:text-amber-900 underline"
+                      >
+                        결제 카드 등록하기
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -753,7 +771,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
                     <p>
                       <span className="text-blue-500">플랜:</span>{' '}
                       <span className="font-semibold">{getPlanName(subscription.pendingPlan)}</span>
-                      {subscription.pendingAmount && ` (${formatPrice(subscription.pendingAmount)}원/월)`}
+                      {subscription.pendingPlan !== 'enterprise' && subscription.pendingAmount && ` (${formatPrice(subscription.pendingAmount)}원/월)`}
                     </p>
                     {subscription.pendingChangeAt && (
                       <>

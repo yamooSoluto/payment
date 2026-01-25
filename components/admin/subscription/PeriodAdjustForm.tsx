@@ -7,10 +7,11 @@ import { SubscriptionFormProps, formatDateForInput } from './types';
 export default function PeriodAdjustForm({
   tenantId,
   subscription,
-  tenant,
+  tenant: _tenant,
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  void _tenant; // Props interface 호환성 유지
   // Firestore Timestamp 처리
   const getDateString = (value: unknown): string => {
     if (!value) return '';
@@ -30,19 +31,12 @@ export default function PeriodAdjustForm({
   const [nextBillingDate, setNextBillingDate] = useState(
     getDateString(subscription?.nextBillingDate)
   );
-  const [syncNextBilling, setSyncNextBilling] = useState(false);
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
     setError('');
-
-    if (!reason.trim()) {
-      setError('변경 사유를 입력해주세요.');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const response = await fetch(`/api/admin/subscriptions/${tenantId}/period`, {
@@ -52,8 +46,7 @@ export default function PeriodAdjustForm({
           currentPeriodStart: currentPeriodStart || undefined,
           currentPeriodEnd: currentPeriodEnd || undefined,
           nextBillingDate: nextBillingDate || null,
-          syncNextBilling,
-          reason,
+          reason: reason || undefined,
         }),
       });
 
@@ -73,11 +66,6 @@ export default function PeriodAdjustForm({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 rounded-lg p-3 text-sm">
-        <div className="font-medium text-gray-900">{tenant.brandName}</div>
-        <div className="text-gray-500">{tenant.email}</div>
-      </div>
-
       {/* 날짜 설정 */}
       <div className="space-y-3">
         <div>
@@ -106,33 +94,18 @@ export default function PeriodAdjustForm({
             type="date"
             value={nextBillingDate}
             onChange={(e) => setNextBillingDate(e.target.value)}
-            disabled={syncNextBilling}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={syncNextBilling}
-            onChange={(e) => setSyncNextBilling(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-600">
-            종료일 변경 시 결제일도 자동 동기화 (종료일 + 1일)
-          </span>
-        </label>
       </div>
 
       {/* 메모 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          변경 사유 <span className="text-red-500">*</span>
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">메모 (선택)</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="변경 사유를 입력하세요 (필수)"
+          placeholder="변경 사유를 입력하세요"
           rows={2}
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
         />

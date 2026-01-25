@@ -444,38 +444,47 @@ export async function POST(request: Request) {
     // tenantId가 있으면 trial subscription 생성
     if (tenantId) {
       const now = new Date();
-      const trialEndDate = new Date(now);
-      trialEndDate.setMonth(trialEndDate.getMonth() + 1); // +1개월
-      trialEndDate.setDate(trialEndDate.getDate() - 1);   // -1일
-
-      // currentPeriodEnd는 trialEndDate와 동일
-      const currentPeriodEnd = new Date(trialEndDate);
+      // currentPeriodEnd: 시작일 + 1개월 - 1일
+      const currentPeriodEnd = new Date(now);
+      currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+      currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
       // subscription 생성 (trial 상태, userId 포함)
       await db.collection('subscriptions').doc(tenantId).set({
         tenantId,
-        userId, // userId 추가
+        userId,
         brandName,
         name,
         phone,
         email,
         plan: 'trial',
         status: 'trial',
-        trialEndDate,
+        amount: 0,
         currentPeriodStart: now,
         currentPeriodEnd,
+        nextBillingDate: null,
+        // pending 필드 초기화
+        pendingPlan: null,
+        pendingAmount: null,
+        pendingChangeAt: null,
+        // 해지 관련 필드 초기화
+        cancelAt: null,
+        canceledAt: null,
+        cancelReason: null,
         createdAt: now,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
-      // tenants 컬렉션에 필수 필드만 동기화 (userId, plan, subscription.status)
+      // tenants 컬렉션에 필수 필드만 동기화
       try {
         await db.collection('tenants').doc(tenantId).update({
           userId,
+          plan: 'trial',
           'subscription.plan': 'trial',
           'subscription.status': 'trial',
-          plan: 'trial',
           updatedAt: now,
+          updatedBy: 'user',
         });
       } catch (syncError) {
         console.error('Failed to sync tenant subscription:', syncError);
@@ -492,7 +501,7 @@ export async function POST(request: Request) {
           newStatus: 'trial',
           amount: 0,
           periodStart: now,
-          periodEnd: trialEndDate,
+          periodEnd: currentPeriodEnd,
           changeType: 'new',
           changedBy: 'user',
         });
@@ -502,7 +511,7 @@ export async function POST(request: Request) {
         // 히스토리 기록 실패해도 신청은 완료됨
       }
 
-      console.log(`Trial subscription 생성됨: ${tenantId}, 종료일: ${trialEndDate.toISOString()}`);
+      console.log(`Trial subscription 생성됨: ${tenantId}, 종료일: ${currentPeriodEnd.toISOString()}`);
     }
 
     // 알림톡/SMS 발송

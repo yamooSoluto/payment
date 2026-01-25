@@ -24,10 +24,11 @@ interface Plan {
 
 export default function StartSubscriptionForm({
   tenantId,
-  tenant,
+  tenant: _tenant,
   onSuccess,
   onCancel,
 }: SubscriptionFormProps) {
+  void _tenant; // Props interface 호환성 유지
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plan, setPlan] = useState<PlanType>('trial');
@@ -133,11 +134,6 @@ export default function StartSubscriptionForm({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 rounded-lg p-3 text-sm">
-        <div className="font-medium text-gray-900">{tenant.brandName}</div>
-        <div className="text-gray-500">{tenant.email}</div>
-      </div>
-
       {/* 플랜 선택 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">플랜</label>

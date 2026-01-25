@@ -243,16 +243,16 @@ export async function GET(request: NextRequest) {
         return null;
       };
 
-      const trialEndDate = toDate(subscriptionData?.trialEndDate);
+      const currentPeriodEnd = toDate(subscriptionData?.currentPeriodEnd);
       const nextBillingDateValue = toDate(subscriptionData?.nextBillingDate);
       const isTrial = subscriptionData?.status === 'trial';
 
       // pendingChangeAt 계산:
-      // - Trial 사용자: trialEndDate + 1 (무료체험 마지막 날 다음날)
+      // - Trial 사용자: currentPeriodEnd + 1 (무료체험 마지막 날 다음날)
       // - Active 사용자: nextBillingDate 그대로 (다음 결제일이 곧 새 플랜 시작일)
       let pendingChangeAt: Date;
-      if (isTrial && trialEndDate) {
-        pendingChangeAt = new Date(trialEndDate);
+      if (isTrial && currentPeriodEnd) {
+        pendingChangeAt = new Date(currentPeriodEnd);
         pendingChangeAt.setDate(pendingChangeAt.getDate() + 1);
       } else if (nextBillingDateValue) {
         pendingChangeAt = new Date(nextBillingDateValue);
@@ -265,6 +265,7 @@ export async function GET(request: NextRequest) {
       await subscriptionRef.update({
         billingKey,
         cardInfo: billingResponse.card || null,
+        billingType: 'recurring',  // 예약 결제는 정기결제
         pendingPlan: plan,
         pendingAmount: paymentAmount,
         pendingChangeAt,
@@ -397,6 +398,7 @@ export async function GET(request: NextRequest) {
         cardInfo: billingResponse.card || null,
         createdAt: now,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       // 결제 내역 저장 (멱등성 키 포함)
@@ -425,7 +427,7 @@ export async function GET(request: NextRequest) {
     });
 
     // tenants 컬렉션에 구독 정보 동기화
-    await syncNewSubscription(validTenantId, plan, nextBillingDate);
+    await syncNewSubscription(validTenantId, plan, nextBillingDate, 'user');
 
     // subscription_history에 기록 추가
     // users 컬렉션에서 userId 조회

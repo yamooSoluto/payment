@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash, ArrowsUpFromLine, Calendar, WarningCircle, Plus } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, NavArrowDown, NavArrowUp, Check, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Xmark, PageFlip, Timer, Trash, FastRightCircle, Calendar, WarningCircle, Plus } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
@@ -1052,7 +1052,7 @@ export default function TenantDetailPage() {
                               }}
                               className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                             >
-                              <ArrowsUpFromLine className="w-3.5 h-3.5" />
+                              <FastRightCircle className="w-3.5 h-3.5" />
                               플랜 변경
                             </button>
                             <button
@@ -1154,6 +1154,50 @@ export default function TenantDetailPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* 예약된 플랜 변경 알림 */}
+                    {subscription.pendingPlan && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-start gap-3 bg-blue-50 rounded-lg p-3">
+                          <FastRightCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-blue-800">플랜 변경 예약됨</p>
+                            <p className="text-xs text-blue-600 mt-1">
+                              {subscription.pendingChangeAt
+                                ? new Date(subscription.pendingChangeAt as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+                                : '다음 결제일'}부터{' '}
+                              <span className="font-semibold">{getPlanName(subscription.pendingPlan)}</span>
+                              {subscription.pendingAmount !== undefined && (
+                                <> ({((subscription.pendingAmount as number) ?? 0).toLocaleString()}원/월)</>
+                              )}
+                              로 변경됩니다.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 해지 예정 알림 */}
+                    {subscription.status === 'pending_cancel' && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-start gap-3 bg-orange-50 rounded-lg p-3">
+                          <WarningCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-orange-800">해지 예정</p>
+                            <p className="text-xs text-orange-600 mt-1">
+                              {subscription.cancelAt
+                                ? new Date(subscription.cancelAt as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+                                : subscription.currentPeriodEnd
+                                  ? new Date(subscription.currentPeriodEnd as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+                                  : '-'}에 구독이 종료됩니다.
+                              {subscription.cancelReason && (
+                                <span className="block mt-1">사유: {subscription.cancelReason as string}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

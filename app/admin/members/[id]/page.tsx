@@ -2,11 +2,21 @@
 
 import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz, ArrowsUpFromLine, WarningCircle } from 'iconoir-react';
+import { ArrowLeft, User, Sofa, CreditCard, FloppyDisk, RefreshDouble, HandCash, Plus, EditPencil, Trash, Calendar, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, PageFlip, MoreHoriz, WarningCircle } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import { INDUSTRY_OPTIONS, INDUSTRY_LABEL_TO_CODE, MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 import Spinner from '@/components/admin/Spinner';
-import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription, isSubscriptionActive } from '@/components/admin/subscription';
+import {
+  SubscriptionActionModal,
+  SubscriptionActionType,
+  SubscriptionInfo,
+  canStartSubscription,
+  isSubscriptionActive,
+  StartSubscriptionForm,
+  PlanChangeForm,
+  PeriodAdjustForm,
+  CancelSubscriptionForm,
+} from '@/components/admin/subscription';
 
 interface Member {
   id: string;
@@ -36,6 +46,7 @@ interface TenantSubscription {
   priceProtectedUntil: string | null;
   originalAmount: number | null;
   cancelMode?: 'scheduled' | 'immediate';
+  pendingPlan?: string | null;
 }
 
 interface TenantInfo {
@@ -221,6 +232,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [savingTenantDetail, setSavingTenantDetail] = useState(false);
   const [saveTenantProgress, setSaveTenantProgress] = useState(0);
   const [tenantDetailTab, setTenantDetailTab] = useState<'info' | 'subscription'>('info');
+  const [subscriptionInlineAction, setSubscriptionInlineAction] = useState<SubscriptionActionType | null>(null);
 
   // 구독 액션 모달 상태 (통합 액션 기반)
   const [subscriptionActionModal, setSubscriptionActionModal] = useState<{
@@ -347,13 +359,23 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         return false;
       }
     }
-    // 상태 필터
-    if (tenantFilterStatus.length > 0) {
-      const tenantStatus = tenant.deleted ? 'deleted' : (tenant.subscription?.status || 'none');
-      if (!tenantFilterStatus.includes(tenantStatus)) {
+    // 상태 필터 - '삭제' 필터는 삭제된 매장 포함 여부를 결정하는 토글
+    const tenantStatus = tenant.deleted ? 'deleted' : (tenant.subscription?.status || 'none');
+    const includeDeleted = tenantFilterStatus.includes('deleted');
+    const otherFilters = tenantFilterStatus.filter(s => s !== 'deleted');
+
+    // 삭제된 매장: '삭제' 필터가 선택된 경우에만 표시
+    if (tenantStatus === 'deleted') {
+      if (!includeDeleted) return false;
+    }
+
+    // 다른 상태 필터: 필터가 선택된 경우 해당 상태만 표시
+    if (otherFilters.length > 0 && tenantStatus !== 'deleted') {
+      if (!otherFilters.includes(tenantStatus)) {
         return false;
       }
     }
+
     // 플랜 필터
     if (tenantFilterPlan.length > 0 && !tenantFilterPlan.includes(tenant.subscription?.plan || '')) {
       return false;
@@ -1168,6 +1190,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     const sub = tenant.subscription;
     setTenantDetailModal({ isOpen: true, tenant });
     setTenantDetailTab('info'); // 탭 초기화
+    setSubscriptionInlineAction(null); // 구독 액션 초기화
     // 업종: 한글 라벨로 저장된 경우 코드로 변환
     const industryCode = tenant.industry
       ? (INDUSTRY_LABEL_TO_CODE[tenant.industry] || tenant.industry)
@@ -1459,17 +1482,24 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     });
   };
 
-  const getStatusBadge = (status: string | null | undefined, size: 'sm' | 'md' = 'md', cancelMode?: string) => {
+  const getStatusBadge = (status: string | null | undefined, size: 'sm' | 'md' = 'md', cancelMode?: string, pendingPlan?: string | null) => {
     const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
     // 즉시 해지(cancelMode === 'immediate')는 미구독으로 표시
     if (status === 'canceled' && cancelMode === 'immediate') {
       return <span className={`${sizeClass} font-medium bg-gray-100 text-gray-400 rounded-full`}>미구독</span>;
     }
+    // 플랜 변경 예약 인디케이터
+    const pendingIndicator = pendingPlan ? (
+      <span className="text-blue-500 ml-0.5">→{pendingPlan.charAt(0).toUpperCase()}</span>
+    ) : null;
     switch (status) {
       case 'active':
-        return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>구독중</span>;
+        return <span className={`${sizeClass} font-medium bg-green-100 text-green-700 rounded-full`}>구독중{pendingIndicator}</span>;
       case 'trial':
-        return <span className={`${sizeClass} font-medium bg-blue-100 text-blue-700 rounded-full`}>체험중</span>;
+      case 'trialing':
+        return <span className={`${sizeClass} font-medium bg-blue-100 text-blue-700 rounded-full`}>체험중{pendingIndicator}</span>;
+      case 'pending_cancel':
+        return <span className={`${sizeClass} font-medium bg-orange-100 text-orange-700 rounded-full`}>해지예정</span>;
       case 'canceled':
         return <span className={`${sizeClass} font-medium bg-orange-100 text-orange-700 rounded-full`}>해지 예정</span>;
       case 'expired':
@@ -1904,7 +1934,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       ) : tenant.deleted ? (
                         getStatusBadge('deleted', 'sm')
                       ) : (
-                        getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode)
+                        getStatusBadge(tenant.subscription?.status, 'sm', tenant.subscription?.cancelMode, tenant.subscription?.pendingPlan)
                       )}
                     </td>
                     <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">
@@ -1964,17 +1994,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                                 >
                                   <EditPencil className="w-4 h-4" />
                                   수정
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    openManualChargeModal(tenant);
-                                    setTenantActionDropdown(null);
-                                    setDropdownPosition(null);
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                >
-                                  <HandCash className="w-4 h-4" />
-                                  결제
                                 </button>
                                 <button
                                   onClick={() => {
@@ -3169,7 +3188,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             {/* 모달 헤더 */}
             <div className="p-6 border-b border-gray-100 shrink-0">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900">매장 수정</h3>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">매장 수정</h3>
+                  <p className="text-sm text-gray-500">{tenantDetailModal.tenant.brandName}</p>
+                </div>
                 <button
                   onClick={() => setTenantDetailModal({ isOpen: false, tenant: null })}
                   className="p-1 hover:bg-gray-100 rounded"
@@ -3199,20 +3221,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                   </div>
                 </div>
               )}
-
-              {/* 고정 정보 (항상 표시) */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="text-left">
-                    <span className="text-gray-500 block mb-1">계정</span>
-                    <span className="font-medium text-gray-900">{member?.email}</span>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-gray-500 block mb-1">tenantId</span>
-                    <span className="font-mono text-xs text-gray-700">{tenantDetailModal.tenant.tenantId}</span>
-                  </div>
-                </div>
-              </div>
 
               {/* 탭 선택 */}
               <div className="flex border-b border-gray-200 mb-4">
@@ -3325,67 +3333,166 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                     )}
                   </div>
 
-                  {/* 액션 버튼들 */}
-                  <div className="space-y-2">
-                    {(() => {
-                      const sub = tenantDetailModal.tenant.subscription;
-                      const status = sub?.status as SubscriptionInfo['status'] | undefined;
-                      const hasActiveSub = isSubscriptionActive(status);
-                      const canStart = canStartSubscription(status);
+                  {/* 액션 탭 및 인라인 폼 */}
+                  {(() => {
+                    const sub = tenantDetailModal.tenant.subscription;
+                    const status = sub?.status as SubscriptionInfo['status'] | undefined;
+                    const hasActiveSub = isSubscriptionActive(status);
+                    const canStart = canStartSubscription(status);
 
-                      if (hasActiveSub) {
+                    const handleFormSuccess = () => {
+                      setSubscriptionInlineAction(null);
+                      fetchMemberDetail();
+                      setTenantDetailModal({ isOpen: false, tenant: null });
+                    };
+
+                    const handleFormCancel = () => {
+                      setSubscriptionInlineAction(null);
+                    };
+
+                    const tenantBasicInfo = {
+                      tenantId: tenantDetailModal.tenant.tenantId,
+                      brandName: tenantDetailModal.tenant.brandName,
+                      email: member?.email || '',
+                    };
+
+                    const subscriptionInfo: SubscriptionInfo | null = sub ? {
+                      tenantId: tenantDetailModal.tenant.tenantId,
+                      plan: sub.plan as SubscriptionInfo['plan'],
+                      status: sub.status as SubscriptionInfo['status'],
+                      amount: sub.amount,
+                      currentPeriodStart: sub.currentPeriodStart,
+                      currentPeriodEnd: sub.currentPeriodEnd,
+                      nextBillingDate: sub.nextBillingDate,
+                      pendingPlan: sub.pendingPlan as SubscriptionInfo['plan'] | null,
+                    } : null;
+
+                    // 예약 상태 확인
+                    const hasPendingPlan = !!sub?.pendingPlan;
+                    const hasPendingCancel = sub?.status === 'pending_cancel';
+                    const hasPendingAction = hasPendingPlan || hasPendingCancel;
+
+                    if (hasActiveSub) {
+                      // 예약 취소 핸들러
+                      const handleCancelPending = async (type: 'plan' | 'cancel') => {
+                        try {
+                          const res = await fetch(`/api/admin/subscriptions/${tenantDetailModal.tenant.tenantId}/pending?type=${type}`, {
+                            method: 'DELETE',
+                          });
+                          const data = await res.json();
+                          if (!res.ok) {
+                            alert(data.error || '예약 취소에 실패했습니다.');
+                            return;
+                          }
+                          alert(data.message);
+                          fetchMemberDetail();
+                        } catch {
+                          alert('예약 취소에 실패했습니다.');
+                        }
+                      };
+
+                      // 예약이 있으면 예약 취소 UI만 표시
+                      if (hasPendingAction) {
+                        const pendingType = hasPendingPlan ? 'plan' : 'cancel';
+                        const pendingLabel = hasPendingPlan
+                          ? `플랜 변경 예약: ${sub?.plan} → ${sub?.pendingPlan}`
+                          : '해지 예약됨';
+
                         return (
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="text-center py-6 text-gray-500">
+                            <WarningCircle className="w-10 h-10 mx-auto mb-2 text-amber-400" />
+                            <p className="font-medium text-gray-700">{pendingLabel}</p>
+                            <p className="text-sm mt-1 mb-3">다른 작업을 하려면 먼저 예약을 취소해주세요.</p>
                             <button
-                              onClick={() => {
-                                setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                                setSubscriptionInitialAction('change_plan');
-                              }}
-                              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                              onClick={() => handleCancelPending(pendingType)}
+                              className="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
                             >
-                              <ArrowsUpFromLine className="w-4 h-4" />
-                              플랜 변경
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                                setSubscriptionInitialAction('adjust_period');
-                              }}
-                              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                              <Calendar className="w-4 h-4" />
-                              기간 조정
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                                setSubscriptionInitialAction('cancel');
-                              }}
-                              className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                            >
-                              <WarningCircle className="w-4 h-4" />
-                              해지
+                              예약 취소
                             </button>
                           </div>
                         );
-                      } else if (canStart) {
-                        return (
-                          <button
-                            onClick={() => {
-                              setSubscriptionActionModal({ isOpen: true, tenant: tenantDetailModal.tenant });
-                              setSubscriptionInitialAction('start');
-                            }}
-                            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                          >
-                            <Plus className="w-4 h-4" />
-                            구독 시작
-                          </button>
-                        );
-                      } else {
-                        return null;
                       }
-                    })()}
-                  </div>
+
+                      return (
+                        <div className="space-y-3">
+                          {/* 탭 버튼 */}
+                          <div className="flex border-b border-gray-200">
+                            <button
+                              onClick={() => setSubscriptionInlineAction(subscriptionInlineAction === 'change_plan' ? null : 'change_plan')}
+                              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                subscriptionInlineAction === 'change_plan'
+                                  ? 'border-blue-500 text-blue-600'
+                                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                              }`}
+                            >
+                              플랜 변경
+                            </button>
+                            <button
+                              onClick={() => setSubscriptionInlineAction(subscriptionInlineAction === 'adjust_period' ? null : 'adjust_period')}
+                              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                subscriptionInlineAction === 'adjust_period'
+                                  ? 'border-blue-500 text-blue-600'
+                                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                              }`}
+                            >
+                              기간 조정
+                            </button>
+                            <button
+                              onClick={() => setSubscriptionInlineAction(subscriptionInlineAction === 'cancel' ? null : 'cancel')}
+                              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                subscriptionInlineAction === 'cancel'
+                                  ? 'border-red-500 text-red-600'
+                                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                              }`}
+                            >
+                              해지
+                            </button>
+                          </div>
+
+                          {/* 인라인 폼 */}
+                          {subscriptionInlineAction === 'change_plan' && (
+                            <PlanChangeForm
+                              tenantId={tenantDetailModal.tenant.tenantId}
+                              subscription={subscriptionInfo}
+                              tenant={tenantBasicInfo}
+                              onSuccess={handleFormSuccess}
+                              onCancel={handleFormCancel}
+                            />
+                          )}
+                          {subscriptionInlineAction === 'adjust_period' && (
+                            <PeriodAdjustForm
+                              tenantId={tenantDetailModal.tenant.tenantId}
+                              subscription={subscriptionInfo}
+                              tenant={tenantBasicInfo}
+                              onSuccess={handleFormSuccess}
+                              onCancel={handleFormCancel}
+                            />
+                          )}
+                          {subscriptionInlineAction === 'cancel' && (
+                            <CancelSubscriptionForm
+                              tenantId={tenantDetailModal.tenant.tenantId}
+                              subscription={subscriptionInfo}
+                              tenant={tenantBasicInfo}
+                              onSuccess={handleFormSuccess}
+                              onCancel={handleFormCancel}
+                            />
+                          )}
+                        </div>
+                      );
+                    } else if (canStart) {
+                      return (
+                        <StartSubscriptionForm
+                          tenantId={tenantDetailModal.tenant.tenantId}
+                          subscription={subscriptionInfo}
+                          tenant={tenantBasicInfo}
+                          onSuccess={handleFormSuccess}
+                          onCancel={() => setTenantDetailModal({ isOpen: false, tenant: null })}
+                        />
+                      );
+                    } else {
+                      return null;
+                    }
+                  })()}
                 </div>
               )}
             </div>

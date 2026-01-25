@@ -88,24 +88,24 @@ const MetricRing = ({
   const degrees = Math.round(clamped * 360);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">{label}</p>
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
       <div className="mt-4 flex items-center gap-4">
         <div className="relative h-16 w-16 flex-shrink-0">
           <div
             className="absolute inset-0 rounded-full"
             style={{
-              background: `conic-gradient(${tone} 0deg ${degrees}deg, rgba(255,255,255,0.12) ${degrees}deg 360deg)`,
+              background: `conic-gradient(${tone} 0deg ${degrees}deg, rgba(0,0,0,0.06) ${degrees}deg 360deg)`,
             }}
           />
-          <div className="absolute inset-2 rounded-full border border-white/10 bg-[#0b0b0b]" />
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white">
+          <div className="absolute inset-2 rounded-full border border-slate-200 bg-white" />
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-900">
             {Math.round(clamped * 100)}%
           </div>
         </div>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-white">{value}</p>
-          <p className="text-xs text-white/60">{caption}</p>
+          <p className="text-sm font-semibold text-slate-900">{value}</p>
+          <p className="text-xs text-slate-500">{caption}</p>
         </div>
       </div>
     </div>
@@ -143,12 +143,12 @@ const TrendCard = ({
   const lastPoint = pointCoords[pointCoords.length - 1] || { x: width, y: height };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
       <div className="grid grid-cols-[1fr_auto] items-start gap-3">
         <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">{label}</p>
-          <p className="text-2xl font-semibold text-white">{value}</p>
-          <p className="text-xs text-white/60">{description}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+          <p className="text-2xl font-semibold text-slate-900">{value}</p>
+          <p className="text-xs text-slate-500">{description}</p>
         </div>
         <div className="flex flex-col items-end pt-1">
           <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block">
@@ -163,7 +163,7 @@ const TrendCard = ({
             <circle cx={lastPoint.x} cy={lastPoint.y} r="3" fill={tone} />
           </svg>
           <div
-            className="mt-2 flex items-center justify-between text-[10px] text-white/40"
+            className="mt-2 flex items-center justify-between text-[10px] text-slate-400"
             style={{ width }}
           >
             {months.map((month) => (
@@ -237,7 +237,7 @@ export default function AdminDashboard() {
       <div className="pointer-events-none absolute left-10 top-48 h-64 w-64 rounded-full bg-[#ff5e9a]/10 blur-3xl" />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_360px] xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm xl:order-2 xl:row-span-2 xl:h-full">
+        <section className="overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-2 xl:row-span-2 xl:h-full">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">최근 현황</h2>
@@ -255,10 +255,9 @@ export default function AdminDashboard() {
               {activityFeed.map((item) => {
                 const isPayment = item.type === 'payment';
                 const displayName = isPayment
-                  ? item.memberInfo?.businessName || '회원사'
-                  : item.businessName || '신규 회원사';
-                const title = isPayment ? `${displayName} 결제 완료` : `${displayName} 신규 가입`;
-                const detail = isPayment ? `${formatCurrency(item.amount)} 결제` : '신규 가입';
+                  ? item.memberInfo?.businessName || '매장'
+                  : item.businessName || item.ownerName || '회원';
+                const actionText = isPayment ? '결제 완료' : '신규 가입';
 
                 return (
                   <li key={`${item.id}-${item.type}`} className="relative px-6 py-4">
@@ -268,14 +267,17 @@ export default function AdminDashboard() {
                     />
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
-                        <p className="text-sm font-semibold text-slate-900">{title}</p>
-                        <p className="text-xs text-slate-500">{detail}</p>
-                        {isPayment && item.plan && (
-                          <p className="text-xs text-slate-500">플랜 {item.plan}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          <span className="font-bold">{displayName}</span>
+                          <span className="text-slate-400 mx-1">-</span>
+                          {actionText}
+                        </p>
+                        {isPayment && (
+                          <p className="text-xs text-slate-500">{formatCurrency(item.amount)} · {item.plan || 'basic'}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
-                        <span className="rounded-full border border-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]">
+                        <span className="rounded-full border border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-600">
                           {isPayment ? '결제' : '가입'}
                         </span>
                         <span>{timeAgo(item.createdAt)}</span>
@@ -288,25 +290,16 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <section className="relative overflow-hidden rounded-[28px] border border-black bg-[#0b0b0b] text-white shadow-[0_18px_40px_rgba(0,0,0,0.25)] order-first xl:order-1 xl:row-span-2 xl:h-full">
-          <div
-            className="absolute inset-0 opacity-50"
-            style={{
-              background:
-                'linear-gradient(120deg, rgba(255,191,3,0.3) 0%, rgba(255,94,154,0.18) 45%, rgba(0,0,0,0) 80%)',
-            }}
-          />
+        <section className="relative overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] order-first xl:order-1 xl:row-span-2 xl:h-full">
           <div className="relative flex h-full flex-col gap-6 px-6 py-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <Image src="/yamoo_white_cut.png" alt="YAMOO" width={96} height={30} />
-                <span className="text-xs font-semibold uppercase tracking-[0.3em] text-yamoo-primary">
-                  요약
-                </span>
+                <Image src="/yamoo_favi.png" alt="YAMOO Icon" width={32} height={32} />
+                <Image src="/yamoo_black_1.png" alt="YAMOO" width={96} height={30} />
               </div>
               <button
                 onClick={fetchDashboardData}
-                className="rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-white/80 transition hover:border-yamoo-primary hover:text-yamoo-primary"
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-yamoo-primary hover:text-yamoo-primary"
               >
                 새로고침
               </button>
@@ -339,20 +332,20 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-sm xl:order-3 xl:h-full">
+        <section className="rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-3 xl:h-full">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">구독 상태</h2>
             </div>
             <span className="rounded-full bg-yamoo-primary px-3 py-1 text-xs font-semibold text-gray-900">
-              {activeRate}% 유지
+              {activeRate}%
             </span>
           </div>
           <div className="mt-6 space-y-5">
             <div>
               <div className="flex items-center justify-between text-sm text-slate-700">
                 <span>구독중 매장수</span>
-                <span className="text-base font-semibold text-slate-900">{formatNumber(activeSubscriptions)}개</span>
+                <span className="text-base font-semibold text-slate-900">{formatNumber(activeSubscriptions)}개 / {formatNumber(totalTenants)}개</span>
               </div>
               <div className="mt-3 h-2 rounded-full bg-slate-100">
                 <div
@@ -367,7 +360,7 @@ export default function AdminDashboard() {
                 <p className="text-slate-500">신규 가입</p>
                 <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(newSignups)}명</p>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl border border-slate-100 bg-[#fff9e5] px-4 py-3">
                 <p className="text-slate-500">전체 회원수</p>
                 <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(totalMembers)}명</p>
               </div>
@@ -375,7 +368,7 @@ export default function AdminDashboard() {
                 <p className="text-slate-500">신규 매장</p>
                 <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(newTenants)}개</p>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl border border-slate-100 bg-[#e5f0ff] px-4 py-3">
                 <p className="text-slate-500">전체 매장수</p>
                 <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(totalTenants)}개</p>
               </div>
@@ -383,52 +376,52 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-black bg-[#0b0b0b] px-6 py-6 text-white shadow-[0_18px_40px_rgba(0,0,0,0.25)] xl:order-4 xl:h-full">
-          <h2 className="text-lg font-semibold">운영 바로가기</h2>
+        <section className="rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-4 xl:h-full">
+          <h2 className="text-lg font-semibold text-slate-900">바로가기</h2>
           <div className="mt-5 space-y-4 text-sm">
             <Link
-              href="/admin/members/new"
-              className="group flex items-start gap-4 border-b border-white/10 pb-4 transition hover:text-yamoo-primary"
+              href="/admin/members"
+              className="group flex items-start gap-4 border-b border-slate-100 pb-4 transition hover:text-yamoo-primary"
             >
               <span className="text-xs font-semibold text-yamoo-primary">01</span>
               <div className="flex-1">
-                <p className="font-semibold">새 회원 등록</p>
-                <p className="text-xs text-white/60">파트너 정보를 입력하고 바로 온보딩합니다.</p>
+                <p className="font-semibold text-slate-900">회원</p>
+                <p className="text-xs text-slate-500">회원 추가, 수정, 삭제</p>
               </div>
-              <span className="text-xs uppercase tracking-[0.2em] text-white/50">이동</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">이동</span>
             </Link>
             <Link
-              href="/admin/notifications"
-              className="group flex items-start gap-4 border-b border-white/10 pb-4 transition hover:text-yamoo-primary"
+              href="/admin/tenants"
+              className="group flex items-start gap-4 border-b border-slate-100 pb-4 transition hover:text-yamoo-primary"
             >
               <span className="text-xs font-semibold text-yamoo-primary">02</span>
               <div className="flex-1">
-                <p className="font-semibold">공지/안내 발송</p>
-                <p className="text-xs text-white/60">공지 사항과 업데이트 안내를 전달합니다.</p>
+                <p className="font-semibold text-slate-900">매장 관리</p>
+                <p className="text-xs text-slate-500">매장 추가, 수정, 삭제</p>
               </div>
-              <span className="text-xs uppercase tracking-[0.2em] text-white/50">발송</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">이동</span>
             </Link>
             <Link
-              href="/admin/plans"
-              className="group flex items-start gap-4 border-b border-white/10 pb-4 transition hover:text-yamoo-primary"
+              href="/admin/orders"
+              className="group flex items-start gap-4 border-b border-slate-100 pb-4 transition hover:text-yamoo-primary"
             >
               <span className="text-xs font-semibold text-yamoo-primary">03</span>
               <div className="flex-1">
-                <p className="font-semibold">요금제 구성</p>
-                <p className="text-xs text-white/60">가격과 혜택을 전략적으로 조정합니다.</p>
+                <p className="font-semibold text-slate-900">결제 관리</p>
+                <p className="text-xs text-slate-500">상세 내역, 환불</p>
               </div>
-              <span className="text-xs uppercase tracking-[0.2em] text-white/50">설정</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">이동</span>
             </Link>
             <Link
-              href="/admin/settings"
+              href="/admin/subscriptions"
               className="group flex items-start gap-4 pb-2 transition hover:text-yamoo-primary"
             >
               <span className="text-xs font-semibold text-yamoo-primary">04</span>
               <div className="flex-1">
-                <p className="font-semibold">서비스 정책</p>
-                <p className="text-xs text-white/60">권한, 결제, 운영 정책을 관리합니다.</p>
+                <p className="font-semibold text-slate-900">구독 관리</p>
+                <p className="text-xs text-slate-500">구독하기, 수정, 해지</p>
               </div>
-              <span className="text-xs uppercase tracking-[0.2em] text-white/50">관리</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">이동</span>
             </Link>
           </div>
         </section>
@@ -442,9 +435,9 @@ const DashboardSkeleton = () => (
   <div className="space-y-8 animate-pulse">
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_360px] xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="h-[560px] rounded-[28px] border border-slate-200 bg-white xl:row-span-2" />
-      <div className="h-[560px] rounded-[28px] border border-black bg-slate-900 xl:row-span-2" />
+      <div className="h-[560px] rounded-[28px] border border-slate-200 bg-white xl:row-span-2" />
       <div className="h-60 rounded-[28px] border border-slate-200 bg-white" />
-      <div className="h-60 rounded-[28px] border border-black bg-slate-900" />
+      <div className="h-60 rounded-[28px] border border-slate-200 bg-white" />
     </div>
   </div>
 );

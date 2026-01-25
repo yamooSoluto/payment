@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 플랜별 금액
 const PLAN_PRICES: Record<string, number> = {
@@ -82,6 +83,7 @@ export async function POST(
       const updateData: Record<string, unknown> = {
         plan: newPlan,
         amount: newAmount,
+        baseAmount: newAmount,
         // pending 필드 초기화
         pendingPlan: null,
         pendingAmount: null,
@@ -94,27 +96,28 @@ export async function POST(
 
       // tenants 컬렉션도 업데이트
       await db.collection('tenants').doc(tenantId).update({
+        plan: newPlan,  // 상위 plan 필드
         'subscription.plan': newPlan,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // subscription_history에 기록
+      // subscription_history에 기록 (기존 레코드 완료 + 새 레코드 추가)
       const changeType = PLAN_PRICES[newPlan] > PLAN_PRICES[currentPlan] ? 'upgrade' : 'downgrade';
-      await db.collection('subscription_history').add({
+      await handleSubscriptionChange(db, {
         tenantId,
-        brandName: tenantData?.brandName || '',
+        userId: tenantData?.userId || existingSubscription.userId || '',
         email: tenantData?.email || '',
-        plan: newPlan,
-        status: currentStatus,
+        brandName: tenantData?.brandName || '',
+        newPlan: newPlan,
+        newStatus: currentStatus,
         amount: newAmount,
-        periodStart: existingSubscription.currentPeriodStart,
-        periodEnd: existingSubscription.currentPeriodEnd,
-        billingDate: existingSubscription.nextBillingDate,
+        periodStart: existingSubscription.currentPeriodStart?.toDate?.() || existingSubscription.currentPeriodStart || new Date(),
+        periodEnd: existingSubscription.currentPeriodEnd?.toDate?.() || existingSubscription.currentPeriodEnd || null,
+        billingDate: existingSubscription.nextBillingDate?.toDate?.() || existingSubscription.nextBillingDate || null,
         changeType,
+        changedBy: 'admin',
         previousPlan: currentPlan,
         previousStatus: currentStatus,
-        changedAt: FieldValue.serverTimestamp(),
-        changedBy: 'admin',
         note: reason || `관리자에 의해 플랜 즉시 변경 (${currentPlan} → ${newPlan})`,
       });
 
@@ -139,24 +142,7 @@ export async function POST(
         updatedBy: 'admin',
       });
 
-      // subscription_history에 예약 기록
-      await db.collection('subscription_history').add({
-        tenantId,
-        brandName: tenantData?.brandName || '',
-        email: tenantData?.email || '',
-        plan: newPlan,
-        status: 'pending_change',
-        amount: newAmount,
-        periodStart: existingSubscription.currentPeriodStart,
-        periodEnd: existingSubscription.currentPeriodEnd,
-        billingDate: nextBillingDate,
-        changeType: 'plan_change_scheduled',
-        previousPlan: currentPlan,
-        previousStatus: currentStatus,
-        changedAt: FieldValue.serverTimestamp(),
-        changedBy: 'admin',
-        note: reason || `관리자에 의해 플랜 변경 예약 (${currentPlan} → ${newPlan}, 다음 결제일부터 적용)`,
-      });
+      // subscription_history는 실제 적용 시점(cron)에서 기록
 
       return NextResponse.json({
         success: true,

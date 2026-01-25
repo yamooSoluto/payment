@@ -156,6 +156,8 @@ export async function POST(request: NextRequest) {
         planChangedAt: now,
         status: 'active',
         amount: paymentAmount,
+        baseAmount: planInfo.price,  // 플랜 기본 가격 (정기결제 금액)
+        billingType: 'recurring',  // 정기결제
         currentPeriodStart: now,
         currentPeriodEnd,
         nextBillingDate,

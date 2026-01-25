@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     for (const doc of trialSubscriptions.docs) {
       const subscription = doc.data();
       const tenantId = doc.id;
-      const trialEndDate = subscription.trialEndDate?.toDate?.() || subscription.trialEndDate;
+      const currentPeriodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
       const pendingChangeAt = subscription.pendingChangeAt?.toDate?.() || subscription.pendingChangeAt;
 
       // 1. pendingPlan이 있고 pendingChangeAt이 오늘 이전이면: 예약된 플랜 결제
@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
               pendingAmount: null,
               pendingChangeAt: null,
               updatedAt: now,
+              updatedBy: 'system',
             });
 
             // 결제 내역 저장 (멱등성 키 포함)
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest) {
 
           // tenants 컬렉션 동기화
           const { syncNewSubscription } = await import('@/lib/tenant-sync');
-          await syncNewSubscription(tenantId, plan, nextBillingDate);
+          await syncNewSubscription(tenantId, plan, nextBillingDate, 'system');
 
           // subscription_history에 기록 추가
           try {
@@ -168,17 +169,19 @@ export async function GET(request: NextRequest) {
           console.error(`Trial conversion failed for ${tenantId}:`, error);
         }
       }
-      // 2. pendingPlan이 없고 trialEndDate가 오늘 이전이면: 만료 처리
-      else if (trialEndDate && new Date(trialEndDate) < today) {
-        // expired 상태로 변경
+      // 2. pendingPlan이 없고 currentPeriodEnd가 오늘 이전이면: 만료 처리
+      else if (currentPeriodEnd && new Date(currentPeriodEnd) < today) {
+        // expired 상태로 변경 (nextBillingDate도 제거)
         await db.collection('subscriptions').doc(tenantId).update({
           status: 'expired',
           expiredAt: new Date(),
+          nextBillingDate: null,
           updatedAt: new Date(),
+          updatedBy: 'system',
         });
 
-        // tenants 컬렉션 동기화
-        await syncTrialExpired(tenantId);
+        // tenants 컬렉션 동기화 (plan, status만)
+        await syncTrialExpired(tenantId, 'system');
 
         // subscription_history 상태 업데이트
         try {
@@ -200,7 +203,7 @@ export async function GET(request: NextRequest) {
                 event: 'trial_expired',
                 tenantId,
                 email: subscription.email,
-                trialEndDate: trialEndDate,
+                currentPeriodEnd: currentPeriodEnd,
               }),
             });
           } catch {
@@ -306,10 +309,11 @@ export async function GET(request: NextRequest) {
           pendingMode: null,
           pendingChangeAt: null,
           updatedAt: new Date(),
+          updatedBy: 'system',
         });
 
         // tenants 컬렉션 동기화
-        await syncPlanChange(tenantId, newPlan);
+        await syncPlanChange(tenantId, newPlan, undefined, 'system');
 
         // subscription_history에 기록 추가
         try {
@@ -372,14 +376,16 @@ export async function GET(request: NextRequest) {
       const currentPeriodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
 
       if (currentPeriodEnd && new Date(currentPeriodEnd) <= today) {
-        // 구독 상태를 canceled로 변경 (예약 해지 완료)
+        // 구독 상태를 canceled로 변경 (예약 해지 완료, nextBillingDate도 제거)
         await db.collection('subscriptions').doc(tenantId).update({
           status: 'canceled',
+          nextBillingDate: null,
           updatedAt: new Date(),
+          updatedBy: 'system',
         });
 
-        // tenants 컬렉션 동기화
-        await syncSubscriptionCancellation(tenantId);
+        // tenants 컬렉션 동기화 (plan, status만)
+        await syncSubscriptionCancellation(tenantId, 'system');
 
         // subscription_history 상태를 pending_cancel에서 canceled로 변경
         try {
@@ -416,11 +422,12 @@ export async function GET(request: NextRequest) {
           status: 'suspended',
           suspendedAt: new Date(),
           updatedAt: new Date(),
+          updatedBy: 'system',
         });
 
         // tenants 컬렉션 동기화
         const { syncSubscriptionSuspended } = await import('@/lib/tenant-sync');
-        await syncSubscriptionSuspended(tenantId);
+        await syncSubscriptionSuspended(tenantId, 'system');
 
         // N8N 웹훅 알림
         if (isN8NNotificationEnabled()) {
@@ -573,6 +580,7 @@ export async function GET(request: NextRequest) {
             gracePeriodUntil: null,
             lastPaymentError: null,
             updatedAt: new Date(),
+            updatedBy: 'system',
           });
 
           // 결제 내역 저장 (멱등성 키 포함)
@@ -609,7 +617,7 @@ export async function GET(request: NextRequest) {
           }
 
           // tenants 컬렉션에 결제 성공 동기화
-          await syncPaymentSuccess(tenantId, subscription.plan, nextBillingDate);
+          await syncPaymentSuccess(tenantId, subscription.plan, nextBillingDate, 'system');
 
           // subscription_history에 갱신 기록 추가
           try {
@@ -677,10 +685,11 @@ export async function GET(request: NextRequest) {
           updateData.gracePeriodUntil = gracePeriodUntil;
         }
 
+        updateData.updatedBy = 'system';
         await db.collection('subscriptions').doc(tenantId).update(updateData);
 
         // tenants 컬렉션에 결제 실패 동기화
-        await syncPaymentFailure(tenantId);
+        await syncPaymentFailure(tenantId, 'system');
 
         if (newRetryCount >= 3) {
           // 3회 실패 알림

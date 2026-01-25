@@ -204,7 +204,10 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         </button>
 
         {/* 하단 정보 */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
+        <div
+          className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
           {/* 모바일에서 항상 표시, 데스크톱에서는 펼침 모드일 때만 */}
           <div className={`flex items-center justify-center gap-1.5 text-xs text-gray-500 ${collapsed ? 'lg:hidden' : ''}`}>
             <span>Powered by</span>

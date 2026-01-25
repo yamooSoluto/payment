@@ -460,15 +460,15 @@ export default function TossPaymentWidget({
           isDowngrade ? (
             <>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-gray-600">새 플랜 가격</span>
-                <span className="text-gray-900">
-                  {formatPrice(fullAmount)}원 / 월
+                <span className="text-gray-600">환불</span>
+                <span className="text-lg font-semibold text-green-600">
+                  +{formatPrice(calculationDetails?.currentRefund || 0)}원
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">환불액</span>
-                <span className="text-xl font-bold text-green-600">
-                  +{formatPrice(refundAmount)}원
+                <span className="text-gray-600">결제</span>
+                <span className="text-lg font-semibold text-gray-900">
+                  -{formatPrice(calculationDetails?.newPlanRemaining || 0)}원
                 </span>
               </div>
               {/* 계산 상세 내역 토글 */}
@@ -583,15 +583,15 @@ export default function TossPaymentWidget({
           ) : (
             <>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-gray-600">정상가</span>
-                <span className="text-gray-400 line-through">
-                  {formatPrice(fullAmount)}원 / 월
+                <span className="text-gray-600">환불</span>
+                <span className="text-lg font-semibold text-green-600">
+                  +{formatPrice(calculationDetails?.currentRefund || 0)}원
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">지금 결제 (차액)</span>
-                <span className="text-xl font-bold text-gray-900">
-                  {formatPrice(amount)}원
+                <span className="text-gray-600">결제</span>
+                <span className="text-lg font-semibold text-gray-900">
+                  -{formatPrice(calculationDetails?.newPlanRemaining || 0)}원
                 </span>
               </div>
               {/* 업그레이드 계산 상세 내역 토글 */}

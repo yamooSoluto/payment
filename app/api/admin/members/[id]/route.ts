@@ -90,6 +90,7 @@ export async function GET(
       priceProtectedUntil: string | null;
       originalAmount: number | null;
       cancelMode?: 'scheduled' | 'immediate';
+      pendingPlan: string | null;
     }>();
 
     subscriptionDocs.forEach((doc) => {
@@ -106,6 +107,7 @@ export async function GET(
           priceProtectedUntil: data?.priceProtectedUntil?.toDate?.()?.toISOString() || null,
           originalAmount: data?.originalAmount || null,
           cancelMode: data?.cancelMode || undefined,
+          pendingPlan: data?.pendingPlan || null,
         });
       }
     });

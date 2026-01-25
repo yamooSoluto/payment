@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreHoriz, ArrowsUpFromLine, WarningCircle, Plus } from 'iconoir-react';
+import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreHoriz, FastRightCircle, WarningCircle, Plus } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
@@ -26,6 +26,9 @@ interface Subscription {
   createdAt: string | null;
   pricePolicy: string | null;
   hasBillingKey: boolean;
+  pendingPlan: string | null;
+  pendingAmount: number | null;
+  cancelAt: string | null;
 }
 
 // 구독 내역 인터페이스
@@ -280,6 +283,8 @@ export default function SubscriptionsPage() {
       case 'trial':
       case 'trialing':
         return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험</span>;
+      case 'pending_cancel':
+        return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':
@@ -329,15 +334,15 @@ export default function SubscriptionsPage() {
     const MENU_HEIGHT = 160; // 예상 메뉴 높이
 
     if (spaceBelow < MENU_HEIGHT) {
-      // 아래 공간이 부족하면 위로 띄움
+      // 아래 공간이 부족하면 위로 띄움 (버튼 바로 위)
       setDropdownPosition({
-        bottom: windowHeight - rect.top + 4,
+        bottom: windowHeight - rect.top - 8,
         left: rect.right - 160,
       });
     } else {
-      // 충분하면 아래로 띄움
+      // 충분하면 아래로 띄움 (버튼 상단 기준 + 10px 지점)
       setDropdownPosition({
-        top: rect.bottom + 4,
+        top: rect.top + 10,
         left: rect.right - 160,
       });
     }
@@ -689,7 +694,14 @@ export default function SubscriptionsPage() {
                         {getPlanName(subscription.plan)}
                       </td>
                       <td className="px-2 py-3 text-center">
-                        {getStatusBadge(subscription.status)}
+                        <div className="flex flex-col items-center gap-1">
+                          {getStatusBadge(subscription.status)}
+                          {subscription.pendingPlan && (
+                            <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                              → {getPlanName(subscription.pendingPlan)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                         {formatDate(subscription.currentPeriodStart)}
@@ -1042,7 +1054,7 @@ export default function SubscriptionsPage() {
                 onClick={() => openActionModal(selectedSubscription, 'change_plan')}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                <ArrowsUpFromLine className="w-4 h-4" />
+                <FastRightCircle className="w-4 h-4" />
                 플랜 변경
               </button>
               <button

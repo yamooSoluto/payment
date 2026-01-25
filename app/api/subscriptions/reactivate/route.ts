@@ -57,18 +57,29 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // nextBillingDate 복구 (Timestamp → Date 변환)
+    let restoredNextBillingDate = null;
+    if (subscription.previousNextBillingDate) {
+      restoredNextBillingDate = subscription.previousNextBillingDate.toDate
+        ? subscription.previousNextBillingDate.toDate()
+        : new Date(subscription.previousNextBillingDate);
+    }
+
     // 구독 상태를 active로 변경
     await db.collection('subscriptions').doc(tenantId).update({
       status: 'active',
       canceledAt: null,
       cancelReason: null,
+      cancelMode: null,
+      // nextBillingDate 복구
+      nextBillingDate: restoredNextBillingDate,
+      previousNextBillingDate: null,
       reactivatedAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // tenants 컬렉션에 재활성화 상태 동기화
-    const nextBillingDate = subscription.nextBillingDate?.toDate?.() || new Date(subscription.nextBillingDate);
-    await syncSubscriptionReactivation(tenantId, subscription.plan, nextBillingDate);
+    // tenants 컬렉션에 재활성화 상태 동기화 (복구된 nextBillingDate 사용)
+    await syncSubscriptionReactivation(tenantId, subscription.plan, restoredNextBillingDate);
 
     // subscription_history 상태 업데이트 (재활성화)
     try {
