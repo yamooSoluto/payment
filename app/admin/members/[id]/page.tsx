@@ -3376,7 +3376,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                       // 예약 취소 핸들러
                       const handleCancelPending = async (type: 'plan' | 'cancel') => {
                         try {
-                          const res = await fetch(`/api/admin/subscriptions/${tenantDetailModal.tenant.tenantId}/pending?type=${type}`, {
+                          const res = await fetch(`/api/admin/subscriptions/${tenantDetailModal.tenant?.tenantId}/pending?type=${type}`, {
                             method: 'DELETE',
                           });
                           const data = await res.json();

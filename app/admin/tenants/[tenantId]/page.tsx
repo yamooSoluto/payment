@@ -1156,7 +1156,7 @@ export default function TenantDetailPage() {
                     </div>
 
                     {/* 예약된 플랜 변경 알림 */}
-                    {subscription.pendingPlan && (
+                    {Boolean(subscription.pendingPlan) && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
                         <div className="flex items-start gap-3 bg-blue-50 rounded-lg p-3">
                           <FastRightCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -1166,7 +1166,7 @@ export default function TenantDetailPage() {
                               {subscription.pendingChangeAt
                                 ? new Date(subscription.pendingChangeAt as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
                                 : '다음 결제일'}부터{' '}
-                              <span className="font-semibold">{getPlanName(subscription.pendingPlan)}</span>
+                              <span className="font-semibold">{getPlanName(subscription.pendingPlan as string)}</span>
                               {subscription.pendingAmount !== undefined && (
                                 <> ({((subscription.pendingAmount as number) ?? 0).toLocaleString()}원/월)</>
                               )}
@@ -1190,7 +1190,7 @@ export default function TenantDetailPage() {
                                 : subscription.currentPeriodEnd
                                   ? new Date(subscription.currentPeriodEnd as string).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
                                   : '-'}에 구독이 종료됩니다.
-                              {subscription.cancelReason && (
+                              {Boolean(subscription.cancelReason) && (
                                 <span className="block mt-1">사유: {subscription.cancelReason as string}</span>
                               )}
                             </p>
