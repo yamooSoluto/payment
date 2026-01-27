@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChatBubble, Mail, Copy, Check, Building, MapPin, Phone } from 'iconoir-react';
-import DynamicTermsModal from './modals/DynamicTermsModal';
+import Link from 'next/link';
 
 interface FooterCompanyInfo {
   companyName: string;
@@ -55,7 +55,6 @@ const defaultFooterSettings: FooterSettings = {
 };
 
 export default function Footer() {
-  const [modalType, setModalType] = useState<'terms' | 'privacy' | null>(null);
   const [copied, setCopied] = useState(false);
   const [footerSettings, setFooterSettings] = useState<FooterSettings>(defaultFooterSettings);
 
@@ -211,18 +210,20 @@ export default function Footer() {
             <div className="mt-6 pt-4 border-t border-gray-700 flex flex-col md:flex-row md:justify-center md:items-center gap-2 md:gap-6">
               {footerSettings.showTermsLinks && (
                 <div className="flex gap-4">
-                  <button
-                    onClick={() => setModalType('terms')}
+                  <Link
+                    href="/terms"
+                    target="_blank"
                     className="text-gray-300 hover:text-yamoo-primary underline underline-offset-2 transition-colors"
                   >
                     이용약관
-                  </button>
-                  <button
-                    onClick={() => setModalType('privacy')}
+                  </Link>
+                  <Link
+                    href="/privacy"
+                    target="_blank"
                     className="text-gray-300 hover:text-yamoo-primary underline underline-offset-2 transition-colors"
                   >
                     개인정보처리방침
-                  </button>
+                  </Link>
                 </div>
               )}
               {footerSettings.showCopyright && (
@@ -235,12 +236,6 @@ export default function Footer() {
         </div>
       </footer>
 
-      {modalType && (
-        <DynamicTermsModal
-          type={modalType}
-          onClose={() => setModalType(null)}
-        />
-      )}
     </>
   );
 }

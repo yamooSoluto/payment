@@ -77,10 +77,11 @@ export async function POST(request: NextRequest) {
       reactivatedAt: new Date(),
       updatedAt: new Date(),
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     // tenants 컬렉션에 재활성화 상태 동기화 (복구된 nextBillingDate 사용)
-    await syncSubscriptionReactivation(tenantId, subscription.plan, restoredNextBillingDate);
+    await syncSubscriptionReactivation(tenantId, subscription.plan, restoredNextBillingDate, 'user');
 
     // subscription_history 상태 업데이트 (재활성화)
     try {

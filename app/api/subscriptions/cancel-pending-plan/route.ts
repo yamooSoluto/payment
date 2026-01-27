@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       pendingChangeAt: FieldValue.delete(),
       updatedAt: new Date(),
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     // n8n 웹훅 호출

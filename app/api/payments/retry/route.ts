@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
           lastPaymentFailedAt: null,
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
 
         // 결제 내역 저장

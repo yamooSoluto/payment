@@ -271,6 +271,7 @@ export async function GET(request: NextRequest) {
         pendingChangeAt,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       console.log('✅ Billing key registered, pending plan set:', { plan, pendingChangeAt: pendingChangeAt.toISOString() });
@@ -297,6 +298,7 @@ export async function GET(request: NextRequest) {
           }],
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
 
         // subscription에 primaryCardId 추가
@@ -405,6 +407,7 @@ export async function GET(request: NextRequest) {
         createdAt: now,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // 결제 내역 저장 (멱등성 키 포함)
@@ -473,6 +476,7 @@ export async function GET(request: NextRequest) {
           paidSubscriptionAt: now,
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
       } else {
         await userRef.set({
@@ -482,6 +486,7 @@ export async function GET(request: NextRequest) {
           createdAt: now,
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
       }
       console.log('✅ User trialApplied flag set for:', email);
@@ -508,6 +513,7 @@ export async function GET(request: NextRequest) {
         }],
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // subscription에 primaryCardId 추가

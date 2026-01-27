@@ -77,6 +77,17 @@ export async function PATCH(
     // 종료일 변경
     if (currentPeriodEnd) {
       const newEndDate = new Date(currentPeriodEnd);
+
+      // 과거 날짜 검증 (오늘보다 이전이면 경고)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (newEndDate < today) {
+        return NextResponse.json({
+          error: '종료일은 오늘 이후 날짜로 설정해주세요.',
+          hint: '과거 날짜로 설정하면 즉시 결제가 시도될 수 있습니다.'
+        }, { status: 400 });
+      }
+
       updateData.currentPeriodEnd = newEndDate;
       changes.push(`종료일: ${currentPeriodEnd}`);
 

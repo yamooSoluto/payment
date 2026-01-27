@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         currentPeriodStart: now, // 플랜 변경 시 구독 기간 시작일도 업데이트
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
         // pendingPlan 관련 필드 제거
         pendingPlan: null,
         pendingAmount: null,

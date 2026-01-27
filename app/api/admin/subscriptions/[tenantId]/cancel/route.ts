@@ -96,6 +96,7 @@ export async function POST(
         nextBillingDate: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       // tenants 컬렉션 업데이트
@@ -103,6 +104,7 @@ export async function POST(
         'subscription.status': 'pending_cancel',
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       // subscription_history에 기록 (서브컬렉션 구조)
@@ -162,6 +164,7 @@ export async function POST(
         nextBillingDate: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       // tenants 컬렉션 업데이트
@@ -169,6 +172,7 @@ export async function POST(
         'subscription.status': 'canceled',
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       // subscription_history에 기록 (서브컬렉션 구조)

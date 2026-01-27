@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       cardAlias: cardAlias || null,
       updatedAt: new Date(),
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     return NextResponse.json({

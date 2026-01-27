@@ -196,6 +196,7 @@ export async function DELETE(
         pendingChangeAt: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'user',
+        updatedByAdminId: null,
         // currentPeriodEnd는 건드리지 않음 (구독 이벤트에서만 설정)
       });
     }

@@ -177,6 +177,7 @@ export async function POST(request: NextRequest) {
         resubscribedAt: now,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // 결제 내역 저장 (멱등성 키 포함)

@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
       pendingChangeAt: subscription.nextBillingDate,
       updatedAt: new Date(),
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     // n8n 웹훅 호출 (플랜 변경 예약 알림)

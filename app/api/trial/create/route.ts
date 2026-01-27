@@ -474,6 +474,7 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // tenants 컬렉션에 필수 필드만 동기화
@@ -485,6 +486,7 @@ export async function POST(request: Request) {
           'subscription.status': 'trial',
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
       } catch (syncError) {
         console.error('Failed to sync tenant subscription:', syncError);

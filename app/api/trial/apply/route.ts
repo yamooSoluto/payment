@@ -3,6 +3,7 @@ import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import crypto from 'crypto';
 import { verifyBearerToken } from '@/lib/auth';
 import { generateUniqueUserId } from '@/lib/user-utils';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -277,6 +278,7 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     // tenant에도 subscription 정보 + userId 업데이트 (최소화된 필드만)
@@ -287,7 +289,30 @@ export async function POST(request: Request) {
       'subscription.status': 'trial',
       updatedAt: now,
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
+
+    // subscription_history에 기록 추가
+    try {
+      await handleSubscriptionChange(db, {
+        tenantId,
+        userId,
+        email,
+        brandName,
+        newPlan: 'trial',
+        newStatus: 'trial',
+        amount: 0,
+        periodStart: now,
+        periodEnd: currentPeriodEnd,
+        billingDate: null,
+        changeType: 'new',
+        changedBy: 'user',
+        previousPlan: null,
+        previousStatus: null,
+      });
+    } catch (historyError) {
+      console.error('Failed to record subscription history:', historyError);
+    }
 
     // users 컬렉션 업데이트 (trialApplied 플래그 + userId)
     if (existingUser.exists) {

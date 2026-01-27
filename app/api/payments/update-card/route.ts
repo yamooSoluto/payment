@@ -136,6 +136,7 @@ export async function GET(request: NextRequest) {
         cards,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // 구독의 primary 카드 정보 업데이트
@@ -149,6 +150,7 @@ export async function GET(request: NextRequest) {
           cardUpdatedAt: now,
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
       }
     });

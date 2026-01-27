@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getAdminFromRequest } from '@/lib/admin-auth';
 
 // 예약 취소 API
 // - pendingPlan 취소: pendingPlan, pendingAmount, pendingChangeAt 초기화
@@ -12,6 +13,12 @@ export async function DELETE(
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+
+  // 관리자 인증
+  const admin = await getAdminFromRequest(request);
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -61,6 +68,7 @@ export async function DELETE(
         pendingChangeAt: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       return NextResponse.json({
@@ -100,6 +108,7 @@ export async function DELETE(
         previousNextBillingDate: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       // tenants 컬렉션도 업데이트
@@ -107,6 +116,7 @@ export async function DELETE(
         'subscription.status': restoredStatus,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
+        updatedByAdminId: admin.adminId,
       });
 
       return NextResponse.json({

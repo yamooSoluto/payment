@@ -141,6 +141,8 @@ export async function PUT(
     }
 
     if (Object.keys(tenantSubscriptionUpdate).length > 0) {
+      tenantSubscriptionUpdate.updatedAt = FieldValue.serverTimestamp();
+      tenantSubscriptionUpdate.updatedBy = 'admin';
       await db.collection('tenants').doc(tenantId).update(tenantSubscriptionUpdate);
     }
 
@@ -267,7 +269,7 @@ export async function DELETE(
 
     // tenants 컬렉션에 만료 상태 동기화
     const { syncSubscriptionExpired } = await import('@/lib/tenant-sync');
-    await syncSubscriptionExpired(tenantId);
+    await syncSubscriptionExpired(tenantId, 'admin');
 
     // 변경 로그 기록
     await db.collection('subscription_changes').add({

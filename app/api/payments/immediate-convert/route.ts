@@ -5,6 +5,7 @@ import { syncNewSubscription } from '@/lib/tenant-sync';
 import { getPlanById, verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 // 인증 함수: Authorization 헤더 또는 body의 token 처리
 async function authenticateRequest(request: NextRequest, bodyToken?: string, bodyEmail?: string): Promise<string | null> {
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest) {
         pendingChangeAt: null,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // 결제 내역 저장 (멱등성 키 포함)
@@ -200,6 +202,29 @@ export async function POST(request: NextRequest) {
 
     // tenants 컬렉션에 구독 정보 동기화
     await syncNewSubscription(tenantId, plan, nextBillingDate);
+
+    // subscription_history에 기록 추가
+    try {
+      await handleSubscriptionChange(db, {
+        tenantId,
+        userId: subscription.userId || '',
+        email,
+        brandName,
+        newPlan: plan,
+        newStatus: 'active',
+        amount: paymentAmount,
+        periodStart: now,
+        periodEnd: currentPeriodEnd,
+        billingDate: now,
+        changeType: 'new',
+        changedBy: 'user',
+        previousPlan: 'trial',
+        previousStatus: 'trial',
+        orderId,
+      });
+    } catch (historyError) {
+      console.error('Failed to record subscription history:', historyError);
+    }
 
     // n8n 웹훅 호출 (선택적)
     if (isN8NNotificationEnabled()) {

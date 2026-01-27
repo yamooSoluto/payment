@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         cardNumber: card.number,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       },
       { merge: true }
     );

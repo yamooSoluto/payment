@@ -241,11 +241,12 @@ export async function POST(request: NextRequest) {
           pendingChangeAt: FieldValue.delete(),
           updatedAt: now,
           updatedBy: 'user',
+          updatedByAdminId: null,
         });
       });
 
       // tenants 컬렉션에 취소 상태 동기화 (subscriptions와 동일하게 'canceled')
-      await syncSubscriptionCancellation(tenantId);
+      await syncSubscriptionCancellation(tenantId, 'user');
 
       // subscription_history 상태 업데이트 (즉시 해지: canceled)
       try {
@@ -303,10 +304,11 @@ export async function POST(request: NextRequest) {
         nextBillingDate: null,
         updatedAt: now,
         updatedBy: 'user',
+        updatedByAdminId: null,
       });
 
       // tenants 컬렉션에 예약 해지 상태 동기화 (subscriptions와 동일하게 'pending_cancel')
-      await syncSubscriptionPendingCancel(tenantId);
+      await syncSubscriptionPendingCancel(tenantId, 'user');
 
       // subscription_history 상태 업데이트 (예약 해지: pending_cancel)
       try {

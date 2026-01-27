@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
       pendingChangeAt,
       updatedAt: new Date(),
       updatedBy: 'user',
+      updatedByAdminId: null,
     });
 
     return NextResponse.json({
