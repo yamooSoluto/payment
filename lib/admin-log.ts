@@ -222,7 +222,32 @@ export async function addAdminLog(
     logData.details = data.details;
   }
 
-  const docRef = await db.collection('admin_logs').add(logData);
+  const docRef = await db.collection('admin_task_logs').add(logData);
+  return docRef.id;
+}
+
+/**
+ * 관리자 접속 로그 기록
+ */
+export async function addAdminAccessLog(
+  db: Firestore,
+  admin: AdminInfo,
+  options?: {
+    ip?: string;
+    userAgent?: string;
+  }
+): Promise<string> {
+  const logData: Record<string, unknown> = {
+    adminId: admin.adminId,
+    adminLoginId: admin.loginId,
+    adminName: admin.name,
+    accessedAt: new Date(),
+  };
+
+  if (options?.ip) logData.ip = options.ip;
+  if (options?.userAgent) logData.userAgent = options.userAgent;
+
+  const docRef = await db.collection('admin_access_logs').add(logData);
   return docRef.id;
 }
 

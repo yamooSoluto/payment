@@ -38,6 +38,36 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [loading, admin, isLoginPage, router]);
 
+  // 접속 로그 기록 (1시간마다)
+  useEffect(() => {
+    if (!loading && admin && !isLoginPage) {
+      const storageKey = 'admin_access_logged_at';
+      const lastLoggedAt = localStorage.getItem(storageKey);
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+
+      const shouldLog = !lastLoggedAt || (now - parseInt(lastLoggedAt, 10)) > oneHour;
+      console.log('[AccessLog] Check:', { lastLoggedAt, now, shouldLog, admin: admin.name });
+
+      if (shouldLog) {
+        localStorage.setItem(storageKey, now.toString());
+        fetch('/api/admin/access-log', {
+          method: 'POST',
+          credentials: 'include',
+        })
+          .then(async res => {
+            if (!res.ok) {
+              const text = await res.text();
+              console.error('[AccessLog] Failed:', res.status, text);
+            } else {
+              console.log('[AccessLog] Success');
+            }
+          })
+          .catch(err => console.error('[AccessLog] Error:', err));
+      }
+    }
+  }, [loading, admin, isLoginPage]);
+
   // 로그인 페이지는 별도 레이아웃
   if (isLoginPage) {
     return <>{children}</>;

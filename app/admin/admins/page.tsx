@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group, List, Search, NavArrowLeft, NavArrowRight } from 'iconoir-react';
+import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group, Search, NavArrowLeft, NavArrowRight, InfoCircle, Clock, Journal } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 
 interface Admin {
@@ -38,6 +38,60 @@ interface LogData {
 interface ActionType {
   value: string;
   label: string;
+}
+
+interface AccessLogData {
+  id: string;
+  adminId: string;
+  adminLoginId: string;
+  adminName: string;
+  accessedAt: string | null;
+  ip?: string;
+  userAgent?: string;
+}
+
+// User-Agent 파싱하여 간결한 브라우저/디바이스 이름 추출
+function parseBrowser(userAgent?: string): string {
+  if (!userAgent) return '알 수 없음';
+
+  // 모바일 앱
+  if (userAgent.includes('Android')) {
+    if (userAgent.includes('Mobile')) return 'Android 모바일';
+    return 'Android';
+  }
+  if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+    if (userAgent.includes('iPad')) return 'iPad';
+    return 'iPhone';
+  }
+
+  // 데스크톱 브라우저
+  if (userAgent.includes('Edg/')) {
+    const match = userAgent.match(/Edg\/(\d+)/);
+    return match ? `Edge ${match[1]}` : 'Edge';
+  }
+  if (userAgent.includes('Chrome/') && !userAgent.includes('Chromium')) {
+    const match = userAgent.match(/Chrome\/(\d+)/);
+    return match ? `Chrome ${match[1]}` : 'Chrome';
+  }
+  if (userAgent.includes('Firefox/')) {
+    const match = userAgent.match(/Firefox\/(\d+)/);
+    return match ? `Firefox ${match[1]}` : 'Firefox';
+  }
+  if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) {
+    const match = userAgent.match(/Version\/(\d+)/);
+    return match ? `Safari ${match[1]}` : 'Safari';
+  }
+  if (userAgent.includes('OPR/')) {
+    const match = userAgent.match(/OPR\/(\d+)/);
+    return match ? `Opera ${match[1]}` : 'Opera';
+  }
+
+  // OS 정보라도 표시
+  if (userAgent.includes('Windows')) return 'Windows';
+  if (userAgent.includes('Mac OS')) return 'macOS';
+  if (userAgent.includes('Linux')) return 'Linux';
+
+  return '알 수 없는 클라이언트';
 }
 
 // 권한 정의
@@ -104,22 +158,32 @@ export default function AdminsPage() {
   const router = useRouter();
 
   // URL에서 탭 상태 읽기
-  type TabType = 'list' | 'permissions' | 'task';
+  type TabType = 'list' | 'permissions' | 'access' | 'task';
   const tabFromUrl = searchParams.get('tab') as TabType | null;
-  const initialTab = tabFromUrl === 'permissions' ? 'permissions' : tabFromUrl === 'task' ? 'task' : 'list';
+  const initialTab = tabFromUrl === 'permissions' ? 'permissions' : tabFromUrl === 'access' ? 'access' : tabFromUrl === 'task' ? 'task' : 'list';
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Task 탭 상태
+  // 작업 로그 탭 상태
   const [logs, setLogs] = useState<LogData[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsPagination, setLogsPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 0 });
   const [logsSearch, setLogsSearch] = useState('');
   const [logsActionFilter, setLogsActionFilter] = useState('');
+  const [logsDateFrom, setLogsDateFrom] = useState('');
+  const [logsDateTo, setLogsDateTo] = useState('');
   const [actionTypes, setActionTypes] = useState<ActionType[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogData | null>(null);
+
+  // 접속 로그 탭 상태
+  const [accessLogs, setAccessLogs] = useState<AccessLogData[]>([]);
+  const [accessLogsLoading, setAccessLogsLoading] = useState(false);
+  const [accessLogsPagination, setAccessLogsPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 0 });
+  const [accessLogsSearch, setAccessLogsSearch] = useState('');
+  const [accessLogsDateFrom, setAccessLogsDateFrom] = useState('');
+  const [accessLogsDateTo, setAccessLogsDateTo] = useState('');
 
   // 탭 변경 시 URL 업데이트
   const handleTabChange = (tab: TabType) => {
@@ -152,12 +216,19 @@ export default function AdminsPage() {
     fetchRolePermissions();
   }, []);
 
-  // Task 탭이 활성화될 때 로그 조회
+  // 작업 로그 탭이 활성화될 때 로그 조회
   useEffect(() => {
     if (activeTab === 'task') {
       fetchLogs();
     }
-  }, [activeTab, logsPagination.page, logsActionFilter]);
+  }, [activeTab, logsPagination.page, logsActionFilter, logsDateFrom, logsDateTo]);
+
+  // 접속 로그 탭이 활성화될 때 로그 조회
+  useEffect(() => {
+    if (activeTab === 'access') {
+      fetchAccessLogs();
+    }
+  }, [activeTab, accessLogsPagination.page, accessLogsDateFrom, accessLogsDateTo]);
 
   const fetchLogs = async () => {
     setLogsLoading(true);
@@ -168,6 +239,8 @@ export default function AdminsPage() {
       });
       if (logsSearch) params.set('search', logsSearch);
       if (logsActionFilter) params.set('action', logsActionFilter);
+      if (logsDateFrom) params.set('dateFrom', logsDateFrom);
+      if (logsDateTo) params.set('dateTo', logsDateTo);
 
       const response = await fetch(`/api/admin/logs?${params.toString()}`);
       if (response.ok) {
@@ -188,6 +261,35 @@ export default function AdminsPage() {
   const handleLogsSearch = () => {
     setLogsPagination(prev => ({ ...prev, page: 1 }));
     fetchLogs();
+  };
+
+  const fetchAccessLogs = async () => {
+    setAccessLogsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: accessLogsPagination.page.toString(),
+        limit: accessLogsPagination.limit.toString(),
+      });
+      if (accessLogsSearch) params.set('search', accessLogsSearch);
+      if (accessLogsDateFrom) params.set('dateFrom', accessLogsDateFrom);
+      if (accessLogsDateTo) params.set('dateTo', accessLogsDateTo);
+
+      const response = await fetch(`/api/admin/access-log?${params.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAccessLogs(data.logs);
+        setAccessLogsPagination(prev => ({ ...prev, total: data.pagination.total, totalPages: data.pagination.totalPages }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch access logs:', error);
+    } finally {
+      setAccessLogsLoading(false);
+    }
+  };
+
+  const handleAccessLogsSearch = () => {
+    setAccessLogsPagination(prev => ({ ...prev, page: 1 }));
+    fetchAccessLogs();
   };
 
   // 테이블에 표시할 간단 요약 (API에서 이미 users/tenants 조회해서 매핑됨)
@@ -439,6 +541,17 @@ export default function AdminsPage() {
           권한 관리
         </button>
         <button
+          onClick={() => handleTabChange('access')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'access'
+              ? 'text-blue-600 border-blue-600'
+              : 'text-gray-500 border-transparent hover:text-gray-700'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          접속 로그
+        </button>
+        <button
           onClick={() => handleTabChange('task')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'task'
@@ -446,8 +559,8 @@ export default function AdminsPage() {
               : 'text-gray-500 border-transparent hover:text-gray-700'
           }`}
         >
-          <List className="w-4 h-4" />
-          Task
+          <Journal className="w-4 h-4" />
+          작업 로그
         </button>
       </div>
 
@@ -607,11 +720,139 @@ export default function AdminsPage() {
         </div>
       )}
 
-      {/* Task 탭 */}
+      {/* 접속 로그 탭 */}
+      {activeTab === 'access' && (
+        <div className="space-y-4">
+          {/* 검색 및 필터 */}
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={accessLogsSearch}
+                  onChange={(e) => setAccessLogsSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAccessLogsSearch()}
+                  placeholder="관리자명, 아이디, IP 검색..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={accessLogsDateFrom}
+                onChange={(e) => {
+                  setAccessLogsDateFrom(e.target.value);
+                  setAccessLogsPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              <span className="text-gray-400">~</span>
+              <input
+                type="date"
+                value={accessLogsDateTo}
+                onChange={(e) => {
+                  setAccessLogsDateTo(e.target.value);
+                  setAccessLogsPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+            <button
+              onClick={handleAccessLogsSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              검색
+            </button>
+          </div>
+
+          {/* 접속 로그 테이블 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {accessLogsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Spinner size="md" />
+              </div>
+            ) : accessLogs.length === 0 ? (
+              <div className="text-center py-20 text-gray-500">
+                접속 기록이 없습니다.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">접속 일시</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">관리자</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">아이디</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">IP</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 whitespace-nowrap">브라우저</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {accessLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                          {log.accessedAt ? new Date(log.accessedAt).toLocaleString('ko-KR') : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                          {log.adminName || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                          {log.adminLoginId || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 font-mono whitespace-nowrap">
+                          {log.ip || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1" title={log.userAgent}>
+                            {parseBrowser(log.userAgent)}
+                            <InfoCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 페이지네이션 */}
+            {accessLogsPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  총 {accessLogsPagination.total}건 중 {(accessLogsPagination.page - 1) * accessLogsPagination.limit + 1}-{Math.min(accessLogsPagination.page * accessLogsPagination.limit, accessLogsPagination.total)}건
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAccessLogsPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={accessLogsPagination.page === 1}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {accessLogsPagination.page} / {accessLogsPagination.totalPages}
+                  </span>
+                  <button
+                    onClick={() => setAccessLogsPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={accessLogsPagination.page === accessLogsPagination.totalPages}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 작업 로그 탭 */}
       {activeTab === 'task' && (
         <div className="space-y-4">
           {/* 검색 및 필터 */}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
                 <input
@@ -638,6 +879,27 @@ export default function AdminsPage() {
                 <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={logsDateFrom}
+                onChange={(e) => {
+                  setLogsDateFrom(e.target.value);
+                  setLogsPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              <span className="text-gray-400">~</span>
+              <input
+                type="date"
+                value={logsDateTo}
+                onChange={(e) => {
+                  setLogsDateTo(e.target.value);
+                  setLogsPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
             <button
               onClick={handleLogsSearch}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

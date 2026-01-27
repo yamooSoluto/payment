@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { RefreshDouble, Check } from 'iconoir-react';
-import { SubscriptionFormProps, formatDateForInput } from './types';
+import { SubscriptionFormProps, formatDateForInput, calculateNextBillingDate } from './types';
 
 export default function PeriodAdjustForm({
   tenantId,
@@ -83,7 +83,15 @@ export default function PeriodAdjustForm({
           <input
             type="date"
             value={currentPeriodEnd}
-            onChange={(e) => setCurrentPeriodEnd(e.target.value)}
+            onChange={(e) => {
+              const newEndDate = e.target.value;
+              setCurrentPeriodEnd(newEndDate);
+              // 종료일 변경 시 결제일 자동 계산 (종료일 + 1일)
+              if (newEndDate) {
+                const billing = calculateNextBillingDate(newEndDate);
+                setNextBillingDate(formatDateForInput(billing));
+              }
+            }}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -93,9 +101,10 @@ export default function PeriodAdjustForm({
           <input
             type="date"
             value={nextBillingDate}
-            onChange={(e) => setNextBillingDate(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            disabled
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
           />
+          <p className="text-xs text-gray-500 mt-1">종료일 + 1일로 자동 설정됩니다.</p>
         </div>
       </div>
 

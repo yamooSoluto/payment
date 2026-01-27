@@ -27,9 +27,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '30');
     const search = searchParams.get('search') || '';
     const actionFilter = searchParams.get('action') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
 
-    // admin_logs 컬렉션 조회
-    const logsSnapshot = await db.collection('admin_logs').get();
+    // admin_task_logs 컬렉션 조회
+    const logsSnapshot = await db.collection('admin_task_logs').get();
 
     interface LogData {
       id: string;
@@ -182,6 +184,24 @@ export async function GET(request: NextRequest) {
           (log.brandName && log.brandName.toLowerCase().includes(searchLower)) ||
           (log.userId && log.userId.toLowerCase().includes(searchLower))
         );
+      });
+    }
+
+    // 날짜 필터
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      logs = logs.filter(log => {
+        if (!log.createdAt) return false;
+        return new Date(log.createdAt) >= fromDate;
+      });
+    }
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      logs = logs.filter(log => {
+        if (!log.createdAt) return false;
+        return new Date(log.createdAt) <= toDate;
       });
     }
 
