@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission, hashPassword } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 운영진 상세 조회
 export async function GET(
@@ -133,6 +134,33 @@ export async function PUT(
 
     await db.collection('admins').doc(id).update(updateData);
 
+    // 관리자 로그 기록
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    if (username !== undefined && username !== currentUsername) {
+      changes.username = { from: currentUsername, to: username };
+    }
+    if (name !== undefined && targetAdmin?.name !== name) {
+      changes.name = { from: targetAdmin?.name || '', to: name };
+    }
+    if (email !== undefined && targetAdmin?.email !== email) {
+      changes.email = { from: targetAdmin?.email || '', to: email };
+    }
+    if (role !== undefined && targetAdmin?.role !== role && targetAdmin?.role !== 'owner') {
+      changes.role = { from: targetAdmin?.role || '', to: role };
+    }
+    if (password) {
+      changes.password = { from: '********', to: '(변경됨)' };
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await addAdminLog(db, admin, {
+        action: 'admin_update',
+        targetAdminId: id,
+        targetAdminName: name || targetAdmin?.name || '',
+        changes,
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Update admin error:', error);
@@ -190,6 +218,21 @@ export async function DELETE(
     }
 
     await db.collection('admins').doc(id).delete();
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'admin_delete',
+      targetAdminId: id,
+      targetAdminName: targetAdmin?.name || '',
+      details: {
+        deletedData: {
+          username: targetAdmin?.username || '',
+          name: targetAdmin?.name || '',
+          email: targetAdmin?.email || '',
+          role: targetAdmin?.role || '',
+        },
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

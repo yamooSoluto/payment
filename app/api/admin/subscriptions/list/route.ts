@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 구독 목록 조회 (삭제되지 않은 모든 매장 기반, 미구독 포함)
 export async function GET(request: NextRequest) {
@@ -419,15 +420,14 @@ export async function PUT(request: NextRequest) {
     }
 
     if (Object.keys(changes).length > 0) {
-      await db.collection('admin_logs').add({
+      await addAdminLog(db, admin, {
         action: 'subscription_update',
         tenantId,
         userId: previousData?.userId || null,
+        brandName: brandName !== undefined ? brandName : previousData?.brandName || null,
+        email: previousData?.email || null,
+        phone: phone !== undefined ? phone : previousData?.phone || null,
         changes,
-        adminId: admin.adminId,
-        adminLoginId: admin.loginId,
-        adminName: admin.name,
-        createdAt: new Date(),
       });
     }
 

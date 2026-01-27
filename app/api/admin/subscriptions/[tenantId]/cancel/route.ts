@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
+import { getAdminFromRequest } from '@/lib/admin-auth';
 
 // 구독 해지 API
 export async function POST(
@@ -11,6 +13,12 @@ export async function POST(
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+
+  // 관리자 인증
+  const admin = await getAdminFromRequest(request);
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -94,6 +102,7 @@ export async function POST(
       await db.collection('tenants').doc(tenantId).update({
         'subscription.status': 'pending_cancel',
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'admin',
       });
 
       // subscription_history에 기록 (서브컬렉션 구조)
@@ -114,6 +123,20 @@ export async function POST(
         previousPlan: existingSubscription.plan,
         previousStatus: currentStatus,
         note: `관리자에 의해 해지 예약. 해지 예정일: ${cancelAt.toISOString().split('T')[0]}${reasonText ? `. 사유: ${reasonText}` : ''}`,
+      });
+
+      // 관리자 로그 기록
+      await addAdminLog(db, admin, {
+        action: 'subscription_cancel',
+        tenantId,
+        userId: tenantData?.userId || null,
+        brandName: tenantData?.brandName || null,
+        email: tenantData?.email || null,
+        details: {
+          cancelMode: 'scheduled',
+          previousPlan: existingSubscription.plan,
+          note: reasonText || null,
+        },
       });
 
       return NextResponse.json({
@@ -145,6 +168,7 @@ export async function POST(
       await db.collection('tenants').doc(tenantId).update({
         'subscription.status': 'canceled',
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'admin',
       });
 
       // subscription_history에 기록 (서브컬렉션 구조)
@@ -165,6 +189,20 @@ export async function POST(
         previousPlan: existingSubscription.plan,
         previousStatus: currentStatus,
         note: `관리자에 의해 즉시 해지${reasonText ? `. 사유: ${reasonText}` : ''}`,
+      });
+
+      // 관리자 로그 기록
+      await addAdminLog(db, admin, {
+        action: 'subscription_cancel',
+        tenantId,
+        userId: tenantData?.userId || null,
+        brandName: tenantData?.brandName || null,
+        email: tenantData?.email || null,
+        details: {
+          cancelMode: 'immediate',
+          previousPlan: existingSubscription.plan,
+          note: reasonText || null,
+        },
       });
 
       return NextResponse.json({

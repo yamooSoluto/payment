@@ -91,6 +91,9 @@ export async function GET(request: NextRequest) {
           const currentPeriodEnd = new Date(nextBillingDate);
           currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+          // amountPeriodDays 계산: 이번 결제 금액에 해당하는 기간 일수
+          const amountPeriodDays = Math.round((nextBillingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
           // 플랜 기본 가격 조회
           const planInfo = await getPlanById(plan);
           const baseAmount = planInfo?.price || amount;
@@ -101,6 +104,7 @@ export async function GET(request: NextRequest) {
               plan,
               status: 'active',
               amount,
+              amountPeriodDays,  // 이번 결제 금액에 해당하는 기간 일수
               baseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
               currentPeriodStart: now,
               currentPeriodEnd,
@@ -570,12 +574,17 @@ export async function GET(request: NextRequest) {
           const currentPeriodEnd = new Date(nextBillingDate);
           currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+          // amountPeriodDays 계산: 이번 결제 금액에 해당하는 기간 일수
+          const newAmountPeriodDays = Math.round((nextBillingDate.getTime() - newPeriodStart.getTime()) / (1000 * 60 * 60 * 24));
+
           // 구독 정보 업데이트
           await db.collection('subscriptions').doc(tenantId).update({
             status: 'active',
             currentPeriodStart: newPeriodStart,
             currentPeriodEnd,
             nextBillingDate,
+            amount: effectiveAmount,         // 이번 결제 금액
+            amountPeriodDays: newAmountPeriodDays, // 이번 결제 금액에 해당하는 기간 일수
             retryCount: 0,
             gracePeriodUntil: null,
             lastPaymentError: null,

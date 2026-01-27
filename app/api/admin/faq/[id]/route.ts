@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // PUT: FAQ 수정
 export async function PUT(
@@ -41,6 +42,16 @@ export async function PUT(
 
     await db.collection('web_faq').doc(id).update(updateData);
 
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'faq_update',
+      faqId: id,
+      details: {
+        question: question || null,
+        category: category || null,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       message: 'FAQ가 수정되었습니다.',
@@ -76,7 +87,24 @@ export async function DELETE(
     }
 
     const { id } = await params;
+
+    // 삭제 전 데이터 조회
+    const faqDoc = await db.collection('web_faq').doc(id).get();
+    const faqData = faqDoc.exists ? faqDoc.data() : null;
+
     await db.collection('web_faq').doc(id).delete();
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'faq_delete',
+      faqId: id,
+      details: {
+        deletedData: {
+          question: faqData?.question || '',
+          category: faqData?.category || '',
+        },
+      },
+    });
 
     return NextResponse.json({
       success: true,

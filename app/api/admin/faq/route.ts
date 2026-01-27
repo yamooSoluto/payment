@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: FAQ 목록 조회
 export async function GET(request: NextRequest) {
@@ -90,6 +91,16 @@ export async function POST(request: NextRequest) {
     }
 
     const docRef = await db.collection('web_faq').add(faqData);
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'faq_create',
+      faqId: docRef.id,
+      details: {
+        question,
+        category: category || '일반',
+      },
+    });
 
     return NextResponse.json({
       success: true,

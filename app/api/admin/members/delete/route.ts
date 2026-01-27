@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // POST: 회원 삭제 (Soft Delete 방식)
 export async function POST(request: NextRequest) {
@@ -212,24 +213,22 @@ export async function POST(request: NextRequest) {
           reason: 'Admin requested deletion',
         });
 
+        await batch.commit();
+
         // 7. 관리자 로그 기록 (admin_logs)
-        const adminLogRef = db.collection('admin_logs').doc();
-        batch.set(adminLogRef, {
+        await addAdminLog(db, admin, {
           action: 'member_delete',
           email,
           userId: userId || null,
-          deletedData: {
-            name: userData?.name || '',
-            phone: userData?.phone || '',
-            group: userData?.group || 'normal',
+          details: {
+            deletedData: {
+              name: userData?.name || '',
+              phone: userData?.phone || '',
+              group: userData?.group || 'normal',
+            },
           },
-          adminId: admin.adminId,
-          adminLoginId: admin.loginId,
-          adminName: admin.name,
-          createdAt: now,
         });
 
-        await batch.commit();
         deletedCount++;
       } catch (error) {
         console.error(`Delete member error for ${memberId}:`, error);

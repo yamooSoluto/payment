@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
           lastPaymentError: null,
           lastPaymentFailedAt: null,
           updatedAt: now,
+          updatedBy: 'user',
         });
 
         // 결제 내역 저장

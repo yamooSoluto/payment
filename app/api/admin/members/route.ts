@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { generateUniqueUserId } from '@/lib/user-utils';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 회원 목록 조회 (users 컬렉션 기반)
 export async function GET(request: NextRequest) {
@@ -262,19 +263,16 @@ export async function POST(request: NextRequest) {
     });
 
     // 관리자 로그 기록
-    await db.collection('admin_logs').add({
+    await addAdminLog(db, admin, {
       action: 'member_create',
       email,
+      phone: phone || null,
       userId,
       details: {
         name: name || '',
         phone: phone || '',
         group: group || 'normal',
       },
-      adminId: admin.adminId,
-      adminLoginId: admin.loginId,
-      adminName: admin.name,
-      createdAt: now,
     });
 
     return NextResponse.json({

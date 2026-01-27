@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
         cardCompany: card.company,
         cardNumber: card.number,
         updatedAt: now,
+        updatedBy: 'user',
       },
       { merge: true }
     );

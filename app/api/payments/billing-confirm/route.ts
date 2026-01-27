@@ -270,6 +270,7 @@ export async function GET(request: NextRequest) {
         pendingAmount: paymentAmount,
         pendingChangeAt,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       console.log('✅ Billing key registered, pending plan set:', { plan, pendingChangeAt: pendingChangeAt.toISOString() });
@@ -295,6 +296,7 @@ export async function GET(request: NextRequest) {
             createdAt: now,
           }],
           updatedAt: now,
+          updatedBy: 'user',
         });
 
         // subscription에 primaryCardId 추가
@@ -367,6 +369,9 @@ export async function GET(request: NextRequest) {
     const currentPeriodEnd = new Date(nextBillingDate);
     currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+    // amountPeriodDays 계산: 이번 결제 금액에 해당하는 기간 일수
+    const amountPeriodDays = Math.round((nextBillingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
     // 트랜잭션으로 구독 및 결제 내역 저장 (원자성 보장)
     const paymentDocId = `${orderId}_${Date.now()}`;
 
@@ -388,6 +393,7 @@ export async function GET(request: NextRequest) {
         billingKey,
         status: 'active',
         amount: paymentAmount,
+        amountPeriodDays,              // 이번 결제 금액에 해당하는 기간 일수
         baseAmount: planInfo.price,    // 플랜 기본 가격 (정기결제 금액, UI 표시용)
         currentPeriodStart: now,
         currentPeriodEnd,
@@ -466,6 +472,7 @@ export async function GET(request: NextRequest) {
           trialApplied: true,
           paidSubscriptionAt: now,
           updatedAt: now,
+          updatedBy: 'user',
         });
       } else {
         await userRef.set({
@@ -474,6 +481,7 @@ export async function GET(request: NextRequest) {
           paidSubscriptionAt: now,
           createdAt: now,
           updatedAt: now,
+          updatedBy: 'user',
         });
       }
       console.log('✅ User trialApplied flag set for:', email);
@@ -499,6 +507,7 @@ export async function GET(request: NextRequest) {
           createdAt: now,
         }],
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       // subscription에 primaryCardId 추가

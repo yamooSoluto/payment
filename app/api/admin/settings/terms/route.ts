@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { defaultTermsOfService, defaultPrivacyPolicy } from '@/lib/default-terms';
+import { addAdminLog } from '@/lib/admin-log';
 
 // 시행일 포맷
 function formatEffectiveDate(date: Date): string {
@@ -236,6 +237,20 @@ export async function PUT(request: NextRequest) {
       { merge: true }
     );
 
+    // 관리자 로그 기록 (변경된 항목에 따라)
+    if (termsOfService !== undefined) {
+      await addAdminLog(db, admin, {
+        action: 'settings_terms_update',
+        details: { note: '이용약관 임시저장' },
+      });
+    }
+    if (privacyPolicy !== undefined) {
+      await addAdminLog(db, admin, {
+        action: 'settings_privacy_update',
+        details: { note: '개인정보처리방침 임시저장' },
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Save terms error:', error);
@@ -424,6 +439,20 @@ export async function POST(request: NextRequest) {
       });
 
       results.privacy = privacyVersion;
+    }
+
+    // 관리자 로그 기록
+    if (results.terms) {
+      await addAdminLog(db, admin, {
+        action: 'settings_terms_publish',
+        details: { version: results.terms },
+      });
+    }
+    if (results.privacy) {
+      await addAdminLog(db, admin, {
+        action: 'settings_privacy_publish',
+        details: { version: results.privacy },
+      });
     }
 
     const message = type === 'both'

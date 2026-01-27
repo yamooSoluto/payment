@@ -5,6 +5,7 @@ import { cancelPayment } from '@/lib/toss';
 import { FieldValue } from 'firebase-admin/firestore';
 import { syncSubscriptionExpired } from '@/lib/tenant-sync';
 import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
 
 export async function POST(request: NextRequest) {
   try {
@@ -178,6 +179,20 @@ export async function POST(request: NextRequest) {
         // 환불은 성공했으므로 구독 취소 실패는 경고만
       }
     }
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'payment_refund',
+      tenantId: paymentData.tenantId || null,
+      email: paymentData.email || null,
+      userId: paymentData.userId || null,
+      details: {
+        refundAmount,
+        refundReason,
+        originalPaymentId: paymentId,
+        cancelSubscription: cancelSubscription || false,
+      },
+    });
 
     return NextResponse.json({
       success: true,

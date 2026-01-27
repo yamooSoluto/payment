@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
 import { getSubscriptionHistory } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
 
 // Firestore Timestamp를 ISO 문자열로 변환하는 헬퍼 함수
 function convertTimestamps(data: Record<string, unknown>): Record<string, unknown> {
@@ -456,6 +457,7 @@ export async function DELETE(
       deletedBy: 'admin',
       deletedByDetails: admin.adminId,
       updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'admin',
       // 구독 상태 만료 처리
       'subscription.status': 'expired',
     });
@@ -507,19 +509,20 @@ export async function DELETE(
     });
 
     // 4. 관리자 로그 기록
-    await db.collection('admin_logs').add({
+    await addAdminLog(db, admin, {
       action: 'tenant_delete',
       tenantId,
       userId: userIdForLog || null,
-      deletedData: {
-        brandName: tenantData?.brandName || '',
-        email: tenantData?.email || '',
-        industry: tenantData?.industry || '',
+      brandName: tenantData?.brandName || null,
+      email: tenantData?.email || null,
+      phone: userPhone || null,
+      details: {
+        deletedData: {
+          brandName: tenantData?.brandName || '',
+          email: tenantData?.email || '',
+          industry: tenantData?.industry || '',
+        },
       },
-      adminId: admin.adminId,
-      adminLoginId: admin.loginId,
-      adminName: admin.name,
-      createdAt: now,
     });
 
     return NextResponse.json({

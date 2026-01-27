@@ -24,8 +24,16 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: siteName,
       description: data?.ogDescription || 'YAMOO CS 자동화 서비스',
+      manifest: '/manifest.webmanifest',
+      themeColor: '#2563eb',
       icons: {
         icon: data?.faviconUrl || '/yamoo_favi.png',
+        apple: data?.webappIconUrl || '/yamoo_favi.png',
+      },
+      appleWebApp: {
+        capable: true,
+        statusBarStyle: 'default',
+        title: 'YAMOO',
       },
       openGraph: {
         title: data?.ogTitle || siteName,
@@ -60,8 +68,16 @@ function getDefaultMetadata(): Metadata {
   return {
     title: 'YAMOO',
     description: 'YAMOO CS 자동화 서비스',
+    manifest: '/manifest.webmanifest',
+    themeColor: '#2563eb',
     icons: {
       icon: '/yamoo_favi.png',
+      apple: '/yamoo_favi.png',
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'default',
+      title: 'YAMOO',
     },
     robots: {
       index: false,

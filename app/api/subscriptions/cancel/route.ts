@@ -240,6 +240,7 @@ export async function POST(request: NextRequest) {
           pendingMode: FieldValue.delete(),
           pendingChangeAt: FieldValue.delete(),
           updatedAt: now,
+          updatedBy: 'user',
         });
       });
 
@@ -301,6 +302,7 @@ export async function POST(request: NextRequest) {
         // 다음 결제일 제거 (자동 결제 방지)
         nextBillingDate: null,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       // tenants 컬렉션에 예약 해지 상태 동기화 (subscriptions와 동일하게 'pending_cancel')

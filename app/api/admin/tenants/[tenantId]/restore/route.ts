@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
+import { addAdminLog } from '@/lib/admin-log';
 
 // 관리자: 삭제된 매장 복구
 export async function POST(
@@ -66,21 +67,31 @@ export async function POST(
     }
 
     // 3. 관리자 로그 기록
-    await db.collection('admin_logs').add({
+    // users 컬렉션에서 phone 조회
+    let userPhone = tenantData?.phone || '';
+    if (tenantData?.email) {
+      const userDoc = await db.collection('users').doc(tenantData.email).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (!userPhone) userPhone = userData?.phone || '';
+      }
+    }
+
+    await addAdminLog(db, admin, {
       action: 'tenant_restore',
       tenantId,
       userId: tenantData?.userId || null,
-      restoredData: {
-        brandName: tenantData?.brandName || '',
-        email: tenantData?.email || '',
-        deletedAt: tenantData?.deletedAt,
-        deletedBy: tenantData?.deletedBy,
-        deletedByDetails: tenantData?.deletedByDetails,
+      brandName: tenantData?.brandName || null,
+      email: tenantData?.email || null,
+      phone: userPhone || null,
+      details: {
+        restoredData: {
+          brandName: tenantData?.brandName || '',
+          email: tenantData?.email || '',
+          deletedAt: tenantData?.deletedAt,
+          deletedBy: tenantData?.deletedBy,
+        },
       },
-      adminId: admin.adminId,
-      adminLoginId: admin.loginId,
-      adminName: admin.name,
-      createdAt: now,
     });
 
     return NextResponse.json({

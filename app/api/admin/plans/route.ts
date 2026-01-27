@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // 기본 플랜 데이터
 const DEFAULT_PLANS = [
@@ -186,6 +187,18 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: admin.adminId,
+    });
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'plan_create',
+      planId: id,
+      planName: name,
+      details: {
+        name,
+        price: price || 0,
+        description: description || '',
+      },
     });
 
     return NextResponse.json({ success: true, id });

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
+import { getAdminFromRequest } from '@/lib/admin-auth';
 
 // 기간 조정 API
 export async function PATCH(
@@ -13,20 +15,26 @@ export async function PATCH(
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
+  // 관리자 인증
+  const admin = await getAdminFromRequest(request);
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { tenantId } = await params;
     const body = await request.json();
     const {
       currentPeriodStart,  // ISO date string (optional)
       currentPeriodEnd,    // ISO date string (optional)
-      nextBillingDate,     // ISO date string | null (optional)
+      // nextBillingDate는 더 이상 사용하지 않음 - 결제일은 종료일 + 1일로 자동 계산
       reason,              // 선택
     } = body;
 
     const reasonText = reason?.trim() || '';
 
     // 최소 하나의 날짜 변경 필요
-    if (!currentPeriodStart && !currentPeriodEnd && nextBillingDate === undefined) {
+    if (!currentPeriodStart && !currentPeriodEnd) {
       return NextResponse.json({ error: '변경할 날짜를 선택해주세요.' }, { status: 400 });
     }
 
@@ -53,6 +61,7 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: 'admin',
+      updatedByAdminId: admin.adminId,
     };
 
     // 변경 내역 추적
@@ -70,19 +79,19 @@ export async function PATCH(
       const newEndDate = new Date(currentPeriodEnd);
       updateData.currentPeriodEnd = newEndDate;
       changes.push(`종료일: ${currentPeriodEnd}`);
-    }
 
-    // 결제일 변경
-    if (nextBillingDate !== undefined) {
-      if (nextBillingDate === null) {
-        updateData.nextBillingDate = null;
-        changes.push('결제일: 없음');
-      } else {
-        const newBillingDate = new Date(nextBillingDate);
+      // 종료일 변경 시 결제일도 자동 업데이트 (종료일 + 1일)
+      // 단, Trial 플랜(결제일 없음)이 아닌 경우에만
+      const isTrial = existingSubscription.plan === 'trial' || existingSubscription.status === 'trial';
+      if (!isTrial) {
+        const newBillingDate = new Date(newEndDate);
+        newBillingDate.setDate(newBillingDate.getDate() + 1);
         updateData.nextBillingDate = newBillingDate;
-        changes.push(`결제일: ${nextBillingDate}`);
+        changes.push(`결제일: ${newBillingDate.toISOString().split('T')[0]} (자동)`);
       }
     }
+    // 결제일 단독 변경은 허용하지 않음
+    // 결제일은 항상 종료일 + 1일로 자동 계산됨
 
     // subscriptions 컬렉션만 업데이트 (tenants는 subscription 필드 없음)
     await db.collection('subscriptions').doc(tenantId).update(updateData);
@@ -108,6 +117,43 @@ export async function PATCH(
       existingSubscription.status, // 상태는 그대로 유지
       historyUpdateData
     );
+
+    // 관리자 로그 기록
+    const logChanges: Record<string, { from: unknown; to: unknown }> = {};
+    if (currentPeriodStart) {
+      logChanges.currentPeriodStart = {
+        from: existingSubscription.currentPeriodStart?.toDate?.()?.toISOString?.() || null,
+        to: currentPeriodStart,
+      };
+    }
+    if (currentPeriodEnd) {
+      logChanges.currentPeriodEnd = {
+        from: existingSubscription.currentPeriodEnd?.toDate?.()?.toISOString?.() || null,
+        to: currentPeriodEnd,
+      };
+    }
+    if (updateData.nextBillingDate !== undefined) {
+      const newBillingStr = updateData.nextBillingDate instanceof Date
+        ? updateData.nextBillingDate.toISOString()
+        : updateData.nextBillingDate;
+      logChanges.nextBillingDate = {
+        from: existingSubscription.nextBillingDate?.toDate?.()?.toISOString?.() || null,
+        to: newBillingStr,
+      };
+    }
+
+    await addAdminLog(db, admin, {
+      action: 'subscription_update',
+      tenantId,
+      userId: tenantData?.userId || null,
+      brandName: tenantData?.brandName || null,
+      email: tenantData?.email || null,
+      changes: logChanges,
+      details: {
+        note: reasonText || null,
+        updateType: 'period_adjustment',
+      },
+    });
 
     return NextResponse.json({
       success: true,

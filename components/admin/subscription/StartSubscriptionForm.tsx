@@ -65,10 +65,11 @@ export default function StartSubscriptionForm({
   // 초기 날짜 설정
   useEffect(() => {
     const today = new Date();
+    const endDate = calculatePeriodEnd(today);
     setCurrentPeriodStart(formatDateForInput(today));
-    setCurrentPeriodEnd(formatDateForInput(calculatePeriodEnd(today)));
+    setCurrentPeriodEnd(formatDateForInput(endDate));
     if (!isTrial) {
-      setNextBillingDate(formatDateForInput(calculateNextBillingDate(today)));
+      setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
     } else {
       setNextBillingDate('');
     }
@@ -79,10 +80,20 @@ export default function StartSubscriptionForm({
     setCurrentPeriodStart(value);
     if (value) {
       const startDate = new Date(value);
-      setCurrentPeriodEnd(formatDateForInput(calculatePeriodEnd(startDate)));
+      const endDate = calculatePeriodEnd(startDate);
+      setCurrentPeriodEnd(formatDateForInput(endDate));
       if (!isTrial) {
-        setNextBillingDate(formatDateForInput(calculateNextBillingDate(startDate)));
+        setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
       }
+    }
+  };
+
+  // 종료일 변경 시 결제일 재계산
+  const handleEndDateChange = (value: string) => {
+    setCurrentPeriodEnd(value);
+    if (value && !isTrial) {
+      const endDate = new Date(value);
+      setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
     }
   };
 
@@ -91,8 +102,8 @@ export default function StartSubscriptionForm({
     setPlan(newPlan);
     if (newPlan === 'trial') {
       setNextBillingDate('');
-    } else if (currentPeriodStart) {
-      setNextBillingDate(formatDateForInput(calculateNextBillingDate(new Date(currentPeriodStart))));
+    } else if (currentPeriodEnd) {
+      setNextBillingDate(formatDateForInput(calculateNextBillingDate(new Date(currentPeriodEnd))));
     }
   };
 
@@ -152,13 +163,9 @@ export default function StartSubscriptionForm({
             ))}
           </select>
         )}
-        {selectedPlan && (
+        {selectedPlan && (selectedPlan.isNegotiable || selectedPlan.price === 0) && (
           <div className="mt-2 text-sm text-gray-600">
-            {selectedPlan.isNegotiable
-              ? '가격 협의 플랜입니다.'
-              : selectedPlan.price === 0
-                ? '무료 플랜입니다.'
-                : `월 ${selectedPlan.price.toLocaleString()}원`}
+            {selectedPlan.isNegotiable ? '가격 협의 플랜입니다.' : '무료 플랜입니다.'}
           </div>
         )}
       </div>
@@ -182,7 +189,7 @@ export default function StartSubscriptionForm({
           <input
             type="date"
             value={currentPeriodEnd}
-            onChange={(e) => setCurrentPeriodEnd(e.target.value)}
+            onChange={(e) => handleEndDateChange(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -193,9 +200,12 @@ export default function StartSubscriptionForm({
             <input
               type="date"
               value={nextBillingDate}
-              onChange={(e) => setNextBillingDate(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              disabled
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              종료일 + 1일로 자동 설정됩니다.
+            </p>
           </div>
         )}
 

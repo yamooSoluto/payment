@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 회원 상세 조회 (이메일 기준)
 export async function GET(
@@ -282,6 +283,13 @@ export async function PUT(
 
       // Firestore 업데이트 (트랜잭션)
       const now = new Date();
+
+      // 트랜잭션 전에 기존 데이터 조회 (로그용)
+      const preUserDoc = await db.collection('users').doc(oldEmail).get();
+      const preUserData = preUserDoc.exists ? preUserDoc.data() : {};
+      const preOldName = preUserData?.name;
+      const preOldPhone = preUserData?.phone;
+
       await db.runTransaction(async (transaction) => {
         // 1. 기존 users 문서 읽기
         const oldUserDoc = await transaction.get(db.collection('users').doc(oldEmail));
@@ -347,17 +355,22 @@ export async function PUT(
           transaction.delete(doc.ref);
         });
 
-        // 6. 관리자 로그 기록
-        const logRef = db.collection('admin_logs').doc();
-        transaction.set(logRef, {
-          action: 'email_change',
-          oldEmail,
-          newEmail: normalizedNewEmail,
-          adminId: admin.adminId,
-          adminLoginId: admin.loginId,
-          adminName: admin.name,
-          changedAt: now,
-        });
+      });
+
+      // 관리자 로그 기록 (이메일 변경)
+      await addAdminLog(db, admin, {
+        action: 'member_update',
+        email: normalizedNewEmail,
+        userId: preUserData?.userId || null,
+        changes: {
+          email: { from: oldEmail, to: normalizedNewEmail },
+          ...(name !== undefined && preOldName && preOldName !== name && {
+            name: { from: preOldName, to: name },
+          }),
+          ...(phone !== undefined && preOldPhone && preOldPhone !== phone && {
+            phone: { from: preOldPhone, to: phone },
+          }),
+        },
       });
 
         return NextResponse.json({
@@ -431,15 +444,16 @@ export async function PUT(
     }
 
     if (Object.keys(changes).length > 0) {
-      await db.collection('admin_logs').add({
+      const tenantData = tenantsSnapshot.docs.length > 0 ? tenantsSnapshot.docs[0].data() : null;
+
+      await addAdminLog(db, admin, {
         action: 'member_update',
         email: oldEmail,
         userId: currentUserData?.userId || null,
+        tenantId: tenantsSnapshot.docs.length > 0 ? tenantsSnapshot.docs[0].id : null,
+        brandName: tenantData?.brandName || null,
+        phone: phone || currentUserData?.phone || null,
         changes,
-        adminId: admin.adminId,
-        adminLoginId: admin.loginId,
-        adminName: admin.name,
-        createdAt: new Date(),
       });
     }
 

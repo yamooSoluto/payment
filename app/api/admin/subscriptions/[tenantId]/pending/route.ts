@@ -57,6 +57,7 @@ export async function DELETE(
       await db.collection('subscriptions').doc(tenantId).update({
         pendingPlan: null,
         pendingAmount: null,
+        pendingMode: null,
         pendingChangeAt: null,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
@@ -105,6 +106,7 @@ export async function DELETE(
       await db.collection('tenants').doc(tenantId).update({
         'subscription.status': restoredStatus,
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'admin',
       });
 
       return NextResponse.json({

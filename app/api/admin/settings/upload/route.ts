@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File is required' }, { status: 400 });
     }
 
-    if (!type || !['logo', 'favicon', 'ogImage'].includes(type)) {
+    if (!type || !['logo', 'favicon', 'ogImage', 'webappIcon'].includes(type)) {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
     }
 

@@ -46,9 +46,10 @@ interface FooterSettings {
 interface SiteSettings {
   // 사이트 기본 정보
   siteName: string;
-  // 로고 & 파비콘
+  // 로고 & 파비콘 & 웹앱 아이콘
   logoUrl: string;
   faviconUrl: string;
+  webappIconUrl: string;
   // 메뉴 설정
   menuItems: MenuItem[];
   // 링크 미리보기 (OG)
@@ -98,6 +99,7 @@ export default function GeneralSettingsPage() {
     siteName: 'YAMOO',
     logoUrl: '',
     faviconUrl: '',
+    webappIconUrl: '',
     menuItems: defaultMenuItems,
     ogTitle: '',
     ogDescription: '',
@@ -107,6 +109,7 @@ export default function GeneralSettingsPage() {
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
+  const webappIconInputRef = useRef<HTMLInputElement>(null);
   const ogImageInputRef = useRef<HTMLInputElement>(null);
 
   // 설정 불러오기
@@ -137,6 +140,7 @@ export default function GeneralSettingsPage() {
               siteName: data.settings.siteName || 'YAMOO',
               logoUrl: data.settings.logoUrl || '',
               faviconUrl: data.settings.faviconUrl || '',
+              webappIconUrl: data.settings.webappIconUrl || '',
               menuItems,
               ogTitle: data.settings.ogTitle || '',
               ogDescription: data.settings.ogDescription || '',
@@ -181,7 +185,7 @@ export default function GeneralSettingsPage() {
   // 이미지 업로드
   const handleImageUpload = async (
     file: File,
-    type: 'logo' | 'favicon' | 'ogImage'
+    type: 'logo' | 'favicon' | 'webappIcon' | 'ogImage'
   ) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -199,6 +203,8 @@ export default function GeneralSettingsPage() {
           setSettings(prev => ({ ...prev, logoUrl: data.url }));
         } else if (type === 'favicon') {
           setSettings(prev => ({ ...prev, faviconUrl: data.url }));
+        } else if (type === 'webappIcon') {
+          setSettings(prev => ({ ...prev, webappIconUrl: data.url }));
         } else if (type === 'ogImage') {
           setSettings(prev => ({ ...prev, ogImageUrl: data.url }));
         }
@@ -321,7 +327,7 @@ export default function GeneralSettingsPage() {
           <h2 className="text-lg font-semibold text-gray-900">로고 & 파비콘</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* 로고 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -406,6 +412,50 @@ export default function GeneralSettingsPage() {
                 }}
               />
             </div>
+          </div>
+
+          {/* 웹앱 아이콘 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              웹앱 아이콘
+            </label>
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
+              {settings.webappIconUrl ? (
+                <div className="relative inline-block">
+                  <img
+                    src={settings.webappIconUrl}
+                    alt="Webapp Icon"
+                    className="w-16 h-16 mx-auto object-contain"
+                  />
+                  <button
+                    onClick={() => setSettings(prev => ({ ...prev, webappIconUrl: '' }))}
+                    className="absolute -top-2 -right-2 p-1 bg-red-100 rounded-full hover:bg-red-200"
+                  >
+                    <Xmark className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => webappIconInputRef.current?.click()}
+                  className="cursor-pointer py-4"
+                >
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">클릭하여 업로드</p>
+                  <p className="text-xs text-gray-400 mt-1">PNG (권장: 512x512)</p>
+                </div>
+              )}
+              <input
+                ref={webappIconInputRef}
+                type="file"
+                accept=".png"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImageUpload(file, 'webappIcon');
+                }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">홈 화면에 추가 시 표시되는 아이콘</p>
           </div>
         </div>
       </div>

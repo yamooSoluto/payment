@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       previousNextBillingDate: null,
       reactivatedAt: new Date(),
       updatedAt: new Date(),
+      updatedBy: 'user',
     });
 
     // tenants 컬렉션에 재활성화 상태 동기화 (복구된 nextBillingDate 사용)

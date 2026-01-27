@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 사이트 설정 조회
 export async function GET(request: NextRequest) {
@@ -66,6 +67,14 @@ export async function PUT(request: NextRequest) {
       updatedAt: new Date(),
       updatedBy: admin.adminId,
     }, { merge: true });
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'settings_site_update',
+      details: {
+        note: '사이트 설정 수정',
+      },
+    });
 
     return NextResponse.json({
       success: true,

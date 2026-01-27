@@ -157,6 +157,7 @@ export async function PUT(
           trialApplied: true,
           trialAppliedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: 'admin',
         });
       }
     }

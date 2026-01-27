@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog, buildChanges } from '@/lib/admin-log';
 
 // GET: 플랜 상세 조회
 export async function GET(
@@ -68,6 +69,13 @@ export async function PUT(
     const body = await request.json();
     const { name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
 
+    // 기존 데이터 조회
+    const planDoc = await db.collection('plans').doc(id).get();
+    if (!planDoc.exists) {
+      return NextResponse.json({ error: '플랜을 찾을 수 없습니다.' }, { status: 404 });
+    }
+    const previousData = planDoc.data() || {};
+
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
       updatedBy: admin.adminId,
@@ -87,6 +95,17 @@ export async function PUT(
     if (isNegotiable !== undefined) updateData.isNegotiable = isNegotiable;
 
     await db.collection('plans').doc(id).update(updateData);
+
+    // 관리자 로그 기록
+    const changes = buildChanges(previousData, body, ['name', 'price', 'description', 'isActive', 'popular']);
+    if (Object.keys(changes).length > 0) {
+      await addAdminLog(db, admin, {
+        action: 'plan_update',
+        planId: id,
+        planName: name || previousData.name || '',
+        changes,
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -120,6 +139,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
+    // 플랜 정보 조회
+    const planDoc = await db.collection('plans').doc(id).get();
+    if (!planDoc.exists) {
+      return NextResponse.json({ error: '플랜을 찾을 수 없습니다.' }, { status: 404 });
+    }
+    const planData = planDoc.data();
+
     // 사용 중인 플랜인지 확인
     const tenantsSnapshot = await db.collection('tenants')
       .where('planId', '==', id)
@@ -134,6 +160,20 @@ export async function DELETE(
     }
 
     await db.collection('plans').doc(id).delete();
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'plan_delete',
+      planId: id,
+      planName: planData?.name || '',
+      details: {
+        deletedData: {
+          name: planData?.name || '',
+          price: planData?.price || 0,
+          description: planData?.description || '',
+        },
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

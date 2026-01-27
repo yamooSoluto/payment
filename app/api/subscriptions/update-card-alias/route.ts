@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     await db.collection('subscriptions').doc(tenantId).update({
       cardAlias: cardAlias || null,
       updatedAt: new Date(),
+      updatedBy: 'user',
     });
 
     return NextResponse.json({

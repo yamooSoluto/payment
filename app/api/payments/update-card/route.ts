@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
         brandName: docBrandName,
         cards,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       // 구독의 primary 카드 정보 업데이트
@@ -147,6 +148,7 @@ export async function GET(request: NextRequest) {
           primaryCardId: newCardId,
           cardUpdatedAt: now,
           updatedAt: now,
+          updatedBy: 'user',
         });
       }
     });

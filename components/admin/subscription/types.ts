@@ -154,10 +154,10 @@ export function calculatePeriodEnd(startDate: Date | string): Date {
   return end;
 }
 
-// 날짜 계산: 시작일 + 1개월 = 결제일
-export function calculateNextBillingDate(startDate: Date | string): Date {
-  const start = typeof startDate === 'string' ? new Date(startDate) : new Date(startDate);
-  const billing = new Date(start);
-  billing.setMonth(billing.getMonth() + 1);
+// 날짜 계산: 종료일 + 1일 = 결제일
+export function calculateNextBillingDate(endDate: Date | string): Date {
+  const end = typeof endDate === 'string' ? new Date(endDate) : new Date(endDate);
+  const billing = new Date(end);
+  billing.setDate(billing.getDate() + 1);
   return billing;
 }

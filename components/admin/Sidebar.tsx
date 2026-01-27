@@ -120,11 +120,12 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       {/* 사이드바 */}
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-screen bg-gray-900 transform transition-all duration-200 ease-in-out
-          lg:translate-x-0 lg:sticky lg:z-auto lg:top-0
+          fixed top-0 left-0 z-50 bg-gray-900 transform transition-all duration-200 ease-in-out
+          lg:translate-x-0 lg:sticky lg:z-auto lg:top-0 lg:h-screen
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           w-56 ${collapsed ? 'lg:w-16' : 'lg:w-56'}
         `}
+        style={{ height: '100dvh' }}
       >
         {/* 로고 */}
         <div className={`flex items-center h-16 border-b border-gray-800 justify-between px-4 ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group } from 'iconoir-react';
+import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group, List, Search, NavArrowLeft, NavArrowRight } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 
 interface Admin {
@@ -12,6 +12,32 @@ interface Admin {
   role: string;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+interface LogData {
+  id: string;
+  action: string;
+  actionLabel: string;
+  adminId: string;
+  adminLoginId: string;
+  adminName: string;
+  createdAt: string | null;
+  email?: string;
+  phone?: string;
+  userId?: string;
+  oldEmail?: string;
+  newEmail?: string;
+  tenantId?: string;
+  brandName?: string;
+  changes?: Record<string, { from: unknown; to: unknown }>;
+  details?: Record<string, unknown>;
+  deletedData?: Record<string, unknown>;
+  restoredData?: Record<string, unknown>;
+}
+
+interface ActionType {
+  value: string;
+  label: string;
 }
 
 // 권한 정의
@@ -78,13 +104,22 @@ export default function AdminsPage() {
   const router = useRouter();
 
   // URL에서 탭 상태 읽기
-  type TabType = 'list' | 'permissions';
+  type TabType = 'list' | 'permissions' | 'task';
   const tabFromUrl = searchParams.get('tab') as TabType | null;
-  const initialTab = tabFromUrl === 'permissions' ? 'permissions' : 'list';
+  const initialTab = tabFromUrl === 'permissions' ? 'permissions' : tabFromUrl === 'task' ? 'task' : 'list';
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Task 탭 상태
+  const [logs, setLogs] = useState<LogData[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsPagination, setLogsPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 0 });
+  const [logsSearch, setLogsSearch] = useState('');
+  const [logsActionFilter, setLogsActionFilter] = useState('');
+  const [actionTypes, setActionTypes] = useState<ActionType[]>([]);
+  const [selectedLog, setSelectedLog] = useState<LogData | null>(null);
 
   // 탭 변경 시 URL 업데이트
   const handleTabChange = (tab: TabType) => {
@@ -116,6 +151,53 @@ export default function AdminsPage() {
     fetchAdmins();
     fetchRolePermissions();
   }, []);
+
+  // Task 탭이 활성화될 때 로그 조회
+  useEffect(() => {
+    if (activeTab === 'task') {
+      fetchLogs();
+    }
+  }, [activeTab, logsPagination.page, logsActionFilter]);
+
+  const fetchLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: logsPagination.page.toString(),
+        limit: logsPagination.limit.toString(),
+      });
+      if (logsSearch) params.set('search', logsSearch);
+      if (logsActionFilter) params.set('action', logsActionFilter);
+
+      const response = await fetch(`/api/admin/logs?${params.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data.logs);
+        setLogsPagination(prev => ({ ...prev, total: data.pagination.total, totalPages: data.pagination.totalPages }));
+        if (data.actionTypes) {
+          setActionTypes(data.actionTypes);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch logs:', error);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const handleLogsSearch = () => {
+    setLogsPagination(prev => ({ ...prev, page: 1 }));
+    fetchLogs();
+  };
+
+  // 테이블에 표시할 간단 요약 (API에서 이미 users/tenants 조회해서 매핑됨)
+  const getLogSummary = (log: LogData): { brandName?: string; email?: string; phone?: string } => {
+    return {
+      brandName: log.brandName,
+      email: log.action === 'email_change' ? log.newEmail : log.email,
+      phone: log.phone,
+    };
+  };
 
   const fetchRolePermissions = async () => {
     setPermissionsLoading(true);
@@ -356,6 +438,17 @@ export default function AdminsPage() {
           <Settings className="w-4 h-4" />
           권한 관리
         </button>
+        <button
+          onClick={() => handleTabChange('task')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'task'
+              ? 'text-blue-600 border-blue-600'
+              : 'text-gray-500 border-transparent hover:text-gray-700'
+          }`}
+        >
+          <List className="w-4 h-4" />
+          Task
+        </button>
       </div>
 
       {/* 관리자 목록 탭 */}
@@ -514,6 +607,140 @@ export default function AdminsPage() {
         </div>
       )}
 
+      {/* Task 탭 */}
+      {activeTab === 'task' && (
+        <div className="space-y-4">
+          {/* 검색 및 필터 */}
+          <div className="flex flex-wrap gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={logsSearch}
+                  onChange={(e) => setLogsSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogsSearch()}
+                  placeholder="관리자명, 매장명, 이메일, 연락처 검색..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+            <select
+              value={logsActionFilter}
+              onChange={(e) => {
+                setLogsActionFilter(e.target.value);
+                setLogsPagination(prev => ({ ...prev, page: 1 }));
+              }}
+              className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">전체 액션</option>
+              {actionTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleLogsSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              검색
+            </button>
+          </div>
+
+          {/* 로그 테이블 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {logsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Spinner size="md" />
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="text-center py-20 text-gray-500">
+                처리 내역이 없습니다.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">일시</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">관리자</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">아이디</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">유형</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">매장명</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이메일</th>
+                      <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">연락처</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {logs.map((log) => {
+                      const summary = getLogSummary(log);
+                      return (
+                        <tr
+                          key={log.id}
+                          onClick={() => setSelectedLog(log)}
+                          className="hover:bg-gray-50 transition-colors cursor-pointer"
+                        >
+                          <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleString('ko-KR') : '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                            {log.adminName || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {log.adminLoginId || '-'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                              {log.actionLabel}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {summary.brandName || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {summary.email || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {summary.phone || '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 페이지네이션 */}
+            {logsPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  총 {logsPagination.total}건 중 {(logsPagination.page - 1) * logsPagination.limit + 1}-{Math.min(logsPagination.page * logsPagination.limit, logsPagination.total)}건
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLogsPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={logsPagination.page === 1}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {logsPagination.page} / {logsPagination.totalPages}
+                  </span>
+                  <button
+                    onClick={() => setLogsPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={logsPagination.page === logsPagination.totalPages}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <NavArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -605,6 +832,167 @@ export default function AdminsPage() {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 {saving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 로그 상세 모달 */}
+      {selectedLog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">처리 내역 상세</h2>
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 기본 정보 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">일시</label>
+                  <p className="text-sm text-gray-900">
+                    {selectedLog.createdAt ? new Date(selectedLog.createdAt).toLocaleString('ko-KR') : '-'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">유형</label>
+                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                    {selectedLog.actionLabel}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-xs font-medium text-gray-500 mb-2">처리 관리자</label>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-900 font-medium">{selectedLog.adminName || '-'}</p>
+                  <p className="text-xs text-gray-500">{selectedLog.adminLoginId || '-'}</p>
+                </div>
+              </div>
+
+              {/* 대상 정보 */}
+              {(selectedLog.email || selectedLog.userId || selectedLog.tenantId) && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">대상 정보</label>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    {selectedLog.tenantId && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">매장 ID</span>
+                        <span className="text-sm text-gray-900 font-mono">{selectedLog.tenantId}</span>
+                      </div>
+                    )}
+                    {selectedLog.userId && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">회원 ID</span>
+                        <span className="text-sm text-gray-900 font-mono">{selectedLog.userId}</span>
+                      </div>
+                    )}
+                    {selectedLog.email && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">이메일</span>
+                        <span className="text-sm text-gray-900">{selectedLog.email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 이메일 변경 */}
+              {selectedLog.action === 'email_change' && selectedLog.oldEmail && selectedLog.newEmail && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">이메일 변경</label>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">{selectedLog.oldEmail}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="text-sm text-gray-900 font-medium">{selectedLog.newEmail}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 변경 내역 */}
+              {selectedLog.changes && Object.keys(selectedLog.changes).length > 0 && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">변경 내역</label>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    {Object.entries(selectedLog.changes).map(([key, val]) => (
+                      <div key={key} className="flex flex-col">
+                        <span className="text-xs text-gray-500">{key}</span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-sm text-gray-600">{String(val.from ?? '(없음)')}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="text-sm text-gray-900 font-medium">{String(val.to ?? '(없음)')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 상세 정보 */}
+              {selectedLog.details && Object.keys(selectedLog.details).length > 0 && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">상세 정보</label>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    {Object.entries(selectedLog.details).map(([key, val]) => (
+                      <div key={key} className="flex justify-between">
+                        <span className="text-xs text-gray-500">{key}</span>
+                        <span className="text-sm text-gray-900">{String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 삭제된 데이터 */}
+              {selectedLog.deletedData && Object.keys(selectedLog.deletedData).length > 0 && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">삭제된 데이터</label>
+                  <div className="bg-red-50 rounded-lg p-3 space-y-2">
+                    {Object.entries(selectedLog.deletedData)
+                      .filter(([, val]) => val)
+                      .map(([key, val]) => (
+                        <div key={key} className="flex justify-between">
+                          <span className="text-xs text-red-600">{key}</span>
+                          <span className="text-sm text-red-900">{String(val)}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 복구된 데이터 */}
+              {selectedLog.restoredData && Object.keys(selectedLog.restoredData).length > 0 && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">복구된 데이터</label>
+                  <div className="bg-green-50 rounded-lg p-3 space-y-2">
+                    {Object.entries(selectedLog.restoredData)
+                      .filter(([key, val]) => val && !key.includes('deleted'))
+                      .map(([key, val]) => (
+                        <div key={key} className="flex justify-between">
+                          <span className="text-xs text-green-600">{key}</span>
+                          <span className="text-sm text-green-900">{String(val)}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="w-full px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                닫기
               </button>
             </div>
           </div>

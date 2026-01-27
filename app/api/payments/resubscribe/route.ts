@@ -148,6 +148,9 @@ export async function POST(request: NextRequest) {
     const currentPeriodEnd = new Date(nextBillingDate);
     currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
+    // amountPeriodDays 계산: 이번 결제 금액에 해당하는 기간 일수
+    const amountPeriodDays = Math.round((nextBillingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
     const paymentDocId = `${orderId}_${Date.now()}`;
 
     await db.runTransaction(async (transaction) => {
@@ -158,6 +161,7 @@ export async function POST(request: NextRequest) {
         planChangedAt: now,
         status: 'active',
         amount: paymentAmount,
+        amountPeriodDays,  // 이번 결제 금액에 해당하는 기간 일수
         baseAmount: planInfo.price,  // 플랜 기본 가격 (정기결제 금액)
         billingType: 'recurring',  // 정기결제
         currentPeriodStart: now,
@@ -172,6 +176,7 @@ export async function POST(request: NextRequest) {
         pendingChangeAt: null,
         resubscribedAt: now,
         updatedAt: now,
+        updatedBy: 'user',
       });
 
       // 결제 내역 저장 (멱등성 키 포함)

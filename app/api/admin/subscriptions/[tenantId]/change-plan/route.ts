@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
+import { addAdminLog } from '@/lib/admin-log';
+import { getAdminFromRequest } from '@/lib/admin-auth';
 
 // 플랜별 금액
 const PLAN_PRICES: Record<string, number> = {
@@ -21,6 +23,12 @@ export async function POST(
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+
+  // 관리자 인증
+  const admin = await getAdminFromRequest(request);
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -99,6 +107,7 @@ export async function POST(
         plan: newPlan,  // 상위 plan 필드
         'subscription.plan': newPlan,
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: 'admin',
       });
 
       // subscription_history에 기록 (기존 레코드 완료 + 새 레코드 추가)
@@ -121,6 +130,21 @@ export async function POST(
         note: reason || `관리자에 의해 플랜 즉시 변경 (${currentPlan} → ${newPlan})`,
       });
 
+      // 관리자 로그 기록
+      await addAdminLog(db, admin, {
+        action: 'subscription_change_plan',
+        tenantId,
+        userId: tenantData?.userId || null,
+        brandName: tenantData?.brandName || null,
+        email: tenantData?.email || null,
+        details: {
+          previousPlan: currentPlan,
+          newPlan,
+          applyMode: 'immediate',
+          note: reason || null,
+        },
+      });
+
       return NextResponse.json({
         success: true,
         message: `플랜이 ${newPlan === 'business' ? 'Business' : 'Basic'}으로 변경되었습니다.`,
@@ -137,12 +161,28 @@ export async function POST(
       await db.collection('subscriptions').doc(tenantId).update({
         pendingPlan: newPlan,
         pendingAmount: newAmount,
+        pendingMode: 'scheduled',  // cron에서 감지하기 위해 필수
         pendingChangeAt: nextBillingDate || existingSubscription.currentPeriodEnd,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
       });
 
       // subscription_history는 실제 적용 시점(cron)에서 기록
+
+      // 관리자 로그 기록
+      await addAdminLog(db, admin, {
+        action: 'subscription_change_plan',
+        tenantId,
+        userId: tenantData?.userId || null,
+        brandName: tenantData?.brandName || null,
+        email: tenantData?.email || null,
+        details: {
+          previousPlan: currentPlan,
+          newPlan,
+          applyMode: 'scheduled',
+          note: reason || null,
+        },
+      });
 
       return NextResponse.json({
         success: true,

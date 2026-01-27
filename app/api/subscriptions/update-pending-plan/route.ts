@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
       pendingAmount: planInfo.price,
       pendingChangeAt,
       updatedAt: new Date(),
+      updatedBy: 'user',
     });
 
     return NextResponse.json({

@@ -40,23 +40,18 @@ async function authenticateRequest(request: NextRequest): Promise<string | null>
 // 일할계산 함수
 function calculateProration(
   currentAmount: number,
+  currentAmountPeriodDays: number,  // 원래 결제 기간 일수
   newPlanPrice: number,
   currentPeriodStart: Date,
   nextBillingDate: Date
-): { creditAmount: number; proratedNewAmount: number } {
+): { creditAmount: number; proratedNewAmount: number; newAmountPeriodDays: number } {
   const startDateOnly = new Date(currentPeriodStart);
   startDateOnly.setHours(0, 0, 0, 0);
   const nextDateOnly = new Date(nextBillingDate);
   nextDateOnly.setHours(0, 0, 0, 0);
 
-  // 현재 기간의 총 일수 (currentPeriodStart ~ nextBillingDate)
+  // 현재 기간의 총 일수 (currentPeriodStart ~ nextBillingDate) - 실제 기간
   const totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
-
-  // 원래 결제 주기의 총 일수 (nextBillingDate 기준 한 달 전 ~ nextBillingDate)
-  // 예: nextBillingDate가 02-14이면, 원래 시작은 01-14이므로 총 31일
-  const originalBillingCycleStart = new Date(nextDateOnly);
-  originalBillingCycleStart.setMonth(originalBillingCycleStart.getMonth() - 1);
-  const billingCycleTotalDays = Math.round((nextDateOnly.getTime() - originalBillingCycleStart.getTime()) / (1000 * 60 * 60 * 24));
 
   // 사용 일수 (오늘 포함)
   const today = new Date();
@@ -70,18 +65,19 @@ function calculateProration(
   const newPlanDays = daysLeft + 1;
 
   // 0 나누기 방지
-  if (totalDaysInPeriod <= 0 || billingCycleTotalDays <= 0) {
-    return { creditAmount: 0, proratedNewAmount: 0 };
+  if (currentAmountPeriodDays <= 0) {
+    return { creditAmount: 0, proratedNewAmount: 0, newAmountPeriodDays: newPlanDays };
   }
 
-  // 기존 플랜 환불 금액: 현재 기간 기준으로 남은 일수만큼 환불
-  const creditAmount = Math.round((currentAmount / totalDaysInPeriod) * daysLeft);
+  // 기존 플랜 환불 금액: 원래 결제 기간 기준으로 남은 일수만큼 환불
+  const dailyCreditRate = currentAmount / currentAmountPeriodDays;
+  const creditAmount = Math.round(dailyCreditRate * daysLeft);
 
-  // 새 플랜 결제 금액: 원래 결제 주기 기준으로 이용할 일수만큼 결제
-  // 예: 원래 31일 주기에서 30일만 이용하면 99,000 * 30/31 = 95,806원
-  const proratedNewAmount = Math.round((newPlanPrice / billingCycleTotalDays) * newPlanDays);
+  // 새 플랜 결제 금액: 원래 결제 기간 기준으로 이용할 일수만큼 결제
+  const dailyNewPlanRate = newPlanPrice / currentAmountPeriodDays;
+  const proratedNewAmount = Math.round(dailyNewPlanRate * newPlanDays);
 
-  return { creditAmount, proratedNewAmount };
+  return { creditAmount, proratedNewAmount, newAmountPeriodDays: newPlanDays };
 }
 
 export async function POST(request: NextRequest) {
@@ -148,6 +144,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription' }, { status: 400 });
     }
 
+    // amountPeriodDays 검증 (필수 필드)
+    const currentAmountPeriodDays = subscription.amountPeriodDays;
+    if (!currentAmountPeriodDays || currentAmountPeriodDays <= 0) {
+      return NextResponse.json({
+        error: 'amountPeriodDays not found. 기존 구독 데이터를 삭제 후 새로 생성해주세요.'
+      }, { status: 400 });
+    }
+
     const previousPlan = subscription.plan;
     const previousAmount = subscription.amount || PLAN_PRICES[previousPlan] || 0;
     const now = new Date();
@@ -172,10 +176,14 @@ export async function POST(request: NextRequest) {
     const nextBillingDate = subscription.nextBillingDate?.toDate?.() ||
                             (subscription.nextBillingDate ? new Date(subscription.nextBillingDate) : null);
 
+    // newAmountPeriodDays: 플랜 변경 후 저장할 기간 일수
+    let newAmountPeriodDays = currentAmountPeriodDays;
+
     if (currentPeriodStart && nextBillingDate) {
-      const proration = calculateProration(previousAmount, newPlanPrice, currentPeriodStart, nextBillingDate);
+      const proration = calculateProration(previousAmount, currentAmountPeriodDays, newPlanPrice, currentPeriodStart, nextBillingDate);
       creditAmount = proration.creditAmount;
       proratedNewAmount = proration.proratedNewAmount;
+      newAmountPeriodDays = proration.newAmountPeriodDays;
     } else {
       // 기간 정보가 없으면 전체 금액 사용
       proratedNewAmount = newPlanPrice;
@@ -379,6 +387,7 @@ export async function POST(request: NextRequest) {
             lastRefundAt: now,
             lastRefundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경`,
             updatedAt: now,
+            updatedBy: 'user',
           });
         }
       }
@@ -420,12 +429,14 @@ export async function POST(request: NextRequest) {
       transaction.update(subscriptionRef, {
         plan: newPlan,
         amount: proratedNewAmount, // 이번에 실제 결제한 금액 (일할계산)
+        amountPeriodDays: newAmountPeriodDays, // 이번 결제 금액에 해당하는 기간 일수
         baseAmount: newPlanPrice,  // 플랜 기본가 (정기결제 금액, UI 표시용)
         previousPlan,
         previousAmount,
         planChangedAt: now,
         currentPeriodStart: now, // 플랜 변경 시 구독 기간 시작일도 업데이트
         updatedAt: now,
+        updatedBy: 'user',
         pendingPlan: null,
         pendingAmount: null,
         pendingMode: null,

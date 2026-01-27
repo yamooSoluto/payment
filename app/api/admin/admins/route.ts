@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFromRequest, hasPermission, hashPassword } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { addAdminLog } from '@/lib/admin-log';
 
 // GET: 운영진 목록 조회
 export async function GET(request: NextRequest) {
@@ -99,6 +100,19 @@ export async function POST(request: NextRequest) {
       role,
       createdAt: new Date(),
       createdBy: admin.adminId,
+    });
+
+    // 관리자 로그 기록
+    await addAdminLog(db, admin, {
+      action: 'admin_create',
+      targetAdminId: docRef.id,
+      targetAdminName: name,
+      details: {
+        username,
+        name,
+        email: email || '',
+        role,
+      },
     });
 
     return NextResponse.json({
