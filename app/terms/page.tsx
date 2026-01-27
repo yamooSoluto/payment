@@ -44,7 +44,9 @@ export default function TermsPage() {
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
+    if (typeof dateStr === 'string' && dateStr.includes('년')) return dateStr;
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
     return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
   };
 
