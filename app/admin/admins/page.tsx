@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, Fragment } from 'react';
+import useSWR from 'swr';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group, Search, NavArrowLeft, NavArrowRight, InfoCircle, Clock, Journal } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -153,6 +154,8 @@ interface RolePermissions {
   viewer: string[];
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function AdminsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -163,14 +166,11 @@ export default function AdminsPage() {
   const initialTab = tabFromUrl === 'permissions' ? 'permissions' : tabFromUrl === 'access' ? 'access' : tabFromUrl === 'task' ? 'task' : 'list';
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const [admins, setAdmins] = useState<Admin[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // 작업 로그 탭 상태
-  const [logs, setLogs] = useState<LogData[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
   const [logsPagination, setLogsPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 0 });
   const [logsSearch, setLogsSearch] = useState('');
+  const [logsSearchSubmitted, setLogsSearchSubmitted] = useState('');
   const [logsActionFilter, setLogsActionFilter] = useState('');
   const [logsDateFrom, setLogsDateFrom] = useState('');
   const [logsDateTo, setLogsDateTo] = useState('');
@@ -178,12 +178,55 @@ export default function AdminsPage() {
   const [selectedLog, setSelectedLog] = useState<LogData | null>(null);
 
   // 접속 로그 탭 상태
-  const [accessLogs, setAccessLogs] = useState<AccessLogData[]>([]);
-  const [accessLogsLoading, setAccessLogsLoading] = useState(false);
   const [accessLogsPagination, setAccessLogsPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 0 });
   const [accessLogsSearch, setAccessLogsSearch] = useState('');
+  const [accessLogsSearchSubmitted, setAccessLogsSearchSubmitted] = useState('');
   const [accessLogsDateFrom, setAccessLogsDateFrom] = useState('');
   const [accessLogsDateTo, setAccessLogsDateTo] = useState('');
+
+  // SWR: Admins
+  const { data: adminsData, isLoading: loading, mutate: mutateAdmins } = useSWR(
+    '/api/admin/admins',
+    fetcher,
+    { fallbackData: { admins: [] }, keepPreviousData: true }
+  );
+  const admins: Admin[] = adminsData?.admins || [];
+
+  // SWR: Logs
+  const logsParamsStr = (() => {
+    const params = new URLSearchParams({ page: logsPagination.page.toString(), limit: logsPagination.limit.toString() });
+    if (logsSearchSubmitted) params.set('search', logsSearchSubmitted);
+    if (logsActionFilter) params.set('action', logsActionFilter);
+    if (logsDateFrom) params.set('dateFrom', logsDateFrom);
+    if (logsDateTo) params.set('dateTo', logsDateTo);
+    return params.toString();
+  })();
+  const { data: logsData, isLoading: logsLoading, mutate: mutateLogs } = useSWR(
+    activeTab === 'task' ? `/api/admin/logs?${logsParamsStr}` : null,
+    fetcher,
+    { keepPreviousData: true, onSuccess: (data) => {
+      setLogsPagination(prev => ({ ...prev, total: data.pagination?.total ?? 0, totalPages: data.pagination?.totalPages ?? 0 }));
+      if (data.actionTypes) setActionTypes(data.actionTypes);
+    }}
+  );
+  const logs: LogData[] = logsData?.logs || [];
+
+  // SWR: Access Logs
+  const accessLogsParamsStr = (() => {
+    const params = new URLSearchParams({ page: accessLogsPagination.page.toString(), limit: accessLogsPagination.limit.toString() });
+    if (accessLogsSearchSubmitted) params.set('search', accessLogsSearchSubmitted);
+    if (accessLogsDateFrom) params.set('dateFrom', accessLogsDateFrom);
+    if (accessLogsDateTo) params.set('dateTo', accessLogsDateTo);
+    return params.toString();
+  })();
+  const { data: accessLogsData, isLoading: accessLogsLoading, mutate: mutateAccessLogs } = useSWR(
+    activeTab === 'access' ? `/api/admin/access-log?${accessLogsParamsStr}` : null,
+    fetcher,
+    { keepPreviousData: true, onSuccess: (data) => {
+      setAccessLogsPagination(prev => ({ ...prev, total: data.pagination?.total ?? 0, totalPages: data.pagination?.totalPages ?? 0 }));
+    }}
+  );
+  const accessLogs: AccessLogData[] = accessLogsData?.logs || [];
 
   // 탭 변경 시 URL 업데이트
   const handleTabChange = (tab: TabType) => {
@@ -202,94 +245,31 @@ export default function AdminsPage() {
     role: 'admin',
   });
 
+  // SWR: Permissions
+  const { data: permissionsData, isLoading: permissionsLoading, mutate: mutatePermissions } = useSWR(
+    '/api/admin/permissions',
+    fetcher,
+    { keepPreviousData: true, onSuccess: (data) => {
+      if (data.permissions) setRolePermissions(data.permissions);
+    }}
+  );
+
   // 권한 관리 상태
   const [rolePermissions, setRolePermissions] = useState<RolePermissions>({
     super: [],
     admin: [],
     viewer: [],
   });
-  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
-
-  useEffect(() => {
-    fetchAdmins();
-    fetchRolePermissions();
-  }, []);
-
-  // 작업 로그 탭이 활성화될 때 로그 조회
-  useEffect(() => {
-    if (activeTab === 'task') {
-      fetchLogs();
-    }
-  }, [activeTab, logsPagination.page, logsActionFilter, logsDateFrom, logsDateTo]);
-
-  // 접속 로그 탭이 활성화될 때 로그 조회
-  useEffect(() => {
-    if (activeTab === 'access') {
-      fetchAccessLogs();
-    }
-  }, [activeTab, accessLogsPagination.page, accessLogsDateFrom, accessLogsDateTo]);
-
-  const fetchLogs = async () => {
-    setLogsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: logsPagination.page.toString(),
-        limit: logsPagination.limit.toString(),
-      });
-      if (logsSearch) params.set('search', logsSearch);
-      if (logsActionFilter) params.set('action', logsActionFilter);
-      if (logsDateFrom) params.set('dateFrom', logsDateFrom);
-      if (logsDateTo) params.set('dateTo', logsDateTo);
-
-      const response = await fetch(`/api/admin/logs?${params.toString()}`);
-      if (response.ok) {
-        const data = await response.json();
-        setLogs(data.logs);
-        setLogsPagination(prev => ({ ...prev, total: data.pagination.total, totalPages: data.pagination.totalPages }));
-        if (data.actionTypes) {
-          setActionTypes(data.actionTypes);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch logs:', error);
-    } finally {
-      setLogsLoading(false);
-    }
-  };
 
   const handleLogsSearch = () => {
     setLogsPagination(prev => ({ ...prev, page: 1 }));
-    fetchLogs();
-  };
-
-  const fetchAccessLogs = async () => {
-    setAccessLogsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: accessLogsPagination.page.toString(),
-        limit: accessLogsPagination.limit.toString(),
-      });
-      if (accessLogsSearch) params.set('search', accessLogsSearch);
-      if (accessLogsDateFrom) params.set('dateFrom', accessLogsDateFrom);
-      if (accessLogsDateTo) params.set('dateTo', accessLogsDateTo);
-
-      const response = await fetch(`/api/admin/access-log?${params.toString()}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAccessLogs(data.logs);
-        setAccessLogsPagination(prev => ({ ...prev, total: data.pagination.total, totalPages: data.pagination.totalPages }));
-      }
-    } catch (error) {
-      console.error('Failed to fetch access logs:', error);
-    } finally {
-      setAccessLogsLoading(false);
-    }
+    setLogsSearchSubmitted(logsSearch);
   };
 
   const handleAccessLogsSearch = () => {
     setAccessLogsPagination(prev => ({ ...prev, page: 1 }));
-    fetchAccessLogs();
+    setAccessLogsSearchSubmitted(accessLogsSearch);
   };
 
   // 테이블에 표시할 간단 요약 (API에서 이미 users/tenants 조회해서 매핑됨)
@@ -299,21 +279,6 @@ export default function AdminsPage() {
       email: log.action === 'email_change' ? log.newEmail : log.email,
       phone: log.phone,
     };
-  };
-
-  const fetchRolePermissions = async () => {
-    setPermissionsLoading(true);
-    try {
-      const response = await fetch('/api/admin/permissions');
-      if (response.ok) {
-        const data = await response.json();
-        setRolePermissions(data.permissions);
-      }
-    } catch (error) {
-      console.error('Failed to fetch permissions:', error);
-    } finally {
-      setPermissionsLoading(false);
-    }
   };
 
   const handleSavePermissions = async () => {
@@ -369,20 +334,6 @@ export default function AdminsPage() {
     });
   };
 
-  const fetchAdmins = async () => {
-    try {
-      const response = await fetch('/api/admin/admins');
-      if (response.ok) {
-        const data = await response.json();
-        setAdmins(data.admins);
-      }
-    } catch (error) {
-      console.error('Failed to fetch admins:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleOpenModal = (admin?: Admin) => {
     if (admin) {
       setEditingAdmin(admin);
@@ -434,7 +385,7 @@ export default function AdminsPage() {
 
       if (response.ok) {
         handleCloseModal();
-        fetchAdmins();
+        mutateAdmins();
       } else {
         const data = await response.json();
         alert(data.error || '저장에 실패했습니다.');
@@ -458,7 +409,7 @@ export default function AdminsPage() {
       });
 
       if (response.ok) {
-        fetchAdmins();
+        mutateAdmins();
       } else {
         const data = await response.json();
         alert(data.error || '삭제에 실패했습니다.');

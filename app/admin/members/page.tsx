@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
 import { Search, NavArrowLeft, NavArrowRight, NavArrowUp, NavArrowDown, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download, Filter, Eye, EyeClosed } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import { MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 interface TenantInfo {
   tenantId: string;
@@ -43,8 +46,6 @@ interface Pagination {
 
 export default function MembersPage() {
   const router = useRouter();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -94,32 +95,26 @@ export default function MembersPage() {
   const [sortField, setSortField] = useState<'createdAt' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  const fetchMembers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: pagination.page.toString(),
-        limit: pagination.limit.toString(),
-        status: activeTab,
-        ...(search && { search }),
-      });
+  const membersApiUrl = `/api/admin/members?${new URLSearchParams({
+    page: pagination.page.toString(),
+    limit: pagination.limit.toString(),
+    status: activeTab,
+    ...(search && { search }),
+  })}`;
 
-      const response = await fetch(`/api/admin/members?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setMembers(data.members);
-        setPagination(data.pagination);
-      }
-    } catch (error) {
-      console.error('Failed to fetch members:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, search, activeTab]);
+  const { data: membersData, isLoading: loading, mutate: mutateMembers } = useSWR(
+    membersApiUrl,
+    fetcher,
+    { keepPreviousData: true }
+  );
+
+  const members: Member[] = membersData?.members || [];
 
   useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
+    if (membersData?.pagination) {
+      setPagination(membersData.pagination);
+    }
+  }, [membersData]);
 
   const handleTabChange = (tab: 'active' | 'deleted') => {
     setActiveTab(tab);
@@ -130,7 +125,7 @@ export default function MembersPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPagination(prev => ({ ...prev, page: 1 }));
-    fetchMembers();
+    mutateMembers();
   };
 
   const handleOpenModal = () => {
@@ -179,7 +174,7 @@ export default function MembersPage() {
 
       if (response.ok) {
         handleCloseModal();
-        fetchMembers();
+        mutateMembers();
       } else {
         const data = await response.json();
         alert(data.error || '저장에 실패했습니다.');
@@ -282,7 +277,7 @@ export default function MembersPage() {
         setShowGroupModal(false);
         setSelectedMembers(new Set());
         setSelectedGroup('');
-        fetchMembers();
+        mutateMembers();
       } else {
         const data = await response.json();
         alert(data.error || '그룹 지정에 실패했습니다.');
@@ -361,7 +356,7 @@ export default function MembersPage() {
         setShowDeleteModal(false);
         setSelectedMembers(new Set());
         setDeleteTargets([]);
-        fetchMembers();
+        mutateMembers();
       } else {
         const data = await response.json();
         // 상세 에러 메시지 표시

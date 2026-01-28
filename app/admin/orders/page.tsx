@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import useSWR from 'swr';
 import { CreditCard, Search, Filter, Download, Calendar, Xmark, NavArrowLeft, NavArrowRight, MoreHoriz, RefreshDouble, CheckSquare, User } from 'iconoir-react';
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 interface Payment {
   id: string;
@@ -87,9 +90,12 @@ const getPlanName = (planId: string | undefined) => {
 };
 
 export default function OrdersPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: swrData, isLoading: loading, isValidating: refreshing, mutate } = useSWR(
+    '/api/admin/orders?limit=500',
+    fetcher,
+    { keepPreviousData: true }
+  );
+  const payments: Payment[] = swrData?.orders ?? [];
 
   // 페이지네이션 및 필터 상태
   const [page, setPage] = useState(1);
@@ -153,26 +159,6 @@ export default function OrdersPage() {
 
   const filterRef = useRef<HTMLDivElement>(null);
   const PAYMENTS_PER_PAGE = 20;
-
-  // 데이터 로드
-  const fetchPayments = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/orders?limit=500');
-      if (response.ok) {
-        const data = await response.json();
-        setPayments(data.orders);
-      }
-    } catch (error) {
-      console.error('Failed to fetch payments:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
 
   // 외부 클릭 감지
   useEffect(() => {
@@ -398,7 +384,7 @@ export default function OrdersPage() {
       }
 
       alert('환불이 완료되었습니다.');
-      fetchPayments();
+      mutate();
       setRefundModal({ isOpen: false, payment: null, availableAmount: 0 });
     } catch (error) {
       console.error('Refund error:', error);
@@ -410,8 +396,7 @@ export default function OrdersPage() {
 
   // 새로고침
   const handleRefresh = () => {
-    setRefreshing(true);
-    fetchPayments();
+    mutate();
   };
 
   // 새 환불처리 모달 - 회원 검색
@@ -521,7 +506,7 @@ export default function OrdersPage() {
       }
 
       alert('환불이 완료되었습니다.');
-      fetchPayments();
+      mutate();
       closeNewRefundModal();
     } catch (error) {
       console.error('Refund error:', error);

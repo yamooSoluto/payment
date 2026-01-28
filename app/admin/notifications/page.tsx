@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import useSWR from 'swr';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Mail, Plus, EditPencil, Trash, RefreshDouble, Xmark, Flash, Send, Clock, NavArrowLeft, NavArrowRight, Search } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -59,6 +60,8 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
   { id: 'none', name: '미구독' },
 ];
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function NotificationsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -79,10 +82,7 @@ export default function NotificationsPage() {
   };
 
   // ===== SMS 관련 상태 =====
-  const [smsHistory, setSmsHistory] = useState<SmsHistory[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyTotal, setHistoryTotal] = useState(0);
   const [smsSending, setSmsSending] = useState(false);
   const [smsForm, setSmsForm] = useState({
     sendType: 'group' as 'group' | 'search' | 'direct',
@@ -106,9 +106,24 @@ export default function NotificationsPage() {
   const [previewPhoneCount, setPreviewPhoneCount] = useState(0);
   const [previewTargets, setPreviewTargets] = useState<{ email: string; name: string; phone: string }[]>([]);
 
+  // SWR: SMS History
+  const { data: smsHistoryData, isLoading: historyLoading, mutate: mutateSmsHistory } = useSWR(
+    activeTab === 'sms' ? `/api/admin/sms-history?page=${historyPage}&limit=10` : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
+  const smsHistory: SmsHistory[] = smsHistoryData?.history || [];
+  const historyTotal: number = smsHistoryData?.total || 0;
+
+  // SWR: Templates
+  const { data: templatesData, isLoading: templateLoading, mutate: mutateTemplates } = useSWR(
+    activeTab === 'alimtalk' ? '/api/admin/notifications' : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
+  const templates: Template[] = templatesData?.templates || [];
+
   // ===== 알림톡 관련 상태 =====
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [templateLoading, setTemplateLoading] = useState(true);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [templateSaving, setTemplateSaving] = useState(false);
@@ -120,46 +135,6 @@ export default function NotificationsPage() {
     triggerEvent: '',
     isActive: true,
   });
-
-  // ===== 데이터 페칭 =====
-  const fetchSmsHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const response = await fetch(`/api/admin/sms-history?page=${historyPage}&limit=10`);
-      if (response.ok) {
-        const data = await response.json();
-        setSmsHistory(data.history || []);
-        setHistoryTotal(data.total || 0);
-      }
-    } catch (error) {
-      console.error('Failed to fetch SMS history:', error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [historyPage]);
-
-  const fetchTemplates = useCallback(async () => {
-    setTemplateLoading(true);
-    try {
-      const response = await fetch('/api/admin/notifications');
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch templates:', error);
-    } finally {
-      setTemplateLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'sms') {
-      fetchSmsHistory();
-    } else {
-      fetchTemplates();
-    }
-  }, [activeTab, fetchSmsHistory, fetchTemplates]);
 
   // ===== SMS 핸들러 =====
   const handleSearchMembers = async () => {
@@ -331,7 +306,7 @@ export default function NotificationsPage() {
         setSelectedMembers([]);
         setMemberSearchQuery('');
         setMemberSearchResults([]);
-        fetchSmsHistory();
+        mutateSmsHistory();
       } else {
         const data = await response.json();
         alert(data.error || 'SMS 발송에 실패했습니다.');
@@ -418,7 +393,7 @@ export default function NotificationsPage() {
       if (response.ok) {
         setShowTemplateModal(false);
         setEditingTemplate(null);
-        fetchTemplates();
+        mutateTemplates();
       } else {
         const data = await response.json();
         alert(data.error || '저장에 실패했습니다.');
@@ -442,7 +417,7 @@ export default function NotificationsPage() {
       });
 
       if (response.ok) {
-        fetchTemplates();
+        mutateTemplates();
       } else {
         const data = await response.json();
         alert(data.error || '삭제에 실패했습니다.');

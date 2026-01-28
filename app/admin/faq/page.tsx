@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import useSWR from 'swr';
 import {
   DocMagnifyingGlassIn,
   Plus,
@@ -403,8 +404,26 @@ function SortableCategory({
   );
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function FAQManagementPage() {
-  const [loading, setLoading] = useState(true);
+  // SWR: FAQ data
+  const { data: faqSWRData, isLoading: loading, mutate: mutateFaqs } = useSWR(
+    '/api/admin/faq',
+    fetcher,
+    { fallbackData: { faqs: [] }, keepPreviousData: true }
+  );
+  const { data: catSWRData, mutate: mutateCategories } = useSWR(
+    '/api/admin/faq/categories',
+    fetcher,
+    { fallbackData: { categories: [] }, keepPreviousData: true }
+  );
+
+  const mutateAll = useCallback(() => {
+    mutateFaqs();
+    mutateCategories();
+  }, [mutateFaqs, mutateCategories]);
+
   const [saving, setSaving] = useState(false);
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [selectedFaqId, setSelectedFaqId] = useState<string | null>(null);
@@ -550,41 +569,23 @@ export default function FAQManagementPage() {
     return false;
   }, [loadFromLocalStorage, clearAutoSave]);
 
-  // 데이터 불러오기 (FAQ 및 카테고리)
-  const fetchData = async () => {
-    try {
-      const [faqRes, catRes] = await Promise.all([
-        fetch('/api/admin/faq'),
-        fetch('/api/admin/faq/categories')
-      ]);
-
-      if (faqRes.ok && catRes.ok) {
-        const faqData = await faqRes.json();
-        const catData = await catRes.json();
-
-        const faqList = faqData.faqs || [];
-        setFaqs(faqList);
-
-        const categoryList = catData.categories || [];
-        // 서버에서 가져온 순서대로 카테고리 설정
-        const catNames = categoryList.map((c: any) => c.name);
-        setCategoryOrder(catNames);
-
-        // 처음 로드 시 모든 카테고리 펼치기
-        if (expandedCategories.size === 0) {
-          setExpandedCategories(new Set(catNames));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
+  // Sync SWR data to local state
+  useEffect(() => {
+    if (faqSWRData?.faqs) {
+      setFaqs(faqSWRData.faqs);
     }
-  };
+  }, [faqSWRData]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (catSWRData?.categories) {
+      const catNames = catSWRData.categories.map((c: any) => c.name);
+      setCategoryOrder(catNames);
+      // 처음 로드 시 모든 카테고리 펼치기
+      if (expandedCategories.size === 0) {
+        setExpandedCategories(new Set(catNames));
+      }
+    }
+  }, [catSWRData]);
 
   // 카테고리 목록 (서버에서 가져온 categoryOrder를 기준으로 사용)
   const categories = categoryOrder;
@@ -762,7 +763,7 @@ export default function FAQManagementPage() {
       }
       setEditingSubcategory(null);
       setEditSubcategoryName('');
-      fetchData();
+      mutateAll();
     } catch (error) {
       console.error('Failed to update subcategory:', error);
       alert('하위 카테고리 수정에 실패했습니다.');
@@ -795,7 +796,7 @@ export default function FAQManagementPage() {
       if (selectedFaq?.category === category && selectedFaq?.subcategory === subcategory) {
         setSelectedFaqId(null);
       }
-      fetchData();
+      mutateAll();
     } catch (error) {
       console.error('Failed to delete subcategory:', error);
       alert('하위 카테고리 삭제에 실패했습니다.');
@@ -826,7 +827,7 @@ export default function FAQManagementPage() {
       if (response.ok) {
         setShowAddCategory(false);
         setNewCategoryName('');
-        fetchData();
+        mutateAll();
       } else {
         const error = await response.json();
         alert(error.error || '카테고리 추가에 실패했습니다.');
@@ -865,7 +866,7 @@ export default function FAQManagementPage() {
       if (response.ok) {
         setEditingCategory(null);
         setEditCategoryName('');
-        fetchData();
+        mutateAll();
       } else {
         alert('카테고리 수정에 실패했습니다.');
       }
@@ -891,7 +892,7 @@ export default function FAQManagementPage() {
           method: 'DELETE',
         });
         if (response.ok) {
-          fetchData();
+          mutateAll();
         } else {
           alert('삭제 실패');
         }
@@ -917,7 +918,7 @@ export default function FAQManagementPage() {
         if (selectedFaq?.category === category) {
           setSelectedFaqId(null);
         }
-        fetchData();
+        mutateAll();
       } else {
         alert('카테고리 삭제에 실패했습니다.');
       }
@@ -965,7 +966,7 @@ export default function FAQManagementPage() {
           }
           setIsAddingNew(false);
           setSelectedFaqId(data.id);
-          fetchData();
+          mutateAll();
         } else {
           alert('추가에 실패했습니다.');
         }
@@ -979,7 +980,7 @@ export default function FAQManagementPage() {
           // 저장 성공 시 임시저장 삭제
           clearAutoSave(`faq_draft_${selectedFaqId}`);
           setIsEditing(false);
-          fetchData();
+          mutateAll();
         } else {
           alert('수정에 실패했습니다.');
         }
@@ -1004,7 +1005,7 @@ export default function FAQManagementPage() {
       if (response.ok) {
         setSelectedFaqId(null);
         setIsEditing(false);
-        fetchData();
+        mutateAll();
       } else {
         alert('삭제에 실패했습니다.');
       }
@@ -1022,7 +1023,7 @@ export default function FAQManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visible: !faq.visible }),
       });
-      fetchData();
+      mutateAll();
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
     }
@@ -1096,7 +1097,7 @@ export default function FAQManagementPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orders }),
         });
-        fetchData();
+        mutateAll();
       } catch (error) {
         console.error('Failed to reorder:', error);
       }

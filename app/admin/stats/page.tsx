@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import useSWR from 'swr';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { StatsUpSquare, Calendar, CreditCards, Timer, Group, HomeSimpleDoor, ChatBubble } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -140,6 +141,8 @@ function StatCard({
   );
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function StatsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -153,8 +156,6 @@ export default function StatsPage() {
   const [period, setPeriod] = useState<PeriodType>('thisMonth');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [loading, setLoading] = useState(true);
-
   // 탭 변경 시 URL 업데이트
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -163,51 +164,27 @@ export default function StatsPage() {
     router.replace(`?${newParams.toString()}`, { scroll: false });
   };
 
-  // 각 탭별 데이터
-  const [revenueData, setRevenueData] = useState<RevenueStats | null>(null);
-  const [subscriptionData, setSubscriptionData] = useState<SubscriptionStats | null>(null);
-  const [memberData, setMemberData] = useState<MemberStats | null>(null);
-  const [tenantData, setTenantData] = useState<TenantStats | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ period });
-      if (period === 'custom' && startDate && endDate) {
-        params.set('startDate', startDate);
-        params.set('endDate', endDate);
-      }
-
-      const endpoint = `/api/admin/stats/${activeTab === 'subscription' ? 'subscriptions' : activeTab === 'member' ? 'members' : activeTab === 'tenant' ? 'tenants' : 'revenue'}`;
-      const response = await fetch(`${endpoint}?${params}`);
-
-      if (response.ok) {
-        const result = await response.json();
-        switch (activeTab) {
-          case 'revenue':
-            setRevenueData(result);
-            break;
-          case 'subscription':
-            setSubscriptionData(result);
-            break;
-          case 'member':
-            setMemberData(result);
-            break;
-          case 'tenant':
-            setTenantData(result);
-            break;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setLoading(false);
+  // SWR: Stats
+  const statsEndpoint = activeTab === 'subscription' ? 'subscriptions' : activeTab === 'member' ? 'members' : activeTab === 'tenant' ? 'tenants' : 'revenue';
+  const statsParamsStr = (() => {
+    const params = new URLSearchParams({ period });
+    if (period === 'custom' && startDate && endDate) {
+      params.set('startDate', startDate);
+      params.set('endDate', endDate);
     }
-  }, [activeTab, period, startDate, endDate]);
+    return params.toString();
+  })();
+  const statsSwrKey = activeTab === 'cs' ? null : `/api/admin/stats/${statsEndpoint}?${statsParamsStr}`;
+  const { data: statsData, isLoading: loading, mutate: mutateStats } = useSWR(
+    statsSwrKey,
+    fetcher,
+    { keepPreviousData: true }
+  );
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const revenueData: RevenueStats | null = activeTab === 'revenue' ? statsData : null;
+  const subscriptionData: SubscriptionStats | null = activeTab === 'subscription' ? statsData : null;
+  const memberData: MemberStats | null = activeTab === 'member' ? statsData : null;
+  const tenantData: TenantStats | null = activeTab === 'tenant' ? statsData : null;
 
   // 매출 탭 렌더링
   const renderRevenueTab = () => {
@@ -625,7 +602,7 @@ export default function StatsPage() {
                 className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
               <button
-                onClick={fetchData}
+                onClick={mutateStats}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
               >
                 조회

@@ -6,6 +6,9 @@ import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Set
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
+import useSWR from 'swr';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // 컬럼 정의 (고정 컬럼 제외)
 interface ColumnDef {
@@ -85,8 +88,6 @@ interface CustomFieldSchema {
 
 export default function TenantsPage() {
   const router = useRouter();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [industryFilter, setIndustryFilter] = useState<string[]>([]);
   const [planFilter, setPlanFilter] = useState<string[]>([]);
@@ -141,39 +142,28 @@ export default function TenantsPage() {
   const [columnSettingsPosition, setColumnSettingsPosition] = useState<{ top: number; right: number } | null>(null);
   const columnSettingsRef = useRef<HTMLDivElement>(null);
 
-  const fetchTenants = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: pagination.page.toString(),
-        limit: pagination.limit.toString(),
-        ...(search && { search }),
-        ...(industryFilter.length > 0 && { industry: industryFilter.join(',') }),
-        ...(planFilter.length > 0 && { plan: planFilter.join(',') }),
-        ...(subscriptionStatusFilter.length > 0 && { subscriptionStatus: subscriptionStatusFilter.join(',') }),
-        ...(includeDeleted && { includeDeleted: 'true' }),
-      });
-
-      const response = await fetch(`/api/admin/tenants?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTenants(data.tenants);
-        setPagination(data.pagination);
-      }
-    } catch (error) {
-      console.error('Failed to fetch tenants:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, search, industryFilter, planFilter, subscriptionStatusFilter, includeDeleted]);
+  // SWR로 매장 목록 조회
+  const tenantsParams = new URLSearchParams({
+    page: pagination.page.toString(),
+    limit: pagination.limit.toString(),
+    ...(search && { search }),
+    ...(industryFilter.length > 0 && { industry: industryFilter.join(',') }),
+    ...(planFilter.length > 0 && { plan: planFilter.join(',') }),
+    ...(subscriptionStatusFilter.length > 0 && { subscriptionStatus: subscriptionStatusFilter.join(',') }),
+    ...(includeDeleted && { includeDeleted: 'true' }),
+  });
+  const tenantsUrl = `/api/admin/tenants?${tenantsParams}`;
+  const { data: tenantsData, isLoading: loading, mutate: mutateTenants } = useSWR(tenantsUrl, fetcher, { keepPreviousData: true });
+  const tenants: Tenant[] = tenantsData?.tenants || [];
 
   useEffect(() => {
-    fetchTenants();
-  }, [fetchTenants]);
+    if (tenantsData?.pagination) {
+      setPagination(tenantsData.pagination);
+    }
+  }, [tenantsData]);
 
   const handleFilter = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
-    fetchTenants();
   };
 
   // 커스텀 필드 스키마 fetch
@@ -369,7 +359,7 @@ export default function TenantsPage() {
           setMemberSearchResults([]);
           setAddTenantForm({ brandName: '', industry: '' });
           setAddTenantProgress(0);
-          fetchTenants();
+          mutateTenants();
         }, 300);
       } else {
         alert(data.error || '매장 추가에 실패했습니다.');
@@ -420,7 +410,7 @@ export default function TenantsPage() {
       setDeleteConfirmText('');
       setSelectedTenants([]);
       setIsSelectMode(false);
-      fetchTenants();
+      mutateTenants();
     } catch (error) {
       console.error('Delete failed:', error);
       alert('삭제 중 오류가 발생했습니다.');

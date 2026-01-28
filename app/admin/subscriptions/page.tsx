@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreHoriz, FastRightCircle, WarningCircle, Plus } from 'iconoir-react';
 import * as XLSX from 'xlsx';
+import useSWR from 'swr';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 type TabType = 'active' | 'history';
 
@@ -79,14 +82,14 @@ export default function SubscriptionsPage() {
   };
 
   // === 활성 탭 상태 ===
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loadingActive, setLoadingActive] = useState(true);
   const [searchActive, setSearchActive] = useState('');
+  const [searchActiveQuery, setSearchActiveQuery] = useState('');
   const [planFilterActive, setPlanFilterActive] = useState<string[]>([]);
   const [statusFilterActive, setStatusFilterActive] = useState<string[]>([]);
   const [showActiveFilter, setShowActiveFilter] = useState(false);
   const [activeFilterPosition, setActiveFilterPosition] = useState<{ top: number; right: number } | null>(null);
   const activeFilterRef = useRef<HTMLDivElement>(null);
+  const [activePageNum, setActivePageNum] = useState(1);
   const [paginationActive, setPaginationActive] = useState<Pagination>({
     page: 1,
     limit: 20,
@@ -101,9 +104,8 @@ export default function SubscriptionsPage() {
   const [activeSortOrder, setActiveSortOrder] = useState<SortOrder>('asc');
 
   // === 전체(내역) 탭 상태 ===
-  const [history, setHistory] = useState<SubscriptionHistoryItem[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchHistory, setSearchHistory] = useState('');
+  const [searchHistoryQuery, setSearchHistoryQuery] = useState('');
   const [planFilterHistory, setPlanFilterHistory] = useState<string[]>([]);
   const [statusFilterHistory, setStatusFilterHistory] = useState<string[]>([]);
   const [showHistoryFilter, setShowHistoryFilter] = useState(false);
@@ -113,12 +115,35 @@ export default function SubscriptionsPage() {
   const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
   const [tempHistoryDateRange, setTempHistoryDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const historyFilterRef = useRef<HTMLDivElement>(null);
+  const [historyPageNum, setHistoryPageNum] = useState(1);
   const [paginationHistory, setPaginationHistory] = useState<Pagination>({
     page: 1,
     limit: 20,
     total: 0,
     totalPages: 0,
   });
+
+  // === 활성 구독 SWR ===
+  const activeParams = new URLSearchParams({
+    page: activePageNum.toString(),
+    limit: '20',
+    ...(searchActiveQuery && { search: searchActiveQuery }),
+    ...(planFilterActive.length > 0 && { plan: planFilterActive.join(',') }),
+    ...(statusFilterActive.length > 0 && { status: statusFilterActive.join(',') }),
+  });
+  const activeUrl = `/api/admin/subscriptions/list?${activeParams}`;
+  const { data: activeData, isLoading: loadingActive, mutate: mutateActive } = useSWR(
+    activeTab === 'active' ? activeUrl : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
+  const subscriptions: Subscription[] = activeData?.subscriptions ?? [];
+
+  useEffect(() => {
+    if (activeData?.pagination) {
+      setPaginationActive(activeData.pagination);
+    }
+  }, [activeData]);
 
   // 정렬 토글 핸들러
   const handleActiveSort = (field: SortField) => {
@@ -163,75 +188,38 @@ export default function SubscriptionsPage() {
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
   const [initialAction, setInitialAction] = useState<SubscriptionActionType | undefined>(undefined);
 
-  // === 활성 구독 데이터 fetch ===
-  const fetchSubscriptions = useCallback(async () => {
-    setLoadingActive(true);
-    try {
-      const params = new URLSearchParams({
-        page: paginationActive.page.toString(),
-        limit: paginationActive.limit.toString(),
-        ...(searchActive && { search: searchActive }),
-        ...(planFilterActive.length > 0 && { plan: planFilterActive.join(',') }),
-        ...(statusFilterActive.length > 0 && { status: statusFilterActive.join(',') }),
-      });
+  // === 구독 내역 SWR ===
+  const historyParams = new URLSearchParams({
+    page: historyPageNum.toString(),
+    limit: '20',
+    ...(searchHistoryQuery && { search: searchHistoryQuery }),
+    ...(planFilterHistory.length > 0 && { plan: planFilterHistory.join(',') }),
+    ...(statusFilterHistory.length > 0 && { status: statusFilterHistory.join(',') }),
+  });
+  const historyUrl = `/api/admin/subscriptions/history?${historyParams}`;
+  const { data: historyData, isLoading: loadingHistory, mutate: mutateHistory } = useSWR(
+    activeTab === 'history' ? historyUrl : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
+  const history: SubscriptionHistoryItem[] = historyData?.history ?? [];
 
-      const response = await fetch(`/api/admin/subscriptions/list?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSubscriptions(data.subscriptions);
-        setPaginationActive(data.pagination);
-      }
-    } catch (error) {
-      console.error('Failed to fetch subscriptions:', error);
-    } finally {
-      setLoadingActive(false);
-    }
-  }, [paginationActive.page, paginationActive.limit, searchActive, planFilterActive, statusFilterActive]);
-
-  // === 구독 내역 데이터 fetch ===
-  const fetchHistory = useCallback(async () => {
-    setLoadingHistory(true);
-    try {
-      const params = new URLSearchParams({
-        page: paginationHistory.page.toString(),
-        limit: paginationHistory.limit.toString(),
-        ...(searchHistory && { search: searchHistory }),
-        ...(planFilterHistory.length > 0 && { plan: planFilterHistory.join(',') }),
-        ...(statusFilterHistory.length > 0 && { status: statusFilterHistory.join(',') }),
-      });
-
-      const response = await fetch(`/api/admin/subscriptions/history?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setHistory(data.history);
-        setPaginationHistory(data.pagination);
-      }
-    } catch (error) {
-      console.error('Failed to fetch subscription history:', error);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, [paginationHistory.page, paginationHistory.limit, searchHistory, planFilterHistory, statusFilterHistory]);
-
-  // 탭 변경 시 데이터 fetch
   useEffect(() => {
-    if (activeTab === 'active') {
-      fetchSubscriptions();
-    } else {
-      fetchHistory();
+    if (historyData?.pagination) {
+      setPaginationHistory(historyData.pagination);
     }
-  }, [activeTab, fetchSubscriptions, fetchHistory]);
+  }, [historyData]);
 
   // 활성 탭 필터 적용
   const handleFilterActive = () => {
-    setPaginationActive(prev => ({ ...prev, page: 1 }));
-    fetchSubscriptions();
+    setActivePageNum(1);
+    setSearchActiveQuery(searchActive);
   };
 
   // 히스토리 탭 필터 적용
   const handleFilterHistory = () => {
-    setPaginationHistory(prev => ({ ...prev, page: 1 }));
-    fetchHistory();
+    setHistoryPageNum(1);
+    setSearchHistoryQuery(searchHistory);
   };
 
   // 날짜 포맷
@@ -361,7 +349,7 @@ export default function SubscriptionsPage() {
 
   // 액션 성공 처리
   const handleActionSuccess = () => {
-    fetchSubscriptions();
+    mutateActive();
     setActionModal(false);
     setSelectedSubscription(null);
     setInitialAction(undefined);
@@ -377,7 +365,7 @@ export default function SubscriptionsPage() {
     setHistoryDateRange(tempHistoryDateRange);
     setHistoryFilterType('custom');
     setShowHistoryDatePicker(false);
-    setPaginationHistory(prev => ({ ...prev, page: 1 }));
+    setHistoryPageNum(1);
   };
 
   // 히스토리 xlsx 내보내기
@@ -502,7 +490,7 @@ export default function SubscriptionsPage() {
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     {searchActive && (
                       <button
-                        onClick={() => { setSearchActive(''); setPaginationActive(prev => ({ ...prev, page: 1 })); }}
+                        onClick={() => { setSearchActive(''); setSearchActiveQuery(''); setActivePageNum(1); }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
                       >
                         <Xmark className="w-3 h-3 text-gray-400" />
@@ -557,7 +545,7 @@ export default function SubscriptionsPage() {
                                       } else {
                                         setPlanFilterActive(prev => prev.filter(v => v !== option.value));
                                       }
-                                      setPaginationActive(prev => ({ ...prev, page: 1 }));
+                                      setActivePageNum(1);
                                     }}
                                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
@@ -587,7 +575,7 @@ export default function SubscriptionsPage() {
                                       } else {
                                         setStatusFilterActive(prev => prev.filter(v => v !== option.value));
                                       }
-                                      setPaginationActive(prev => ({ ...prev, page: 1 }));
+                                      setActivePageNum(1);
                                     }}
                                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
@@ -600,7 +588,7 @@ export default function SubscriptionsPage() {
                             onClick={() => {
                               setPlanFilterActive([]);
                               setStatusFilterActive([]);
-                              setPaginationActive(prev => ({ ...prev, page: 1 }));
+                              setActivePageNum(1);
                             }}
                             className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
                           >
@@ -737,7 +725,7 @@ export default function SubscriptionsPage() {
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page - 1 }))}
+                  onClick={() => setActivePageNum(prev => prev - 1)}
                   disabled={paginationActive.page === 1}
                   className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -747,7 +735,7 @@ export default function SubscriptionsPage() {
                   {paginationActive.page} / {paginationActive.totalPages}
                 </span>
                 <button
-                  onClick={() => setPaginationActive(prev => ({ ...prev, page: prev.page + 1 }))}
+                  onClick={() => setActivePageNum(prev => prev + 1)}
                   disabled={paginationActive.page === paginationActive.totalPages}
                   className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -779,7 +767,7 @@ export default function SubscriptionsPage() {
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     {searchHistory && (
                       <button
-                        onClick={() => { setSearchHistory(''); setPaginationHistory(prev => ({ ...prev, page: 1 })); }}
+                        onClick={() => { setSearchHistory(''); setSearchHistoryQuery(''); setHistoryPageNum(1); }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
                       >
                         <Xmark className="w-3 h-3 text-gray-400" />
@@ -787,7 +775,7 @@ export default function SubscriptionsPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => { setHistoryFilterType('all'); setHistoryDateRange({ start: '', end: '' }); setPaginationHistory(prev => ({ ...prev, page: 1 })); }}
+                    onClick={() => { setHistoryFilterType('all'); setHistoryDateRange({ start: '', end: '' }); setHistoryPageNum(1); }}
                     className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${historyFilterType === 'all'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -856,7 +844,7 @@ export default function SubscriptionsPage() {
                                       } else {
                                         setPlanFilterHistory(prev => prev.filter(v => v !== option.value));
                                       }
-                                      setPaginationHistory(prev => ({ ...prev, page: 1 }));
+                                      setHistoryPageNum(1);
                                     }}
                                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
@@ -885,7 +873,7 @@ export default function SubscriptionsPage() {
                                       } else {
                                         setStatusFilterHistory(prev => prev.filter(v => v !== option.value));
                                       }
-                                      setPaginationHistory(prev => ({ ...prev, page: 1 }));
+                                      setHistoryPageNum(1);
                                     }}
                                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
@@ -898,7 +886,7 @@ export default function SubscriptionsPage() {
                             onClick={() => {
                               setPlanFilterHistory([]);
                               setStatusFilterHistory([]);
-                              setPaginationHistory(prev => ({ ...prev, page: 1 }));
+                              setHistoryPageNum(1);
                             }}
                             className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
                           >
@@ -1004,7 +992,7 @@ export default function SubscriptionsPage() {
                   </p>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPaginationHistory((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                      onClick={() => setHistoryPageNum(prev => Math.max(1, prev - 1))}
                       disabled={paginationHistory.page === 1}
                       className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -1014,7 +1002,7 @@ export default function SubscriptionsPage() {
                       {paginationHistory.page} / {paginationHistory.totalPages}
                     </span>
                     <button
-                      onClick={() => setPaginationHistory((p) => ({ ...p, page: Math.min(p.totalPages, p.page + 1) }))}
+                      onClick={() => setHistoryPageNum(prev => Math.min(paginationHistory.totalPages, prev + 1))}
                       disabled={paginationHistory.page === paginationHistory.totalPages}
                       className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >

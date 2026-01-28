@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import useSWR from 'swr';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Package, Plus, EditPencil, Trash, RefreshDouble, Xmark, Check, Menu, ViewGrid, Eye, Link as LinkIcon, Copy, Search, User } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -259,6 +260,8 @@ function SortablePlanCard({
   );
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function PlansPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -278,9 +281,18 @@ export default function PlansPage() {
     router.replace(`?${newParams.toString()}`, { scroll: false });
   };
 
-  // 플랜 관련 상태
+  // SWR: Plans
+  const { data: plansData, isLoading: loading, mutate: mutatePlans } = useSWR(
+    '/api/admin/plans',
+    fetcher,
+    { fallbackData: { plans: [] }, keepPreviousData: true }
+  );
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Sync SWR data to local state (needed for drag reorder)
+  useEffect(() => {
+    if (plansData?.plans) setPlans(plansData.plans);
+  }, [plansData]);
   const [showModal, setShowModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [saving, setSaving] = useState(false);
@@ -346,7 +358,6 @@ export default function PlansPage() {
   );
 
   useEffect(() => {
-    fetchPlans();
     fetchGridSettings();
   }, []);
 
@@ -383,20 +394,6 @@ export default function PlansPage() {
     }
   };
 
-  const fetchPlans = async () => {
-    try {
-      const response = await fetch('/api/admin/plans');
-      if (response.ok) {
-        const data = await response.json();
-        setPlans(data.plans);
-      }
-    } catch (error) {
-      console.error('Failed to fetch plans:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -422,12 +419,12 @@ export default function PlansPage() {
 
         if (!response.ok) {
           // 실패 시 원래 순서로 복원
-          fetchPlans();
+          mutatePlans();
           alert('순서 변경에 실패했습니다.');
         }
       } catch (error) {
         console.error('Failed to reorder plans:', error);
-        fetchPlans();
+        mutatePlans();
         alert('순서 변경에 실패했습니다.');
       }
     }
@@ -502,7 +499,7 @@ export default function PlansPage() {
 
       if (response.ok) {
         handleCloseModal();
-        fetchPlans();
+        mutatePlans();
       } else {
         const data = await response.json();
         alert(data.error || '저장에 실패했습니다.');
@@ -524,7 +521,7 @@ export default function PlansPage() {
       });
 
       if (response.ok) {
-        fetchPlans();
+        mutatePlans();
       } else {
         const data = await response.json();
         alert(data.error || '변경에 실패했습니다.');
@@ -546,7 +543,7 @@ export default function PlansPage() {
       });
 
       if (response.ok) {
-        fetchPlans();
+        mutatePlans();
       } else {
         const data = await response.json();
         alert(data.error || '삭제에 실패했습니다.');
@@ -566,7 +563,7 @@ export default function PlansPage() {
       });
 
       if (response.ok) {
-        fetchPlans();
+        mutatePlans();
       } else {
         const data = await response.json();
         alert(data.error || '변경에 실패했습니다.');
