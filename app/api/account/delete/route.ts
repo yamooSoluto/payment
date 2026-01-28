@@ -195,8 +195,10 @@ export async function DELETE(request: NextRequest) {
     // Firebase Auth에서 사용자 삭제
     try {
       const auth = getAdminAuth();
-      const userRecord = await auth.getUserByEmail(email);
-      await auth.deleteUser(userRecord.uid);
+      if (auth) {
+        const userRecord = await auth.getUserByEmail(email);
+        await auth.deleteUser(userRecord.uid);
+      }
     } catch (authError: unknown) {
       if (authError && typeof authError === 'object' && 'code' in authError && authError.code !== 'auth/user-not-found') {
         console.error(`Auth delete error for ${email}:`, authError);
