@@ -32,8 +32,13 @@ export async function GET(request: NextRequest) {
     const planFilters = planFilter ? planFilter.split(',') : [];
     const statusFilters = statusFilter ? statusFilter.split(',') : [];
 
-    // 1. users 컬렉션 조회 (userId → 현재 회원 정보 매핑)
-    const usersSnapshot = await db.collection('users').get();
+    // 1~3. users + tenants + subscriptions 병렬 조회
+    const [usersSnapshot, tenantsSnapshot, subscriptionsSnapshot] = await Promise.all([
+      db.collection('users').get(),
+      db.collection('tenants').get(),
+      db.collection('subscriptions').get(),
+    ]);
+
     const userByUserId = new Map<string, { email: string; name: string; phone: string }>();
     usersSnapshot.docs.forEach(doc => {
       const data = doc.data();
@@ -45,12 +50,6 @@ export async function GET(request: NextRequest) {
         });
       }
     });
-
-    // 2. 테넌트 정보 조회 (삭제되지 않은 매장만)
-    const tenantsSnapshot = await db.collection('tenants').get();
-
-    // 3. 구독 정보 조회
-    const subscriptionsSnapshot = await db.collection('subscriptions').get();
     const subscriptionMap = new Map<string, {
       plan: string;
       status: string;

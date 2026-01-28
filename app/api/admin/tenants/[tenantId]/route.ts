@@ -478,7 +478,14 @@ export async function DELETE(
       });
     }
 
-    // 3. 삭제 로그 기록
+    // 3. 카드 정보 삭제 (Hard Delete)
+    const cardsRef = db.collection('cards').doc(tenantId);
+    const cardsDoc = await cardsRef.get();
+    if (cardsDoc.exists) {
+      await cardsRef.delete();
+    }
+
+    // 4. 삭제 로그 기록
     // users 컬렉션에서 userId, name, phone 조회
     let userIdForLog = tenantData?.userId || '';
     let userName = tenantData?.name || tenantData?.ownerName || '';
@@ -508,7 +515,7 @@ export async function DELETE(
       reason: 'admin_delete',
     });
 
-    // 4. 관리자 로그 기록
+    // 5. 관리자 로그 기록
     await addAdminLog(db, admin, {
       action: 'tenant_delete',
       tenantId,

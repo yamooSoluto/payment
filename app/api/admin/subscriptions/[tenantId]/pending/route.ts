@@ -85,8 +85,8 @@ export async function DELETE(
         );
       }
 
-      // active로 복구 (trial이었으면 trial로)
-      const restoredStatus = subscription.plan === 'trial' ? 'trial' : 'active';
+      // 이전 상태로 복구
+      const restoredStatus = subscription.previousStatus || (subscription.plan === 'trial' ? 'trial' : 'active');
 
       // nextBillingDate 복구 (Timestamp → Date 변환)
       let restoredNextBillingDate = null;
@@ -98,7 +98,8 @@ export async function DELETE(
 
       await db.collection('subscriptions').doc(tenantId).update({
         status: restoredStatus,
-        cancelAt: null,
+        previousStatus: null,
+        canceledAt: null,
         cancelMode: null,
         cancelReason: null,
         cancelRequestedAt: null,
@@ -106,6 +107,7 @@ export async function DELETE(
         // nextBillingDate 복구
         nextBillingDate: restoredNextBillingDate,
         previousNextBillingDate: null,
+        reactivatedAt: new Date(),
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'admin',
         updatedByAdminId: admin.adminId,

@@ -232,6 +232,8 @@ export async function POST(request: NextRequest) {
           currentPeriodEnd: now,  // 실제 종료일을 현재로 설정
           cancelReason: reason || 'User requested',
           cancelMode: 'immediate',
+          cancelRequestedAt: now,
+          cancelRequestedBy: 'user',
           refundAmount: refundAmount || 0,
           refundProcessed: !!refundResult,
           // 예약된 플랜 삭제
@@ -290,9 +292,12 @@ export async function POST(request: NextRequest) {
       // 예약 취소: 기간 종료 후 취소 (pending_cancel 상태로 설정)
       await db.collection('subscriptions').doc(tenantId).update({
         status: 'pending_cancel',
+        previousStatus: subscription.status,
         canceledAt: now,
         cancelReason: reason || 'User requested',
         cancelMode: 'scheduled',
+        cancelRequestedAt: now,
+        cancelRequestedBy: 'user',
         // 예약된 플랜 삭제
         pendingPlan: FieldValue.delete(),
         pendingAmount: FieldValue.delete(),

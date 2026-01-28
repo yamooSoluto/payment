@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyToken } from '@/lib/auth';
-import { isN8NNotificationEnabled } from '@/lib/n8n';
 
 export async function DELETE(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -109,6 +108,8 @@ export async function DELETE(request: NextRequest) {
       batch.update(doc.ref, {
         deleted: true,
         deletedAt: now,
+        deletedBy: 'user',
+        deletedByAdminId: null,
         deletedEmail: email,
         email: `deleted_${Date.now()}_${email}`, // 이메일 마스킹
       });
@@ -122,6 +123,8 @@ export async function DELETE(request: NextRequest) {
         batch.update(subscriptionRef, {
           deleted: true,
           deletedAt: now,
+          deletedBy: 'user',
+          deletedByAdminId: null,
         });
       }
     }
@@ -166,6 +169,8 @@ export async function DELETE(request: NextRequest) {
         // 탈퇴 상태 표시 (개인정보는 그대로 유지)
         deleted: true,
         deletedAt: now,
+        deletedBy: 'user',
+        deletedByAdminId: null,
         retentionEndDate,
         retentionReason: hasPaidHistory ? '전자상거래법_5년' : '부정이용방지_1년',
         // email, phone, name, trialApplied 모두 유지
@@ -187,21 +192,14 @@ export async function DELETE(request: NextRequest) {
 
     await batch.commit();
 
-    // n8n 웹훅 호출 (회원탈퇴 알림)
-    if (isN8NNotificationEnabled()) {
-      try {
-        await fetch(process.env.N8N_WEBHOOK_URL!, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'account_deleted',
-            email,
-            tenantIds,
-            deletedAt: now.toISOString(),
-          }),
-        });
-      } catch (webhookError) {
-        console.error('Webhook call failed:', webhookError);
+    // Firebase Auth에서 사용자 삭제
+    try {
+      const auth = getAdminAuth();
+      const userRecord = await auth.getUserByEmail(email);
+      await auth.deleteUser(userRecord.uid);
+    } catch (authError: unknown) {
+      if (authError && typeof authError === 'object' && 'code' in authError && authError.code !== 'auth/user-not-found') {
+        console.error(`Auth delete error for ${email}:`, authError);
       }
     }
 

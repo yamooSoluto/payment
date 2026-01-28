@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
     const planFilter = searchParams.get('plan') || '';
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
 
-    // 1. 테넌트 정보 조회
-    const tenantsSnapshot = await db.collection('tenants').get();
-
-    // 2. 구독 정보 조회
-    const subscriptionsSnapshot = await db.collection('subscriptions').get();
+    // 1~2. 테넌트 + 구독 정보 병렬 조회
+    const [tenantsSnapshot, subscriptionsSnapshot] = await Promise.all([
+      db.collection('tenants').get(),
+      db.collection('subscriptions').get(),
+    ]);
     const subscriptionMap = new Map<string, {
       plan: string;
       status: string;

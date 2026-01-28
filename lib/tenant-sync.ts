@@ -63,6 +63,9 @@ export async function syncSubscriptionToTenant(
     if (updatedBy) {
       updateData['updatedBy'] = updatedBy;
       updateData['updatedAt'] = new Date();
+      if (updatedBy === 'user') {
+        updateData['updatedByAdminId'] = null;
+      }
     }
 
     await docRef.update(updateData);
@@ -144,13 +147,14 @@ export async function syncSubscriptionReactivation(
   tenantId: string,
   plan: string,
   _renewsAt: Date, // 미사용 (subscriptions에서 조회)
-  updatedBy?: UpdatedBy
+  updatedBy?: UpdatedBy,
+  restoredStatus?: string
 ): Promise<boolean> {
   if (!tenantId) return false;
 
   return syncSubscriptionToTenant(tenantId, {
     plan,
-    status: 'active',
+    status: restoredStatus || 'active',
   }, updatedBy);
 }
 

@@ -201,6 +201,13 @@ export async function DELETE(
       });
     }
 
+    // 카드 정보 삭제 (Hard Delete)
+    const cardsRef = db.collection('cards').doc(tenantId);
+    const cardsDoc = await cardsRef.get();
+    if (cardsDoc.exists) {
+      await cardsRef.delete();
+    }
+
     // users 컬렉션에서 name, phone 조회
     let userName = tenantData?.name || tenantData?.ownerName || '';
     let userPhone = tenantData?.phone || '';

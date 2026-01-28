@@ -82,13 +82,16 @@ export async function POST(
 
       await db.collection('subscriptions').doc(tenantId).update({
         status: 'pending_cancel',
-        cancelAt,
+        previousStatus: currentStatus,
+        canceledAt: now,
         cancelReason: reasonText,
+        cancelMode: 'scheduled',
         cancelRequestedAt: now,
         cancelRequestedBy: 'admin',
         // pending 필드 초기화
         pendingPlan: null,
         pendingAmount: null,
+        pendingMode: null,
         pendingChangeAt: null,
         // 원래 결제일 저장 (취소 시 복구용)
         previousNextBillingDate: existingSubscription.nextBillingDate || null,
@@ -151,14 +154,15 @@ export async function POST(
       // 즉시 해지
       await db.collection('subscriptions').doc(tenantId).update({
         status: 'canceled',
-        cancelAt: null,
         canceledAt: now,
         cancelReason: reasonText,
+        cancelMode: 'immediate',
         cancelRequestedAt: now,
         cancelRequestedBy: 'admin',
         // pending 필드 초기화
         pendingPlan: null,
         pendingAmount: null,
+        pendingMode: null,
         pendingChangeAt: null,
         // 다음 결제일 제거
         nextBillingDate: null,

@@ -23,6 +23,9 @@ interface Member {
   createdAt: string;
   group?: string;
   totalPaymentAmount?: number;
+  deletedAt?: string;
+  retentionEndDate?: string;
+  retentionReason?: string;
 }
 
 interface MemberGroup {
@@ -84,6 +87,9 @@ export default function MembersPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<'active' | 'deleted'>('active');
+
   // 정렬 상태
   const [sortField, setSortField] = useState<'createdAt' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -94,6 +100,7 @@ export default function MembersPage() {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
+        status: activeTab,
         ...(search && { search }),
       });
 
@@ -108,11 +115,17 @@ export default function MembersPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search]);
+  }, [pagination.page, pagination.limit, search, activeTab]);
 
   useEffect(() => {
     fetchMembers();
   }, [fetchMembers]);
+
+  const handleTabChange = (tab: 'active' | 'deleted') => {
+    setActiveTab(tab);
+    setPagination(prev => ({ ...prev, page: 1 }));
+    setSelectedMembers(new Set());
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -516,14 +529,40 @@ export default function MembersPage() {
               </div>
             )}
           </div>
-          <button
-            onClick={handleOpenModal}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            회원 추가
-          </button>
+          {activeTab === 'active' && (
+            <button
+              onClick={handleOpenModal}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              회원 추가
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* 탭 */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => handleTabChange('active')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'active'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          활성
+        </button>
+        <button
+          onClick={() => handleTabChange('deleted')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'deleted'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          삭제
+        </button>
       </div>
 
       {/* 검색 및 필터 */}
@@ -549,7 +588,7 @@ export default function MembersPage() {
       </div>
 
       {/* 일괄 작업 버튼 */}
-      {selectedMembers.size > 0 && (
+      {selectedMembers.size > 0 && activeTab === 'active' && (
         <div className="bg-blue-50 rounded-xl p-4 border border-blue-200 flex items-center gap-4">
           <span className="text-sm font-medium text-blue-700">
             {selectedMembers.size}명 선택됨
@@ -633,6 +672,13 @@ export default function MembersPage() {
                       )}
                     </div>
                   </th>
+                  {activeTab === 'deleted' && (
+                    <>
+                      <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">결제이력</th>
+                      <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">삭제일</th>
+                      <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">보관기한</th>
+                    </>
+                  )}
                   <th className="w-12 px-4 py-4"></th>
                 </tr>
               </thead>
@@ -687,6 +733,27 @@ export default function MembersPage() {
                     <td className="px-6 py-4 text-sm text-gray-500 text-center">
                       {member.createdAt ? new Date(member.createdAt).toLocaleDateString('ko-KR') : '-'}
                     </td>
+                    {activeTab === 'deleted' && (
+                      <>
+                        <td className="px-6 py-4 text-sm text-center">
+                          {member.retentionReason === '전자상거래법_5년' ? (
+                            <span className="text-blue-600 font-medium">O</span>
+                          ) : (
+                            <span className="text-gray-400">X</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 text-center">
+                          {member.deletedAt ? new Date(member.deletedAt).toLocaleDateString('ko-KR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 text-center">
+                          {member.retentionEndDate ? (
+                            <span title={member.retentionReason === '전자상거래법_5년' ? '전자상거래법 (5년)' : '부정이용방지 (1년)'}>
+                              {new Date(member.retentionEndDate).toLocaleDateString('ko-KR')}
+                            </span>
+                          ) : '-'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-4 py-4 relative" onClick={(e) => e.stopPropagation()}>
                       <div ref={actionMenuOpen === member.id ? actionMenuRef : undefined}>
                         <button

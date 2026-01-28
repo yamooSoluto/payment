@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'active'; // 'active' | 'deleted'
 
     interface TenantInfo {
       tenantId: string;
@@ -46,17 +47,16 @@ export async function GET(request: NextRequest) {
       totalPaymentAmount: number;
     }
 
-    // 1. users 컬렉션에서 회원 목록 조회
-    const usersSnapshot = await db.collection('users').get();
+    // 1~4. 모든 컬렉션 병렬 조회
+    const [usersSnapshot, tenantsSnapshot, subscriptionsSnapshot, paymentsSnapshot] = await Promise.all([
+      db.collection('users').get(),
+      db.collection('tenants').get(),
+      db.collection('subscriptions').get(),
+      db.collection('payments').get(),
+    ]);
 
-    // 2. tenants 컬렉션에서 매장 정보 조회 (이메일로 그룹화)
-    const tenantsSnapshot = await db.collection('tenants').get();
-    const tenantsByEmail = new Map<string, TenantInfo[]>();
-
-    // 3. subscriptions 컬렉션에서 구독 정보 조회
-    const subscriptionsSnapshot = await db.collection('subscriptions').get();
+    // 구독 정보 맵
     const subscriptionMap = new Map<string, { plan: string; status: string }>();
-
     subscriptionsSnapshot.docs.forEach((doc) => {
       const data = doc.data();
       subscriptionMap.set(doc.id, {
@@ -65,23 +65,21 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // 4. payments 컬렉션에서 순매출 조회 (결제 + 환불)
-    const paymentsSnapshot = await db.collection('payments').get();
+    // 결제 금액 맵
     const paymentsByEmail = new Map<string, number>();
-
     paymentsSnapshot.docs.forEach(doc => {
       const data = doc.data();
       const email = data.email || '';
       if (!email) return;
 
-      // 완료된 결제 또는 환불 (환불은 음수로 저장됨)
       if (data.status === 'completed' || data.status === 'done' || data.status === 'refunded') {
         const amount = data.amount || 0;
         paymentsByEmail.set(email, (paymentsByEmail.get(email) || 0) + amount);
       }
     });
 
-    // 5. tenants를 이메일로 그룹화
+    // tenants를 이메일로 그룹화
+    const tenantsByEmail = new Map<string, TenantInfo[]>();
     tenantsSnapshot.docs.forEach(doc => {
       const data = doc.data();
       const email = data.email || '';
@@ -104,24 +102,35 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 6. users 컬렉션 기반으로 회원 목록 생성
-    let members: MemberData[] = usersSnapshot.docs.map(doc => {
-      const data = doc.data();
-      const email = doc.id; // users 컬렉션은 email을 doc ID로 사용
-      const tenants = tenantsByEmail.get(email) || [];
+    // 6. users 컬렉션 기반으로 회원 목록 생성 (status에 따라 필터링)
+    let members: MemberData[] = usersSnapshot.docs
+      .filter(doc => {
+        const data = doc.data();
+        if (status === 'deleted') return data.deleted === true;
+        return !data.deleted;
+      })
+      .map(doc => {
+        const data = doc.data();
+        const email = doc.id; // users 컬렉션은 email을 doc ID로 사용
+        const tenants = tenantsByEmail.get(email) || [];
 
-      return {
-        id: encodeURIComponent(email),
-        email,
-        name: data.name || '',
-        phone: data.phone || '',
-        group: data.group || 'normal',
-        tenants,
-        tenantCount: tenants.length,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        totalPaymentAmount: paymentsByEmail.get(email) || 0,
-      };
-    });
+        return {
+          id: encodeURIComponent(email),
+          email,
+          name: data.name || '',
+          phone: data.phone || '',
+          group: data.group || 'normal',
+          tenants,
+          tenantCount: tenants.length,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+          totalPaymentAmount: paymentsByEmail.get(email) || 0,
+          ...(status === 'deleted' && {
+            deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
+            retentionEndDate: data.retentionEndDate?.toDate?.()?.toISOString() || null,
+            retentionReason: data.retentionReason || '',
+          }),
+        };
+      });
 
     // 검색 필터
     if (search) {

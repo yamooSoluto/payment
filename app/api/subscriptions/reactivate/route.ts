@@ -65,12 +65,16 @@ export async function POST(request: NextRequest) {
         : new Date(subscription.previousNextBillingDate);
     }
 
-    // 구독 상태를 active로 변경
+    // 구독 상태를 이전 상태로 복구
+    const restoredStatus = subscription.previousStatus || 'active';
     await db.collection('subscriptions').doc(tenantId).update({
-      status: 'active',
+      status: restoredStatus,
+      previousStatus: null,
       canceledAt: null,
       cancelReason: null,
       cancelMode: null,
+      cancelRequestedAt: null,
+      cancelRequestedBy: null,
       // nextBillingDate 복구
       nextBillingDate: restoredNextBillingDate,
       previousNextBillingDate: null,
@@ -81,11 +85,11 @@ export async function POST(request: NextRequest) {
     });
 
     // tenants 컬렉션에 재활성화 상태 동기화 (복구된 nextBillingDate 사용)
-    await syncSubscriptionReactivation(tenantId, subscription.plan, restoredNextBillingDate, 'user');
+    await syncSubscriptionReactivation(tenantId, subscription.plan, restoredNextBillingDate, 'user', restoredStatus);
 
     // subscription_history 상태 업데이트 (재활성화)
     try {
-      await updateCurrentHistoryStatus(db, tenantId, 'active', {
+      await updateCurrentHistoryStatus(db, tenantId, restoredStatus, {
         note: 'User reactivated subscription',
       });
       console.log('✅ Subscription history updated for reactivation');
