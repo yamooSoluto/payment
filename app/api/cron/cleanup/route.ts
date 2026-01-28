@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
   const results = {
     permanentDeleted: [] as string[],
     paymentsDeleted: [] as string[],
-    errors: [] as { tenantId: string; error: string }[],
+    usersDeleted: [] as string[],
+    errors: [] as { tenantId?: string; email?: string; error: string }[],
   };
 
   try {
@@ -167,11 +168,51 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ========== 3. 보관 기간 만료 회원 데이터 영구 삭제 ==========
+    // users 컬렉션에서 deleted == true && retentionEndDate <= today인 항목 조회
+    const expiredUserDocs = await db
+      .collection('users')
+      .where('deleted', '==', true)
+      .where('retentionEndDate', '<=', now)
+      .get();
+
+    for (const userDoc of expiredUserDocs.docs) {
+      const email = userDoc.id;
+
+      try {
+        // 3-1. users 문서 영구 삭제
+        await userDoc.ref.delete();
+        console.log(`Permanently deleted user: ${email}`);
+
+        // 3-2. account_deletions 로그 삭제
+        const accountDeletionDocs = await db
+          .collection('account_deletions')
+          .where('email', '==', email)
+          .get();
+
+        if (!accountDeletionDocs.empty) {
+          const batch = db.batch();
+          accountDeletionDocs.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+          console.log(`Deleted ${accountDeletionDocs.docs.length} account_deletions for: ${email}`);
+        }
+
+        results.usersDeleted.push(email);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Failed to permanently delete user ${email}:`, error);
+        results.errors.push({ email, error: errorMessage });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       timestamp: now.toISOString(),
       permanentDeletedCount: results.permanentDeleted.length,
       paymentsDeletedCount: results.paymentsDeleted.length,
+      usersDeletedCount: results.usersDeleted.length,
       errorCount: results.errors.length,
       details: results,
     });

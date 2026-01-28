@@ -66,6 +66,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // 플랜 활성화 여부 확인 (비활성 플랜은 구매 불가)
+  const planDoc = await db.collection('plans').doc(plan).get();
+  if (planDoc.exists) {
+    const planData = planDoc.data();
+    if (planData && planData.isActive === false) {
+      const authQuery = authParam ? `&${authParam}` : '';
+      return NextResponse.redirect(
+        new URL(`/checkout?plan=${plan}&tenantId=${tenantId}${authQuery}&error=plan_unavailable`, request.url)
+      );
+    }
+  }
+
   try {
     // 1. authKey로 빌링키 발급
     console.log('Issuing billing key for:', customerKey);

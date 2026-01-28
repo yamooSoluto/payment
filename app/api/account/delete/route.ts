@@ -182,13 +182,63 @@ export async function DELETE(request: NextRequest) {
     // 5. 탈퇴 로그 저장
     const deletionLogRef = db.collection('account_deletions').doc();
     const userIdForLog = userId || '';
+    const userName = userDocForUserId.exists ? userDocForUserId.data()?.name || '' : '';
+    const userPhone = userDocForUserId.exists ? userDocForUserId.data()?.phone || '' : '';
+    const brandNames = tenantsSnapshot.docs.map(doc => doc.data().brandName || '');
     batch.set(deletionLogRef, {
       userId: userIdForLog || '',
       email,
+      name: userName,
+      phone: userPhone,
       tenantIds,
+      brandNames,
       deletedAt: now,
+      deletedBy: 'user',
       reason: 'User requested deletion',
     });
+
+    // 6. 매장별 삭제 로그 생성 (tenant_deletions) — 기존에 개별 삭제된 매장은 스킵
+    const permanentDeleteAt = new Date(now);
+    permanentDeleteAt.setDate(permanentDeleteAt.getDate() + 90);
+    const paymentDeleteAt = new Date(now);
+    paymentDeleteAt.setFullYear(paymentDeleteAt.getFullYear() + 5);
+
+    for (const doc of tenantsSnapshot.docs) {
+      const tenantData = doc.data();
+      const tenantId = tenantData.tenantId || doc.id;
+
+      // 이미 tenant_deletions에 기록이 있는 매장은 스킵
+      const existingDeletion = await db.collection('tenant_deletions')
+        .where('tenantId', '==', tenantId)
+        .limit(1)
+        .get();
+      if (!existingDeletion.empty) continue;
+
+      // users 컬렉션에서 name, phone 조회
+      let userName = tenantData.name || tenantData.ownerName || '';
+      let userPhone = tenantData.phone || '';
+      if (userDocForUserId.exists) {
+        const uData = userDocForUserId.data();
+        if (!userName) userName = uData?.name || '';
+        if (!userPhone) userPhone = uData?.phone || '';
+      }
+
+      const tenantDeletionRef = db.collection('tenant_deletions').doc();
+      batch.set(tenantDeletionRef, {
+        tenantId,
+        userId: userIdForLog || '',
+        brandName: tenantData.brandName || '',
+        email,
+        name: userName,
+        phone: userPhone,
+        deletedAt: now,
+        deletedBy: 'user',
+        deletedByDetails: userId || email,
+        permanentDeleteAt,
+        paymentDeleteAt,
+        reason: 'account_delete',
+      });
+    }
 
     await batch.commit();
 

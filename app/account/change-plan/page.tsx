@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyToken, getSubscriptionByTenantId } from '@/lib/auth';
+import { verifyToken, getSubscriptionByTenantId, getPlans } from '@/lib/auth';
 import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import Link from 'next/link';
 import { NavArrowLeft, Check } from 'iconoir-react';
@@ -9,24 +9,6 @@ import ChangePlanButton from '@/components/account/ChangePlanButton';
 interface ChangePlanPageProps {
   searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
 }
-
-const PLANS = [
-  {
-    id: 'basic',
-    name: 'Basic',
-    price: 39000,
-    description: 'CS 마스터 고용하기',
-    features: ['월 300건 이내', '데이터 무제한 추가', 'AI 자동 답변', '업무 처리 메세지 요약 전달'],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: 99000,
-    description: '풀타임 전담 비서 고용하기',
-    features: ['Basic 기능 모두 포함', '문의 건수 제한 없음', '답변 메시지 AI 보정', '미니맵 연동 및 활용', '예약 및 재고 연동'],
-    popular: true,
-  },
-];
 
 // Firebase Timestamp를 직렬화하는 헬퍼 함수
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,10 +77,25 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
     redirect('/account');
   }
 
-  const rawSubscription = await getSubscriptionByTenantId(tenantId, email);
+  const [rawSubscription, allPlans] = await Promise.all([
+    getSubscriptionByTenantId(tenantId, email),
+    getPlans(),
+  ]);
   if (!rawSubscription) {
     redirect('/plan');
   }
+
+  // isActive인 유료 플랜만 필터
+  const PLANS = allPlans
+    .filter(p => p.isActive !== false && p.id !== 'trial' && p.id !== 'enterprise')
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.priceNumber || 0,
+      description: p.description,
+      features: p.features,
+      popular: p.popular,
+    }));
 
   // 해지된 구독은 플랜 변경 대신 요금제 페이지로 이동
   if (rawSubscription.status === 'canceled') {

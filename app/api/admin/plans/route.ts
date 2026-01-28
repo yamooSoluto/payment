@@ -19,6 +19,7 @@ const DEFAULT_PLANS = [
     ],
     refundPolicy: '',
     isActive: true,
+    displayMode: 'hidden',
     popular: false,
     order: 0,
   },
@@ -36,6 +37,7 @@ const DEFAULT_PLANS = [
     ],
     refundPolicy: '결제일로부터 7일 이내 전액 환불 가능',
     isActive: true,
+    displayMode: 'hidden',
     popular: true,
     order: 1,
   },
@@ -54,6 +56,7 @@ const DEFAULT_PLANS = [
     ],
     refundPolicy: '결제일로부터 7일 이내 전액 환불 가능',
     isActive: true,
+    displayMode: 'hidden',
     popular: false,
     order: 2,
   },
@@ -72,6 +75,7 @@ const DEFAULT_PLANS = [
     ],
     refundPolicy: '별도 협의',
     isActive: true,
+    displayMode: 'hidden',
     popular: false,
     order: 3,
   },
@@ -153,7 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
+    const { id, name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, displayMode, popular, order, isNegotiable } = body;
 
     if (!id || !name) {
       return NextResponse.json(
@@ -181,6 +185,7 @@ export async function POST(request: NextRequest) {
       features: features || [],
       refundPolicy: refundPolicy || '',
       isActive: isActive !== false,
+      displayMode: displayMode || 'hidden',
       popular: popular || false,
       order: order || 0,
       isNegotiable: isNegotiable || false,

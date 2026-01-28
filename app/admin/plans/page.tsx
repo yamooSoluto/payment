@@ -34,6 +34,7 @@ interface Plan {
   features: string[];
   refundPolicy: string;
   isActive: boolean;
+  displayMode: 'hidden' | 'coming_soon';
   popular: boolean;
   order: number;
   isNegotiable: boolean;
@@ -198,6 +199,20 @@ function SortablePlanCard({
         </button>
       </div>
 
+      {/* 비활성 시 표시 모드 */}
+      {!plan.isActive && (
+        <div className="flex items-center justify-between py-2 px-4 -mx-4 bg-gray-50 border-t border-gray-100">
+          <span className="text-sm text-gray-600">비활성 표시</span>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            plan.displayMode === 'coming_soon'
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-gray-200 text-gray-600'
+          }`}>
+            {plan.displayMode === 'coming_soon' ? '준비중' : '숨김'}
+          </span>
+        </div>
+      )}
+
       {/* 인기 표시 토글 */}
       <div className="flex items-center justify-between py-2 px-4 -mx-4 mb-4 bg-gray-50 border-y border-gray-100">
         <span className="text-sm text-gray-600">인기 표시</span>
@@ -341,6 +356,7 @@ export default function PlansPage() {
     features: '',
     refundPolicy: '',
     isActive: true,
+    displayMode: 'hidden' as 'hidden' | 'coming_soon',
     popular: false,
     order: 0,
     isNegotiable: false,
@@ -444,6 +460,7 @@ export default function PlansPage() {
         features: plan.features?.join('\n') || '',
         refundPolicy: plan.refundPolicy || '',
         isActive: plan.isActive,
+        displayMode: plan.displayMode || 'hidden',
         popular: plan.popular || false,
         order: plan.order || 0,
         isNegotiable: plan.isNegotiable || false,
@@ -461,6 +478,7 @@ export default function PlansPage() {
         features: '',
         refundPolicy: '',
         isActive: true,
+        displayMode: 'hidden' as 'hidden' | 'coming_soon',
         popular: false,
         order: plans.length,
         isNegotiable: false,
@@ -1253,6 +1271,33 @@ export default function PlansPage() {
                   <span className="text-sm text-gray-700">활성화</span>
                 </div>
 
+                {/* 비활성 시 표시 모드 */}
+                {!formData.isActive && (
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="text-sm text-gray-600">비활성 표시:</span>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="displayMode"
+                        checked={formData.displayMode === 'hidden'}
+                        onChange={() => setFormData({ ...formData, displayMode: 'hidden' })}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700">숨김</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="displayMode"
+                        checked={formData.displayMode === 'coming_soon'}
+                        onChange={() => setFormData({ ...formData, displayMode: 'coming_soon' })}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700">준비중</span>
+                    </label>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1344,7 +1389,7 @@ export default function PlansPage() {
                   : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
               }`}>
                 {plans
-                  .filter((plan) => plan.isActive)
+                  .filter((plan) => plan.isActive || plan.displayMode === 'coming_soon')
                   .map((plan) => (
                     <div key={plan.id} className="flex flex-col">
                       {/* Tagline */}
@@ -1403,19 +1448,23 @@ export default function PlansPage() {
                         <button
                           disabled
                           className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm cursor-not-allowed ${
-                            plan.popular
+                            !plan.isActive && plan.displayMode === 'coming_soon'
+                              ? 'bg-gray-200 text-gray-400'
+                              : plan.popular
                               ? 'bg-yellow-400 text-gray-900'
                               : 'bg-gray-100 text-gray-600'
                           }`}
                         >
-                          {plan.isNegotiable ? '문의하기' : plan.price === 0 ? '무료 체험하기' : '구독하기'}
+                          {!plan.isActive && plan.displayMode === 'coming_soon'
+                            ? '준비중'
+                            : plan.isNegotiable ? '문의하기' : plan.price === 0 ? '무료 체험하기' : '구독하기'}
                         </button>
                       </div>
                     </div>
                   ))}
               </div>
 
-              {plans.filter((p) => p.isActive).length === 0 && (
+              {plans.filter((p) => p.isActive || p.displayMode === 'coming_soon').length === 0 && (
                 <div className="text-center py-12 text-gray-500">
                   활성화된 플랜이 없습니다.
                 </div>

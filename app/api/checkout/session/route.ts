@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCheckoutSession, getSessionIdFromRequest, updateCheckoutSession, CHECKOUT_SESSION_COOKIE, SESSION_EXPIRY_MINUTES } from '@/lib/checkout-session';
+import { initializeFirebaseAdmin, adminDb } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,21 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields' },
         { status: 400 }
       );
+    }
+
+    // 플랜 활성화 여부 확인 (비활성 플랜은 구매 불가)
+    const db = adminDb || initializeFirebaseAdmin();
+    if (db) {
+      const planDoc = await db.collection('plans').doc(plan).get();
+      if (planDoc.exists) {
+        const planData = planDoc.data();
+        if (planData && planData.isActive === false) {
+          return NextResponse.json(
+            { error: '현재 구매할 수 없는 플랜입니다.' },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // 세션 생성

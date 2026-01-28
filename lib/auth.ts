@@ -431,6 +431,8 @@ export async function getPlans(): Promise<Array<{
   description: string;
   features: string[];
   popular?: boolean;
+  isActive?: boolean;
+  displayMode?: string;
 }>> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -439,16 +441,29 @@ export async function getPlans(): Promise<Array<{
   }
 
   try {
-    const snapshot = await db.collection('plans')
-      .where('isActive', '==', true)
-      .get();
+    // isActive == true OR (isActive == false AND displayMode == 'coming_soon')
+    // Firestore doesn't support OR queries across different fields easily,
+    // so fetch all plans and filter in memory
+    const snapshot = await db.collection('plans').get();
 
     if (snapshot.empty) {
       return DEFAULT_PLANS;
     }
 
+    // Filter: active plans + coming_soon plans
+    const filteredDocs = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      if (data.isActive) return true;
+      if (data.displayMode === 'coming_soon') return true;
+      return false;
+    });
+
+    if (filteredDocs.length === 0) {
+      return DEFAULT_PLANS;
+    }
+
     // Sort by order in memory (avoids needing composite index)
-    const sortedDocs = snapshot.docs.sort((a, b) => {
+    const sortedDocs = filteredDocs.sort((a, b) => {
       const orderA = a.data().order ?? 999;
       const orderB = b.data().order ?? 999;
       return orderA - orderB;
@@ -480,6 +495,8 @@ export async function getPlans(): Promise<Array<{
         description: data.description,
         features: data.features || [],
         popular: data.popular || doc.id === 'basic',
+        isActive: data.isActive !== false,
+        displayMode: data.displayMode || 'hidden',
       };
     });
   } catch (error) {

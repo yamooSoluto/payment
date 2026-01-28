@@ -67,7 +67,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, popular, order, isNegotiable } = body;
+    const { name, price, minPrice, maxPrice, tagline, description, features, refundPolicy, isActive, displayMode, popular, order, isNegotiable } = body;
 
     // 기존 데이터 조회
     const planDoc = await db.collection('plans').doc(id).get();
@@ -90,6 +90,7 @@ export async function PUT(
     if (features !== undefined) updateData.features = features;
     if (refundPolicy !== undefined) updateData.refundPolicy = refundPolicy;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (displayMode !== undefined) updateData.displayMode = displayMode;
     if (popular !== undefined) updateData.popular = popular;
     if (order !== undefined) updateData.order = order;
     if (isNegotiable !== undefined) updateData.isNegotiable = isNegotiable;

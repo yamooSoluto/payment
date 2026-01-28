@@ -38,7 +38,11 @@ const features = [
   },
 ];
 
-export default function ComparisonTable() {
+interface ComparisonTableProps {
+  comingSoonPlanIds?: string[];
+}
+
+export default function ComparisonTable({ comingSoonPlanIds = [] }: ComparisonTableProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   const renderCell = (value: boolean | string) => {
@@ -77,18 +81,16 @@ export default function ComparisonTable() {
             <thead>
               <tr className="bg-gray-50">
                 <th className="text-left p-3 sm:p-4 font-semibold text-gray-900 border-b whitespace-nowrap w-[220px]">기능</th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
-                  Trial
-                </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
-                  Basic
-                </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
-                  Business
-                </th>
-                <th className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
-                  Enterprise
-                </th>
+                {['trial', 'basic', 'business', 'enterprise'].map((planId) => (
+                  <th key={planId} className="text-center p-2 sm:p-4 font-semibold text-gray-900 border-b text-xs sm:text-base w-[100px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span>{planId.charAt(0).toUpperCase() + planId.slice(1)}</span>
+                      {comingSoonPlanIds.includes(planId) && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded-full">준비중</span>
+                      )}
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

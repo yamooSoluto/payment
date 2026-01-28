@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, getPlans } from '@/lib/auth';
 import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getSubscriptionHistory } from '@/lib/subscription-history';
@@ -96,12 +96,26 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   }
 
   // 모든 쿼리 병렬 실행 (성능 최적화)
-  const [tenantSnapshot, subscriptionDoc, paymentsSnapshot, rawHistoryData] = await Promise.all([
+  const [tenantSnapshot, subscriptionDoc, paymentsSnapshot, rawHistoryData, allPlans] = await Promise.all([
     db.collection('tenants').where('tenantId', '==', tenantId).get(),
     db.collection('subscriptions').doc(tenantId).get(),
     db.collection('payments').where('tenantId', '==', tenantId).get(),
     getSubscriptionHistory(db, tenantId),
+    getPlans(),
   ]);
+
+  // isActive인 플랜만 필터 (coming_soon 제외)
+  const activePlans = allPlans
+    .filter(p => p.isActive !== false)
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.priceNumber || 0,
+      description: p.description,
+      features: p.features,
+      popular: p.popular,
+    }))
+    .filter(p => p.id !== 'trial' && p.id !== 'enterprise'); // trial/enterprise는 플랜 선택에 불필요
 
   // tenant 존재 확인
   if (tenantSnapshot.empty) {
@@ -263,6 +277,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
                 subscription={subscription}
                 authParam={authParam}
                 tenantId={tenantId}
+                activePlans={activePlans}
               />
             }
             cardsContent={
@@ -297,6 +312,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
             userName={userName}
             userPhone={userPhone}
             industry={tenantData.industry}
+            activePlans={activePlans}
           />
         )}
       </div>

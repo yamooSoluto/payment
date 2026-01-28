@@ -7,8 +7,8 @@ import { formatPrice } from '@/lib/utils';
 import { PLAN_PRICES } from '@/lib/toss';
 import { useAuth } from '@/contexts/AuthContext';
 
-// 플랜 정보
-const PLANS = [
+// 기본 플랜 정보 (activePlans prop이 없을 때 fallback)
+const DEFAULT_PLANS = [
   {
     id: 'basic',
     name: 'Basic',
@@ -33,6 +33,15 @@ const PLANS = [
   },
 ];
 
+interface ActivePlan {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  popular?: boolean;
+}
+
 interface PlanSelectModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,8 +49,17 @@ interface PlanSelectModalProps {
   tenantId: string;
 }
 
-function PlanSelectModal({ isOpen, onClose, authParam, tenantId }: PlanSelectModalProps) {
+function PlanSelectModal({ isOpen, onClose, authParam, tenantId, activePlans }: PlanSelectModalProps & { activePlans?: ActivePlan[] }) {
   if (!isOpen) return null;
+
+  const PLANS = (activePlans && activePlans.length > 0)
+    ? activePlans.map(p => ({
+        ...p,
+        tagline: p.description,
+        icon: p.id === 'basic' ? Sparks : Crown,
+        color: p.id === 'basic' ? 'blue' as const : 'purple' as const,
+      }))
+    : DEFAULT_PLANS;
 
   const handleSelectPlan = (planId: string) => {
     // URLSearchParams로 올바른 URL 구성 (authParam이 빈 문자열일 때 && 방지)
@@ -153,6 +171,7 @@ interface NoSubscriptionCardProps {
   userName?: string;
   userPhone?: string;
   industry?: string;
+  activePlans?: ActivePlan[];
 }
 
 export default function NoSubscriptionCard({
@@ -164,6 +183,7 @@ export default function NoSubscriptionCard({
   userName,
   userPhone,
   industry,
+  activePlans,
 }: NoSubscriptionCardProps) {
   const { user } = useAuth();
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -304,6 +324,7 @@ export default function NoSubscriptionCard({
         onClose={() => setShowPlanModal(false)}
         authParam={authParam}
         tenantId={tenantId}
+        activePlans={activePlans}
       />
     </>
   );

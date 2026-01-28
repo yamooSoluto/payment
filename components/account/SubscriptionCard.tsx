@@ -7,22 +7,17 @@ import { getPlanName, PLAN_PRICES } from '@/lib/toss';
 import { useAuth } from '@/contexts/AuthContext';
 import CancelModal from './CancelModal';
 
-// 플랜 선택 모달
-interface PlanSelectModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  mode: 'schedule' | 'immediate';
-  authParam: string;
-  tenantId?: string;
-  hasBillingKey?: boolean;
-  hasPendingPlan?: boolean; // 변경할 예약이 있는지 여부
-  onUpdatePendingPlan?: (planId: string) => Promise<void>;
-  isActiveSubscription?: boolean; // Active 구독자 여부
-  currentPlan?: string; // 현재 플랜 (같은 플랜 선택 방지)
-  isExpired?: boolean; // 만료된 구독자 (새 구독 시작)
+interface ActivePlan {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  popular?: boolean;
 }
 
-const PLANS = [
+// 기본 플랜 정보 (activePlans prop이 없을 때 fallback)
+const DEFAULT_PLANS = [
   {
     id: 'basic',
     name: 'Basic',
@@ -31,7 +26,7 @@ const PLANS = [
     description: '월 300건 이내',
     features: ['월 300건 이내', '데이터 무제한 추가', 'AI 자동 답변', '업무 처리 메세지 요약 전달'],
     icon: Sparks,
-    color: 'blue',
+    color: 'blue' as const,
     popular: true,
   },
   {
@@ -42,16 +37,41 @@ const PLANS = [
     description: '문의 건수 제한 없음',
     features: ['Basic 기능 모두 포함', '문의 건수 제한 없음', '답변 메시지 AI 보정', '미니맵 연동 및 활용', '예약 및 재고 연동'],
     icon: Crown,
-    color: 'purple',
+    color: 'purple' as const,
     popular: false,
   },
 ];
 
-function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, hasPendingPlan, onUpdatePendingPlan, isActiveSubscription, currentPlan, isExpired }: PlanSelectModalProps) {
+// 플랜 선택 모달
+interface PlanSelectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  mode: 'schedule' | 'immediate';
+  authParam: string;
+  tenantId?: string;
+  hasBillingKey?: boolean;
+  hasPendingPlan?: boolean;
+  onUpdatePendingPlan?: (planId: string) => Promise<void>;
+  isActiveSubscription?: boolean;
+  currentPlan?: string;
+  isExpired?: boolean;
+  activePlans?: ActivePlan[];
+}
+
+function PlanSelectModal({ isOpen, onClose, mode, authParam, tenantId, hasBillingKey, hasPendingPlan, onUpdatePendingPlan, isActiveSubscription, currentPlan, isExpired, activePlans }: PlanSelectModalProps) {
   const [isUpdating, setIsUpdating] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null); // Active 구독자용: 선택된 플랜
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const PLANS = (activePlans && activePlans.length > 0)
+    ? activePlans.map(p => ({
+        ...p,
+        tagline: p.description,
+        icon: p.id === 'basic' ? Sparks : Crown,
+        color: (p.id === 'basic' ? 'blue' : 'purple') as 'blue' | 'purple',
+      }))
+    : DEFAULT_PLANS;
 
   // checkout URL 생성 헬퍼 (authParam이 빈 문자열일 때도 올바르게 처리)
   // 보안: token은 URL에 노출하지 않음 (세션 쿠키로 인증)
@@ -451,9 +471,10 @@ interface SubscriptionCardProps {
   };
   authParam: string;
   tenantId?: string;
+  activePlans?: ActivePlan[];
 }
 
-export default function SubscriptionCard({ subscription, authParam, tenantId }: SubscriptionCardProps) {
+export default function SubscriptionCard({ subscription, authParam, tenantId, activePlans }: SubscriptionCardProps) {
   const { user } = useAuth();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPlanSelectModal, setShowPlanSelectModal] = useState<{ isOpen: boolean; mode: 'schedule' | 'immediate' }>({ isOpen: false, mode: 'schedule' });
@@ -796,7 +817,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 {/* 플랜이 3개 이상일 때만 예약 변경 버튼 표시 (현재 2개라 변경할 플랜이 1개뿐) */}
-                {PLANS.length > 2 && (
+                {(activePlans?.length || DEFAULT_PLANS.length) > 2 && (
                   <>
                     <button
                       onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
@@ -896,7 +917,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
             </>
           )}
           {/* 플랜이 3개 이상이거나 예약된 플랜이 없을 때만 플랜 변경 버튼 표시 */}
-          {isActive && (PLANS.length > 2 || !subscription.pendingPlan) && (
+          {isActive && ((activePlans?.length || DEFAULT_PLANS.length) > 2 || !subscription.pendingPlan) && (
             <button
               onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
               className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
@@ -1006,6 +1027,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId }: 
         isActiveSubscription={isActive}
         currentPlan={subscription.plan}
         isExpired={isExpired}
+        activePlans={activePlans}
       />
     </>
   );

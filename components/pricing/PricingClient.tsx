@@ -16,6 +16,8 @@ interface Plan {
   description: string;
   features: string[];
   popular?: boolean;
+  isActive?: boolean;
+  displayMode?: string;
 }
 
 interface Tenant {

@@ -59,7 +59,11 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
       />
 
       {/* Comparison Table */}
-      <ComparisonTable />
+      <ComparisonTable
+        comingSoonPlanIds={plans
+          .filter(p => p.isActive === false && p.displayMode === 'coming_soon')
+          .map(p => p.id)}
+      />
 
       {/* FAQ Section */}
       <div className="mt-16">

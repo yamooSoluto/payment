@@ -14,6 +14,8 @@ interface PricingCardProps {
     description: string;
     features: string[];
     popular?: boolean;
+    isActive?: boolean;
+    displayMode?: string;
   };
   currentPlan?: string | null;
   subscriptionStatus?: string | null;
@@ -31,6 +33,7 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
   const { user } = useAuth();
   const isCurrentPlan = currentPlan === plan.id;
   const isEnterprise = plan.id === 'enterprise';
+  const isComingSoon = plan.isActive === false && plan.displayMode === 'coming_soon';
 
   // 서버에서 전달받은 isLoggedIn 또는 클라이언트 Firebase Auth 상태 확인
   const isAuthenticated = isLoggedIn || !!user;
@@ -132,17 +135,19 @@ export default function PricingCard({ plan, currentPlan, subscriptionStatus, aut
 
         <button
           onClick={handleSelect}
-          disabled={isCurrentPlan}
+          disabled={isCurrentPlan || isComingSoon}
           className={cn(
             'w-full py-2.5 px-4 rounded-full font-semibold transition-all',
-            isCurrentPlan
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            isCurrentPlan || isComingSoon
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : plan.popular
               ? 'btn-primary'
               : 'btn-secondary'
           )}
         >
-          {isCurrentPlan
+          {isComingSoon
+            ? '준비중'
+            : isCurrentPlan
             ? '현재 이용 중'
             : isEnterprise
             ? '문의하기'
