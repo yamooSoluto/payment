@@ -275,8 +275,6 @@ function SortablePlanCard({
   );
 }
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
-
 export default function PlansPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -299,8 +297,7 @@ export default function PlansPage() {
   // SWR: Plans
   const { data: plansData, isLoading: loading, mutate: mutatePlans } = useSWR(
     '/api/admin/plans',
-    fetcher,
-    { fallbackData: { plans: [] }, keepPreviousData: true }
+    { fallbackData: { plans: [] } }
   );
   const [plans, setPlans] = useState<Plan[]>([]);
 

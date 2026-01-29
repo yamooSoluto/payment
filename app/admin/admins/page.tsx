@@ -154,7 +154,6 @@ interface RolePermissions {
   viewer: string[];
 }
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function AdminsPage() {
   const searchParams = useSearchParams();
@@ -187,8 +186,7 @@ export default function AdminsPage() {
   // SWR: Admins
   const { data: adminsData, isLoading: loading, mutate: mutateAdmins } = useSWR(
     '/api/admin/admins',
-    fetcher,
-    { fallbackData: { admins: [] }, keepPreviousData: true }
+    { fallbackData: { admins: [] } }
   );
   const admins: Admin[] = adminsData?.admins || [];
 
@@ -203,8 +201,7 @@ export default function AdminsPage() {
   })();
   const { data: logsData, isLoading: logsLoading, mutate: mutateLogs } = useSWR(
     activeTab === 'task' ? `/api/admin/logs?${logsParamsStr}` : null,
-    fetcher,
-    { keepPreviousData: true, onSuccess: (data) => {
+    { onSuccess: (data: { pagination?: { total: number; totalPages: number }; actionTypes?: ActionType[] }) => {
       setLogsPagination(prev => ({ ...prev, total: data.pagination?.total ?? 0, totalPages: data.pagination?.totalPages ?? 0 }));
       if (data.actionTypes) setActionTypes(data.actionTypes);
     }}
@@ -221,8 +218,7 @@ export default function AdminsPage() {
   })();
   const { data: accessLogsData, isLoading: accessLogsLoading, mutate: mutateAccessLogs } = useSWR(
     activeTab === 'access' ? `/api/admin/access-log?${accessLogsParamsStr}` : null,
-    fetcher,
-    { keepPreviousData: true, onSuccess: (data) => {
+    { onSuccess: (data: { pagination?: { total: number; totalPages: number } }) => {
       setAccessLogsPagination(prev => ({ ...prev, total: data.pagination?.total ?? 0, totalPages: data.pagination?.totalPages ?? 0 }));
     }}
   );
@@ -248,8 +244,7 @@ export default function AdminsPage() {
   // SWR: Permissions
   const { data: permissionsData, isLoading: permissionsLoading, mutate: mutatePermissions } = useSWR(
     '/api/admin/permissions',
-    fetcher,
-    { keepPreviousData: true, onSuccess: (data) => {
+    { onSuccess: (data: { permissions?: RolePermissions }) => {
       if (data.permissions) setRolePermissions(data.permissions);
     }}
   );

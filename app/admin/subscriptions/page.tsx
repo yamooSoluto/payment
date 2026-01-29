@@ -8,7 +8,6 @@ import useSWR from 'swr';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 type TabType = 'active' | 'history';
 
@@ -133,9 +132,7 @@ export default function SubscriptionsPage() {
   });
   const activeUrl = `/api/admin/subscriptions/list?${activeParams}`;
   const { data: activeData, isLoading: loadingActive, mutate: mutateActive } = useSWR(
-    activeTab === 'active' ? activeUrl : null,
-    fetcher,
-    { keepPreviousData: true }
+    activeTab === 'active' ? activeUrl : null
   );
   const subscriptions: Subscription[] = activeData?.subscriptions ?? [];
 
@@ -198,9 +195,7 @@ export default function SubscriptionsPage() {
   });
   const historyUrl = `/api/admin/subscriptions/history?${historyParams}`;
   const { data: historyData, isLoading: loadingHistory, mutate: mutateHistory } = useSWR(
-    activeTab === 'history' ? historyUrl : null,
-    fetcher,
-    { keepPreviousData: true }
+    activeTab === 'history' ? historyUrl : null
   );
   const history: SubscriptionHistoryItem[] = historyData?.history ?? [];
 

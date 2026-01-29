@@ -110,241 +110,232 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // tenantId별 매장 정보 캐싱
-    const tenantInfoCache = new Map<string, { businessName: string; ownerName: string; email: string; phone?: string } | null>();
-    // userId별 users 정보 캐싱
-    const userInfoByIdCache = new Map<string, { name: string; phone: string; email: string } | null>();
-    // 삭제된 매장 정보 캐싱 (tenant_deletions)
-    const deletedTenantCache = new Map<string, { brandName: string; email: string; name: string; phone: string } | null>();
+    // 1) 고유 ID 수집
+    const uniqueUserIds = new Set<string>();
+    const uniqueTenantIds = new Set<string>();
+    const uniqueEmails = new Set<string>();
 
-    // tenant_deletions에서 삭제된 매장 정보 조회
-    const getDeletedTenantInfo = async (tenantId: string): Promise<{ brandName: string; email: string; name: string; phone: string } | null> => {
-      if (!tenantId) return null;
-      if (deletedTenantCache.has(tenantId)) {
-        return deletedTenantCache.get(tenantId) || null;
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.userId) uniqueUserIds.add(data.userId);
+      if (data.tenantId && data.tenantId !== 'new') uniqueTenantIds.add(data.tenantId);
+      if (data.email) uniqueEmails.add(data.email);
+    });
+
+    // 2) 배치 조회 헬퍼 (Firestore in 쿼리 최대 30개)
+    const chunkArray = <T>(arr: T[], size: number): T[][] => {
+      const chunks: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) {
+        chunks.push(arr.slice(i, i + size));
       }
-      try {
-        const deletionSnapshot = await db.collection('tenant_deletions')
-          .where('tenantId', '==', tenantId)
-          .limit(1)
-          .get();
-        if (!deletionSnapshot.empty) {
-          const data = deletionSnapshot.docs[0].data();
-          const info = {
-            brandName: data?.brandName || '',
-            email: data?.email || '',
-            name: data?.name || '',
-            phone: data?.phone || '',
-          };
-          deletedTenantCache.set(tenantId, info);
-          return info;
-        }
-        deletedTenantCache.set(tenantId, null);
-        return null;
-      } catch {
-        deletedTenantCache.set(tenantId, null);
-        return null;
-      }
+      return chunks;
     };
 
-    // users 컬렉션에서 userId로 회원 정보 조회
-    const getUserInfoByUserId = async (userId: string): Promise<{ name: string; phone: string; email: string } | null> => {
-      if (!userId) return null;
-      if (userInfoByIdCache.has(userId)) {
-        return userInfoByIdCache.get(userId) || null;
-      }
-      try {
-        const userSnapshot = await db.collection('users')
-          .where('userId', '==', userId)
-          .limit(1)
-          .get();
-        if (!userSnapshot.empty) {
-          const userData = userSnapshot.docs[0].data();
-          const info = {
-            name: userData?.name || '',
-            phone: userData?.phone || '',
-            email: userData?.email || userSnapshot.docs[0].id,
+    // 3) users, tenants, tenant_deletions, tenants(email) 병렬 배치 조회
+    const userMap = new Map<string, { name: string; phone: string; email: string }>();
+    const tenantMap = new Map<string, { businessName: string; ownerName: string; email: string; phone: string }>();
+    const deletedTenantMap = new Map<string, { brandName: string; email: string; name: string; phone: string }>();
+    const tenantByEmailMap = new Map<string, { businessName: string; ownerName: string; email: string; phone: string }>();
+
+    const batchQueries: Promise<void>[] = [];
+
+    // users 배치 조회
+    if (uniqueUserIds.size > 0) {
+      const chunks = chunkArray([...uniqueUserIds], 30);
+      chunks.forEach(chunk => {
+        batchQueries.push(
+          db.collection('users').where('userId', 'in', chunk).get().then(snap => {
+            snap.docs.forEach(doc => {
+              const d = doc.data();
+              userMap.set(d.userId, { name: d.name || '', phone: d.phone || '', email: d.email || doc.id });
+            });
+          }).catch(() => {})
+        );
+      });
+    }
+
+    // tenants 배치 조회 (tenantId 기준)
+    if (uniqueTenantIds.size > 0) {
+      const chunks = chunkArray([...uniqueTenantIds], 30);
+      chunks.forEach(chunk => {
+        batchQueries.push(
+          db.collection('tenants').where('tenantId', 'in', chunk).get().then(snap => {
+            snap.docs.forEach(doc => {
+              const d = doc.data();
+              tenantMap.set(d.tenantId, {
+                businessName: d.brandName || d.businessName || '',
+                ownerName: d.ownerName || d.name || '',
+                email: d.email || '',
+                phone: d.phone || '',
+              });
+            });
+          }).catch(() => {})
+        );
+      });
+    }
+
+    // tenants 배치 조회 (email 기준 — tenantId 없는 결제용)
+    if (uniqueEmails.size > 0) {
+      const chunks = chunkArray([...uniqueEmails], 30);
+      chunks.forEach(chunk => {
+        batchQueries.push(
+          db.collection('tenants').where('email', 'in', chunk).get().then(snap => {
+            snap.docs.forEach(doc => {
+              const d = doc.data();
+              if (d.email) {
+                tenantByEmailMap.set(d.email, {
+                  businessName: d.brandName || d.businessName || '',
+                  ownerName: d.ownerName || d.name || '',
+                  email: d.email || '',
+                  phone: d.phone || '',
+                });
+              }
+            });
+          }).catch(() => {})
+        );
+      });
+    }
+
+    await Promise.all(batchQueries);
+
+    // tenants에서 못 찾은 tenantId → tenant_deletions에서 배치 조회
+    const missingTenantIds = [...uniqueTenantIds].filter(id => !tenantMap.has(id));
+    if (missingTenantIds.length > 0) {
+      const chunks = chunkArray(missingTenantIds, 30);
+      await Promise.all(chunks.map(chunk =>
+        db.collection('tenant_deletions').where('tenantId', 'in', chunk).get().then(snap => {
+          snap.docs.forEach(doc => {
+            const d = doc.data();
+            deletedTenantMap.set(d.tenantId, {
+              brandName: d.brandName || '',
+              email: d.email || '',
+              name: d.name || '',
+              phone: d.phone || '',
+            });
+          });
+        }).catch(() => {})
+      ));
+    }
+
+    // 4) 동기적으로 주문 데이터 매핑 (N+1 쿼리 제거)
+    let orders: OrderData[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+
+      const tenantId = data.tenantId;
+      const email = data.email;
+      const userId = data.userId;
+
+      const userInfo = userId ? userMap.get(userId) || null : null;
+
+      let memberInfo: OrderData['memberInfo'] = null;
+
+      // tenantId로 매장 정보 조회
+      if (tenantId && tenantId !== 'new') {
+        const tenant = tenantMap.get(tenantId);
+        if (tenant) {
+          memberInfo = {
+            businessName: tenant.businessName,
+            ownerName: userInfo?.name || tenant.ownerName,
+            email: userInfo?.email || tenant.email || email || '',
+            phone: userInfo?.phone || tenant.phone || '',
           };
-          userInfoByIdCache.set(userId, info);
-          return info;
+        } else {
+          const deleted = deletedTenantMap.get(tenantId);
+          if (deleted) {
+            memberInfo = {
+              businessName: deleted.brandName,
+              ownerName: userInfo?.name || deleted.name || '',
+              email: userInfo?.email || deleted.email || email || '',
+              phone: userInfo?.phone || deleted.phone || '',
+            };
+          }
         }
-        userInfoByIdCache.set(userId, null);
-        return null;
-      } catch {
-        userInfoByIdCache.set(userId, null);
-        return null;
       }
-    };
 
-    let orders: OrderData[] = await Promise.all(
-      snapshot.docs.map(async (doc) => {
-        const data = doc.data();
+      // tenantId로 못 찾았으면 email로 시도 (하위 호환성)
+      if (!memberInfo && email) {
+        const tenantByEmail = tenantByEmailMap.get(email);
+        if (tenantByEmail) {
+          memberInfo = {
+            businessName: tenantByEmail.businessName,
+            ownerName: userInfo?.name || tenantByEmail.ownerName,
+            email: userInfo?.email || tenantByEmail.email || email,
+            phone: userInfo?.phone || tenantByEmail.phone || '',
+          };
+        } else {
+          memberInfo = {
+            businessName: '',
+            ownerName: userInfo?.name || '',
+            email: userInfo?.email || email,
+            phone: userInfo?.phone || '',
+          };
+        }
+      }
 
-        // 회원 정보 조회 (tenantId 기반 우선, 없으면 email 기반)
-        let memberInfo: { businessName: string; ownerName: string; email: string; phone?: string } | null = null;
-        const tenantId = data.tenantId;
-        const email = data.email;
-        const userId = data.userId;
+      const amount = data.amount || 0;
+      // 문서에 저장된 refundedAmount + 연결된 환불 기록의 환불 금액 합산
+      const storedRefundedAmount = data.refundedAmount || 0;
+      const linkedRefundAmount = refundsByOriginalPayment.get(doc.id) || 0;
+      const totalRefundedAmount = storedRefundedAmount + linkedRefundAmount;
+      const remainingAmount = Math.max(0, amount - totalRefundedAmount);
 
-        // userId로 users 컬렉션에서 회원 정보(phone) 조회
-        const userInfo = userId ? await getUserInfoByUserId(userId) : null;
+      // 기존 데이터의 type 추론 (레거시 데이터 지원)
+      let inferredType = data.type || null;
 
-        // tenantId로 조회 시도
-        if (tenantId && tenantId !== 'new') {
-          // 캐시 확인
-          if (tenantInfoCache.has(tenantId)) {
-            memberInfo = tenantInfoCache.get(tenantId) || null;
-            // 캐시된 memberInfo에 userInfo의 phone 적용
-            if (memberInfo && userInfo?.phone) {
-              memberInfo = { ...memberInfo, phone: userInfo.phone };
-            }
-          } else {
-            try {
-              // tenantId 필드로 매장 조회
-              const tenantSnapshot = await db.collection('tenants')
-                .where('tenantId', '==', tenantId)
-                .limit(1)
-                .get();
+      // 안전한 문자열 추출
+      let refundReasonText = '';
+      let cancelReasonText = '';
+      try {
+        refundReasonText = typeof data.refundReason === 'string' ? data.refundReason : '';
+        cancelReasonText = typeof data.cancelReason === 'string' ? data.cancelReason : '';
+      } catch (e) {
+        console.error('Error extracting reason text for doc:', doc.id, e);
+      }
 
-              if (!tenantSnapshot.empty) {
-                const tenantData = tenantSnapshot.docs[0].data();
-                memberInfo = {
-                  businessName: tenantData?.brandName || tenantData?.businessName || '',
-                  ownerName: userInfo?.name || tenantData?.ownerName || tenantData?.name || '',
-                  email: userInfo?.email || tenantData?.email || email || '',
-                  phone: userInfo?.phone || tenantData?.phone || '',
-                };
-              } else {
-                // tenants에 없으면 tenant_deletions에서 조회 (삭제된 매장)
-                const deletedInfo = await getDeletedTenantInfo(tenantId);
-                if (deletedInfo) {
-                  memberInfo = {
-                    businessName: deletedInfo.brandName,
-                    ownerName: userInfo?.name || deletedInfo.name || '',
-                    email: userInfo?.email || deletedInfo.email || email || '',
-                    phone: userInfo?.phone || deletedInfo.phone || '',
-                  };
-                }
-              }
-              tenantInfoCache.set(tenantId, memberInfo);
-            } catch {
-              // 조회 실패 시 캐시에 null 저장
-              tenantInfoCache.set(tenantId, null);
-            }
+      // type이 'refund'이거나 없는 경우, refundReason/cancelReason으로 추론
+      try {
+        if (inferredType === 'refund' || (!inferredType && amount < 0)) {
+          if (refundReasonText && refundReasonText.includes('다운그레이드') || refundReasonText && refundReasonText.includes('→')) {
+            inferredType = 'downgrade_refund';
+          } else if ((refundReasonText && refundReasonText.includes('해지')) ||
+                     (cancelReasonText && cancelReasonText.includes('해지')) ||
+                     (refundReasonText && refundReasonText.includes('취소')) ||
+                     (typeof data.orderId === 'string' && data.orderId.includes('CANCEL_REFUND'))) {
+            inferredType = 'cancel_refund';
           }
         }
+      } catch (e) {
+        console.error('Error inferring type for doc:', doc.id, 'data:', JSON.stringify({
+          type: data.type,
+          refundReason: typeof data.refundReason,
+          cancelReason: typeof data.cancelReason,
+          orderId: typeof data.orderId,
+        }), e);
+      }
 
-        // tenantId로 못 찾았으면 email로 시도 (하위 호환성)
-        if (!memberInfo && email) {
-          const emailCacheKey = `email:${email}`;
-          if (tenantInfoCache.has(emailCacheKey)) {
-            memberInfo = tenantInfoCache.get(emailCacheKey) || null;
-            // 캐시된 memberInfo에 userInfo의 phone 적용
-            if (memberInfo && userInfo?.phone) {
-              memberInfo = { ...memberInfo, phone: userInfo.phone };
-            }
-          } else {
-            try {
-              const memberSnapshot = await db.collection('tenants')
-                .where('email', '==', email)
-                .limit(1)
-                .get();
+      // type이 없고 양수 금액이면 구독으로 추론
+      if (!inferredType && amount > 0) {
+        inferredType = 'subscription';
+      }
 
-              if (!memberSnapshot.empty) {
-                const memberData = memberSnapshot.docs[0].data();
-                memberInfo = {
-                  businessName: memberData?.brandName || memberData?.businessName || '',
-                  ownerName: userInfo?.name || memberData?.ownerName || memberData?.name || '',
-                  email: userInfo?.email || memberData?.email || email,
-                  phone: userInfo?.phone || memberData?.phone || '',
-                };
-              } else {
-                // tenants에 없으면 userInfo 사용
-                memberInfo = {
-                  businessName: '',
-                  ownerName: userInfo?.name || '',
-                  email: userInfo?.email || email,
-                  phone: userInfo?.phone || '',
-                };
-              }
-              tenantInfoCache.set(emailCacheKey, memberInfo);
-            } catch {
-              memberInfo = {
-                businessName: '',
-                ownerName: userInfo?.name || '',
-                email: userInfo?.email || email,
-                phone: userInfo?.phone || '',
-              };
-              tenantInfoCache.set(emailCacheKey, memberInfo);
-            }
-          }
-        }
-
-        const amount = data.amount || 0;
-        // 문서에 저장된 refundedAmount + 연결된 환불 기록의 환불 금액 합산
-        const storedRefundedAmount = data.refundedAmount || 0;
-        const linkedRefundAmount = refundsByOriginalPayment.get(doc.id) || 0;
-        const totalRefundedAmount = storedRefundedAmount + linkedRefundAmount;
-        const remainingAmount = Math.max(0, amount - totalRefundedAmount);
-
-        // 기존 데이터의 type 추론 (레거시 데이터 지원)
-        let inferredType = data.type || null;
-
-        // 안전한 문자열 추출
-        let refundReasonText = '';
-        let cancelReasonText = '';
-        try {
-          refundReasonText = typeof data.refundReason === 'string' ? data.refundReason : '';
-          cancelReasonText = typeof data.cancelReason === 'string' ? data.cancelReason : '';
-        } catch (e) {
-          console.error('Error extracting reason text for doc:', doc.id, e);
-        }
-
-        // type이 'refund'이거나 없는 경우, refundReason/cancelReason으로 추론
-        try {
-          if (inferredType === 'refund' || (!inferredType && amount < 0)) {
-            if (refundReasonText && refundReasonText.includes('다운그레이드') || refundReasonText && refundReasonText.includes('→')) {
-              inferredType = 'downgrade_refund';
-            } else if ((refundReasonText && refundReasonText.includes('해지')) ||
-                       (cancelReasonText && cancelReasonText.includes('해지')) ||
-                       (refundReasonText && refundReasonText.includes('취소')) ||
-                       (typeof data.orderId === 'string' && data.orderId.includes('CANCEL_REFUND'))) {
-              inferredType = 'cancel_refund';
-            }
-          }
-        } catch (e) {
-          console.error('Error inferring type for doc:', doc.id, 'data:', JSON.stringify({
-            type: data.type,
-            refundReason: typeof data.refundReason,
-            cancelReason: typeof data.cancelReason,
-            orderId: typeof data.orderId,
-          }), e);
-        }
-
-        // type이 없고 양수 금액이면 구독으로 추론
-        if (!inferredType && amount > 0) {
-          inferredType = 'subscription';
-        }
-
-        return {
-          id: doc.id,
-          ...data,
-          amount,
-          refundedAmount: totalRefundedAmount,
-          remainingAmount,
-          originalPaymentId: data.originalPaymentId || null,
-          type: inferredType,
-          plan: data.plan || data.planId || '',
-          isTest: data.isTest || false,
-          memberInfo,
-          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-          paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
-          canceledAt: data.canceledAt?.toDate?.()?.toISOString() || null,
-          cancelReason: data.cancelReason || null,
-          refundReason: data.refundReason || null,
-        };
-      })
-    );
+      return {
+        id: doc.id,
+        ...data,
+        amount,
+        refundedAmount: totalRefundedAmount,
+        remainingAmount,
+        originalPaymentId: data.originalPaymentId || null,
+        type: inferredType,
+        plan: data.plan || data.planId || '',
+        isTest: data.isTest || false,
+        memberInfo,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
+        canceledAt: data.canceledAt?.toDate?.()?.toISOString() || null,
+        cancelReason: data.cancelReason || null,
+        refundReason: data.refundReason || null,
+      };
+    });
 
     // 날짜 필터 (클라이언트 사이드)
     if (startDate) {

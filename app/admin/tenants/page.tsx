@@ -8,7 +8,6 @@ import Spinner from '@/components/admin/Spinner';
 import { INDUSTRIES, IndustryCode } from '@/lib/constants';
 import useSWR from 'swr';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // 컬럼 정의 (고정 컬럼 제외)
 interface ColumnDef {
@@ -153,7 +152,7 @@ export default function TenantsPage() {
     ...(includeDeleted && { includeDeleted: 'true' }),
   });
   const tenantsUrl = `/api/admin/tenants?${tenantsParams}`;
-  const { data: tenantsData, isLoading: loading, mutate: mutateTenants } = useSWR(tenantsUrl, fetcher, { keepPreviousData: true });
+  const { data: tenantsData, isLoading: loading, mutate: mutateTenants } = useSWR(tenantsUrl);
   const tenants: Tenant[] = tenantsData?.tenants || [];
 
   useEffect(() => {

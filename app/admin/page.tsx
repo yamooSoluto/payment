@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -180,45 +181,22 @@ const TrendCard = ({
 
 // --- MAIN DASHBOARD COMPONENT ---
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [trend, setTrend] = useState<DashboardTrend | null>(null);
-  const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading: loading, error, mutate } = useSWR('/api/admin/dashboard/stats');
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/admin/dashboard/stats');
-      if (!response.ok) throw new Error('데이터를 불러오는데 실패했습니다.');
+  const stats: DashboardStats | null = data?.stats || null;
+  const trend: DashboardTrend | null = data?.trend || null;
 
-      const data = await response.json();
-      setStats(data.stats);
-      setTrend(data.trend || null);
-
-      const payments: ActivityItem[] = (data.recentPayments || []).map((p: RecentPayment) => ({ ...p, type: 'payment' as const }));
-      const signups: ActivityItem[] = (data.recentSignups || []).map((s: RecentSignup) => ({ ...s, type: 'signup' as const }));
-
-      const combinedFeed = [...payments, ...signups]
-        .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-        .slice(0, 10);
-
-      setActivityFeed(combinedFeed);
-    } catch (err) {
-      console.error('Dashboard fetch error:', err);
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const activityFeed = useMemo<ActivityItem[]>(() => {
+    if (!data) return [];
+    const payments: ActivityItem[] = (data.recentPayments || []).map((p: RecentPayment) => ({ ...p, type: 'payment' as const }));
+    const signups: ActivityItem[] = (data.recentSignups || []).map((s: RecentSignup) => ({ ...s, type: 'signup' as const }));
+    return [...payments, ...signups]
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+      .slice(0, 10);
+  }, [data]);
 
   if (loading) return <DashboardSkeleton />;
-  if (error) return <ErrorState onRetry={fetchDashboardData} message={error} />;
+  if (error) return <ErrorState onRetry={() => mutate()} message={error instanceof Error ? error.message : '알 수 없는 오류'} />;
 
   const totalMembers = stats?.totalMembers || 0;
   const activeSubscriptions = stats?.activeSubscriptions || 0;
@@ -298,7 +276,7 @@ export default function AdminDashboard() {
                 <Image src="/yamoo_black_1.png" alt="YAMOO" width={96} height={30} />
               </div>
               <button
-                onClick={fetchDashboardData}
+                onClick={() => mutate()}
                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-yamoo-primary hover:text-yamoo-primary"
               >
                 새로고침

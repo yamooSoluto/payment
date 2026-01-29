@@ -2,9 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { SWRConfig } from 'swr';
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
 import Sidebar from '@/components/admin/Sidebar';
 import AdminHeader from '@/components/admin/AdminHeader';
+
+const swrFetcher = (url: string) => fetch(url).then(res => {
+  if (!res.ok) throw new Error('데이터를 불러오는데 실패했습니다.');
+  return res.json();
+});
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -109,7 +115,14 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <AdminAuthProvider>
-      <AdminLayoutContent>{children}</AdminLayoutContent>
+      <SWRConfig value={{
+        fetcher: swrFetcher,
+        keepPreviousData: true,
+        revalidateOnFocus: false,
+        dedupingInterval: 5000,
+      }}>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+      </SWRConfig>
     </AdminAuthProvider>
   );
 }

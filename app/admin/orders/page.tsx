@@ -6,7 +6,6 @@ import { CreditCard, Search, Filter, Download, Calendar, Xmark, NavArrowLeft, Na
 import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 interface Payment {
   id: string;
@@ -91,9 +90,7 @@ const getPlanName = (planId: string | undefined) => {
 
 export default function OrdersPage() {
   const { data: swrData, isLoading: loading, isValidating: refreshing, mutate } = useSWR(
-    '/api/admin/orders?limit=500',
-    fetcher,
-    { keepPreviousData: true }
+    '/api/admin/orders?limit=500'
   );
   const payments: Payment[] = swrData?.orders ?? [];
 

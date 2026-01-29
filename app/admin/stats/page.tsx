@@ -141,7 +141,6 @@ function StatCard({
   );
 }
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function StatsPage() {
   const searchParams = useSearchParams();
@@ -176,9 +175,7 @@ export default function StatsPage() {
   })();
   const statsSwrKey = activeTab === 'cs' ? null : `/api/admin/stats/${statsEndpoint}?${statsParamsStr}`;
   const { data: statsData, isLoading: loading, mutate: mutateStats } = useSWR(
-    statsSwrKey,
-    fetcher,
-    { keepPreviousData: true }
+    statsSwrKey
   );
 
   const revenueData: RevenueStats | null = activeTab === 'revenue' ? statsData : null;

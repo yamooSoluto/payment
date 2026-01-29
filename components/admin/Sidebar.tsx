@@ -1,8 +1,10 @@
 'use client';
 
+import { useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { preload } from 'swr';
 import {
   Component,
   Group,
@@ -20,6 +22,25 @@ import {
   NavArrowRight,
 } from 'iconoir-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
+
+// 사이드바 메뉴 → API URL 매핑 (호버 시 프리페치)
+const prefetchMap: Record<string, string> = {
+  '/admin': '/api/admin/dashboard/stats',
+  '/admin/members': '/api/admin/members',
+  '/admin/admins': '/api/admin/admins',
+  '/admin/plans': '/api/admin/plans',
+  '/admin/tenants': '/api/admin/tenants',
+  '/admin/orders': '/api/admin/orders',
+  '/admin/subscriptions': '/api/admin/subscriptions/list',
+  '/admin/stats': '/api/admin/stats',
+  '/admin/notifications': '/api/admin/notifications/sms-history',
+  '/admin/faq': '/api/admin/faq',
+};
+
+const fetcher = (url: string) => fetch(url).then(res => {
+  if (!res.ok) throw new Error('fetch failed');
+  return res.json();
+});
 
 interface SidebarProps {
   isOpen: boolean;
@@ -107,6 +128,13 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
     return admin && item.roles.includes(admin.role);
   });
 
+  const handlePrefetch = useCallback((href: string) => {
+    const apiUrl = prefetchMap[href];
+    if (apiUrl) {
+      preload(apiUrl, fetcher);
+    }
+  }, []);
+
   return (
     <>
       {/* 모바일 오버레이 */}
@@ -174,6 +202,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
+                onMouseEnter={() => handlePrefetch(item.href)}
                 title={collapsed ? item.name : undefined}
                 className={`
                   flex items-center gap-3 py-3 rounded-lg transition-colors px-4

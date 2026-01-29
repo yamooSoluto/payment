@@ -60,7 +60,6 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
   { id: 'none', name: '미구독' },
 ];
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function NotificationsPage() {
   const searchParams = useSearchParams();
@@ -108,18 +107,14 @@ export default function NotificationsPage() {
 
   // SWR: SMS History
   const { data: smsHistoryData, isLoading: historyLoading, mutate: mutateSmsHistory } = useSWR(
-    activeTab === 'sms' ? `/api/admin/sms-history?page=${historyPage}&limit=10` : null,
-    fetcher,
-    { keepPreviousData: true }
+    activeTab === 'sms' ? `/api/admin/sms-history?page=${historyPage}&limit=10` : null
   );
   const smsHistory: SmsHistory[] = smsHistoryData?.history || [];
   const historyTotal: number = smsHistoryData?.total || 0;
 
   // SWR: Templates
   const { data: templatesData, isLoading: templateLoading, mutate: mutateTemplates } = useSWR(
-    activeTab === 'alimtalk' ? '/api/admin/notifications' : null,
-    fetcher,
-    { keepPreviousData: true }
+    activeTab === 'alimtalk' ? '/api/admin/notifications' : null
   );
   const templates: Template[] = templatesData?.templates || [];
 

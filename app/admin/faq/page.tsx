@@ -404,19 +404,16 @@ function SortableCategory({
   );
 }
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function FAQManagementPage() {
   // SWR: FAQ data
   const { data: faqSWRData, isLoading: loading, mutate: mutateFaqs } = useSWR(
     '/api/admin/faq',
-    fetcher,
-    { fallbackData: { faqs: [] }, keepPreviousData: true }
+    { fallbackData: { faqs: [] } }
   );
   const { data: catSWRData, mutate: mutateCategories } = useSWR(
     '/api/admin/faq/categories',
-    fetcher,
-    { fallbackData: { categories: [] }, keepPreviousData: true }
+    { fallbackData: { categories: [] } }
   );
 
   const mutateAll = useCallback(() => {

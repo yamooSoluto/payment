@@ -7,7 +7,6 @@ import { Search, NavArrowLeft, NavArrowRight, NavArrowUp, NavArrowDown, Group, R
 import Spinner from '@/components/admin/Spinner';
 import { MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 interface TenantInfo {
   tenantId: string;
@@ -103,9 +102,7 @@ export default function MembersPage() {
   })}`;
 
   const { data: membersData, isLoading: loading, mutate: mutateMembers } = useSWR(
-    membersApiUrl,
-    fetcher,
-    { keepPreviousData: true }
+    membersApiUrl
   );
 
   const members: Member[] = membersData?.members || [];
