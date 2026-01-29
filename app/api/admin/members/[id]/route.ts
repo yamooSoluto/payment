@@ -64,6 +64,9 @@ export async function GET(
       lastLoginIP: userData.lastLoginIP || null,
       trialApplied: userData.trialApplied || false,
       trialAppliedAt: userData.trialAppliedAt?.toDate?.()?.toISOString() || null,
+      deleted: userData.deleted || false,
+      deletedAt: userData.deletedAt?.toDate?.()?.toISOString() || null,
+      deletedBy: userData.deletedBy || null,
     };
 
     // 모든 매장(tenant) 정보 수집

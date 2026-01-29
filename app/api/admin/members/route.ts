@@ -132,19 +132,17 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    // 검색 필터
+    // 검색 필터 (회원 정보만: 이름, 이메일, 연락처)
     if (search) {
       const searchLower = search.toLowerCase();
       members = members.filter(m => {
         const name = (m.name || '').toLowerCase();
         const email = (m.email || '').toLowerCase();
-        const phone = m.phone || '';
-        const brandNames = m.tenants.map(t => t.brandName.toLowerCase()).join(' ');
+        const phone = (m.phone || '').toLowerCase();
 
         return name.includes(searchLower) ||
           email.includes(searchLower) ||
-          phone.includes(search) ||
-          brandNames.includes(searchLower);
+          phone.includes(searchLower);
       });
     }
 

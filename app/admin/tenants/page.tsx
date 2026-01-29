@@ -184,6 +184,15 @@ export default function TenantsPage() {
     fetchCustomFieldSchema();
   }, [fetchCustomFieldSchema]);
 
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (memberSearchTimeoutRef.current) {
+        clearTimeout(memberSearchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // localStorage에서 컬럼 설정 불러오기
   useEffect(() => {
     try {
@@ -287,30 +296,43 @@ export default function TenantsPage() {
     }
   };
 
-  // 회원 검색
-  const handleMemberSearch = async (searchValue: string) => {
+  // 회원 검색 (debounce 적용)
+  const memberSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMemberSearch = (searchValue: string) => {
     setMemberSearch(searchValue);
+
+    // 이전 타이머 취소
+    if (memberSearchTimeoutRef.current) {
+      clearTimeout(memberSearchTimeoutRef.current);
+    }
+
     if (!searchValue.trim()) {
       setMemberSearchResults([]);
+      setSearchingMembers(false);
       return;
     }
 
     setSearchingMembers(true);
-    try {
-      const response = await fetch(`/api/admin/members?search=${encodeURIComponent(searchValue)}&limit=10`);
-      if (response.ok) {
-        const data = await response.json();
-        setMemberSearchResults(data.members.map((m: { email: string; name: string; phone: string }) => ({
-          email: m.email,
-          name: m.name,
-          phone: m.phone,
-        })));
+
+    // 300ms 후 검색 실행
+    memberSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/admin/members?search=${encodeURIComponent(searchValue)}&limit=10`);
+        if (response.ok) {
+          const data = await response.json();
+          setMemberSearchResults(data.members.map((m: { email: string; name: string; phone: string }) => ({
+            email: m.email,
+            name: m.name,
+            phone: m.phone,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to search members:', error);
+      } finally {
+        setSearchingMembers(false);
       }
-    } catch (error) {
-      console.error('Failed to search members:', error);
-    } finally {
-      setSearchingMembers(false);
-    }
+    }, 300);
   };
 
   // 매장 추가
