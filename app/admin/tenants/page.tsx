@@ -327,14 +327,14 @@ export default function TenantsPage() {
     setAddingTenant(true);
     setAddTenantProgress(0);
 
-    // 진행률 시뮬레이션
+    // 진행률 시뮬레이션 (마이페이지와 동일: 0-30% +3, 30-60% +2, 60-90% +1, 500ms 간격)
     const progressInterval = setInterval(() => {
       setAddTenantProgress(prev => {
-        if (prev >= 90) return 90;
-        const next = prev + 5 + Math.random() * 10;
-        return Math.min(next, 90);
+        if (prev >= 90) return prev;
+        const increment = prev < 30 ? 3 : prev < 60 ? 2 : 1;
+        return Math.min(prev + increment, 90);
       });
-    }, 400);
+    }, 500);
 
     try {
       const response = await fetch('/api/admin/tenants', {
@@ -348,10 +348,10 @@ export default function TenantsPage() {
       });
 
       clearInterval(progressInterval);
-      setAddTenantProgress(100);
 
       const data = await response.json();
       if (response.ok) {
+        setAddTenantProgress(100);
         setTimeout(() => {
           alert('매장이 추가되었습니다.');
           setShowAddTenantModal(false);

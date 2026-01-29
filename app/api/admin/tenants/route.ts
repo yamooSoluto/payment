@@ -296,6 +296,16 @@ export async function POST(request: NextRequest) {
       console.error('subscription.status 설정 오류:', error);
     }
 
+    // n8n이 Firestore에 전체 데이터를 기록할 때까지 폴링 (최대 30초)
+    const maxAttempts = 30;
+    for (let i = 0; i < maxAttempts; i++) {
+      const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+      if (tenantDoc.exists && tenantDoc.data()?.brandName) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     return NextResponse.json({
       success: true,
       tenantId,

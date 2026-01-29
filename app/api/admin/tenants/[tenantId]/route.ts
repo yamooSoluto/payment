@@ -55,92 +55,93 @@ export async function GET(
 
     const { tenantId } = await params;
 
-    // 테넌트 문서 조회
-    const tenantDoc = await db.collection('tenants').doc(tenantId).get();
+    // include 파라미터: 부분 로딩 지원 (payments, history)
+    // 없으면 기본 데이터만 반환 (tenant + subscription + adminNames)
+    const includeParam = request.nextUrl.searchParams.get('include');
+    const includePayments = includeParam === 'payments' || includeParam === 'all';
+    const includeHistory = includeParam === 'history' || includeParam === 'all';
+
+    // 테넌트 + 구독 + 관리자 이름 전부 병렬 조회
+    const [tenantDoc, subscriptionDoc, adminsSnapshot] = await Promise.all([
+      db.collection('tenants').doc(tenantId).get(),
+      db.collection('subscriptions').doc(tenantId).get(),
+      db.collection('admins').get(),
+    ]);
 
     if (!tenantDoc.exists) {
       return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const tenantData = tenantDoc.data() || {};
+    const tenant = convertTimestamps(tenantDoc.data() || {});
 
-    // Firestore Timestamp를 ISO 문자열로 변환
-    const tenant = convertTimestamps(tenantData);
-
-    // 구독 정보 조회
-    const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
     let subscription = null;
     if (subscriptionDoc.exists) {
-      const subData = subscriptionDoc.data() || {};
-      subscription = convertTimestamps(subData);
+      subscription = convertTimestamps(subscriptionDoc.data() || {});
     }
 
-    // 결제 내역 조회 (전체) - 인덱스 없이 조회 후 정렬
-    let payments: Array<{ id: string; [key: string]: unknown }> = [];
-    try {
-      // 인덱스 없이 tenantId로만 필터링
-      const paymentsSnapshot = await db.collection('payments')
-        .where('tenantId', '==', tenantId)
-        .get();
+    const adminNames: Record<string, string> = {};
+    adminsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      adminNames[doc.id] = data.name || data.loginId || doc.id;
+    });
 
-      payments = paymentsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
+    // 결제 내역 조회 (include=payments 또는 include=all)
+    let payments: Array<{ id: string; [key: string]: unknown }> | undefined;
+    if (includePayments) {
+      try {
+        const paymentsSnapshot = await db.collection('payments')
+          .where('tenantId', '==', tenantId)
+          .get();
+
+        payments = paymentsSnapshot.docs.map(doc => ({
           id: doc.id,
-          ...convertTimestamps(data),
-        };
-      });
+          ...convertTimestamps(doc.data()),
+        }));
 
-      // 클라이언트 사이드에서 createdAt 내림차순 정렬
-      payments.sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
-        return dateB - dateA;
-      });
-    } catch (paymentError) {
-      console.error('Failed to fetch payments:', paymentError);
+        payments.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+          return dateB - dateA;
+        });
+      } catch (paymentError) {
+        console.error('Failed to fetch payments:', paymentError);
+        payments = [];
+      }
     }
 
-    // 구독 히스토리 조회 - 서브컬렉션 구조 사용 (subscription_history/{tenantId}/records)
-    let subscriptionHistory: Array<{ recordId: string; [key: string]: unknown }> = [];
-    try {
-      const historyRecords = await getSubscriptionHistory(db, tenantId, 50);
-      subscriptionHistory = historyRecords.map((record, index) => ({
-        recordId: `record_${index}`,
-        ...record,
-        // Date를 ISO 문자열로 변환
-        periodStart: record.periodStart instanceof Date ? record.periodStart.toISOString() : record.periodStart,
-        periodEnd: record.periodEnd instanceof Date ? record.periodEnd.toISOString() : record.periodEnd,
-        billingDate: record.billingDate instanceof Date ? record.billingDate.toISOString() : record.billingDate,
-        changedAt: record.changedAt instanceof Date ? record.changedAt.toISOString() : record.changedAt,
-      }));
-    } catch (historyError) {
-      console.error('Failed to fetch subscription history:', historyError);
+    // 구독 히스토리 조회 (include=history 또는 include=all)
+    let subscriptionHistory: Array<{ recordId: string; [key: string]: unknown }> | undefined;
+    if (includeHistory) {
+      try {
+        const historyRecords = await getSubscriptionHistory(db, tenantId, 50);
+        subscriptionHistory = historyRecords.map((record, index) => ({
+          recordId: `record_${index}`,
+          ...record,
+          periodStart: record.periodStart instanceof Date ? record.periodStart.toISOString() : record.periodStart,
+          periodEnd: record.periodEnd instanceof Date ? record.periodEnd.toISOString() : record.periodEnd,
+          billingDate: record.billingDate instanceof Date ? record.billingDate.toISOString() : record.billingDate,
+          changedAt: record.changedAt instanceof Date ? record.changedAt.toISOString() : record.changedAt,
+        }));
+      } catch (historyError) {
+        console.error('Failed to fetch subscription history:', historyError);
+        subscriptionHistory = [];
+      }
     }
 
-    // 관리자 이름 매핑 조회
-    let adminNames: Record<string, string> = {};
-    try {
-      const adminsSnapshot = await db.collection('admins').get();
-      adminsSnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        adminNames[doc.id] = data.name || data.loginId || doc.id;
-      });
-    } catch (adminError) {
-      console.error('Failed to fetch admin names:', adminError);
-    }
-
-    return NextResponse.json({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: Record<string, any> = {
       tenant: {
         id: tenantDoc.id,
-        tenantId: tenantData.tenantId || tenantDoc.id,
+        tenantId: tenantDoc.data()?.tenantId || tenantDoc.id,
         ...tenant,
       },
       subscription,
-      payments,
-      subscriptionHistory,
       adminNames,
-    });
+    };
+    if (payments !== undefined) result.payments = payments;
+    if (subscriptionHistory !== undefined) result.subscriptionHistory = subscriptionHistory;
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Get tenant detail error:', error);
     return NextResponse.json(
