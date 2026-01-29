@@ -3,8 +3,13 @@ import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { addAdminLog } from '@/lib/admin-log';
+import { getSubscriptionHistoryByTenantIds } from '@/lib/subscription-history';
 
 // GET: 회원 상세 조회 (이메일 기준)
+// ?include=payments  → 결제 내역 포함
+// ?include=history   → 구독 내역 포함
+// ?include=all       → 전부 포함
+// (기본) → 회원 + 매장 + 구독 정보만 (빠른 첫 로딩)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,11 +31,18 @@ export async function GET(
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
+    const includeParam = request.nextUrl.searchParams.get('include');
+    const includePayments = includeParam === 'payments' || includeParam === 'all';
+    const includeHistory = includeParam === 'history' || includeParam === 'all';
+
     // URL 디코딩된 이메일로 조회
     const email = decodeURIComponent(id);
 
-    // users 컬렉션에서 회원 기본 정보 조회
-    const userDoc = await db.collection('users').doc(email).get();
+    // 1단계: user + tenants 병렬 조회 (둘 다 email만 필요)
+    const [userDoc, tenantsSnapshot] = await Promise.all([
+      db.collection('users').doc(email).get(),
+      db.collection('tenants').where('email', '==', email).get(),
+    ]);
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: '회원을 찾을 수 없습니다.' }, { status: 404 });
@@ -54,11 +66,6 @@ export async function GET(
       trialAppliedAt: userData.trialAppliedAt?.toDate?.()?.toISOString() || null,
     };
 
-    // 이메일로 tenants 조회 (매장 정보용)
-    const tenantsSnapshot = await db.collection('tenants')
-      .where('email', '==', email)
-      .get();
-
     // 모든 매장(tenant) 정보 수집
     const tenantDataList = tenantsSnapshot.docs.map(doc => {
       const data = doc.data();
@@ -74,12 +81,66 @@ export async function GET(
       };
     });
 
-    // 구독 정보 한 번에 조회
+    const tenantIds = tenantDataList.map(t => t.tenantId);
+
+    // 2단계: 구독 + (결제/내역 선택적) 병렬 조회
+    const parallelTasks: Promise<unknown>[] = [];
+
+    // 구독 정보 (항상 조회)
     const subscriptionRefs = tenantDataList.map(t =>
       db.collection('subscriptions').doc(t.tenantId)
     );
-    const subscriptionDocs = subscriptionRefs.length > 0 ? await db.getAll(...subscriptionRefs) : [];
+    parallelTasks.push(
+      subscriptionRefs.length > 0 ? db.getAll(...subscriptionRefs) : Promise.resolve([])
+    );
 
+    // trial 매장명 조회 (trialApplied인 경우만)
+    parallelTasks.push(
+      userData.trialApplied
+        ? db.collection('subscription_history')
+            .where('email', '==', email)
+            .where('plan', '==', 'trial')
+            .limit(10)
+            .get()
+            .catch(() => null)
+        : Promise.resolve(null)
+    );
+
+    // 결제 내역 (include=payments 일 때만)
+    if (includePayments && tenantIds.length > 0) {
+      const chunkedIds = [];
+      for (let i = 0; i < tenantIds.length; i += 10) {
+        chunkedIds.push(tenantIds.slice(i, i + 10));
+      }
+      parallelTasks.push(
+        Promise.all(
+          chunkedIds.map(chunk =>
+            db.collection('payments')
+              .where('tenantId', 'in', chunk)
+              .get()
+              .catch(() => null)
+          )
+        )
+      );
+    } else {
+      parallelTasks.push(Promise.resolve(null));
+    }
+
+    // 구독 내역 (include=history 일 때만)
+    if (includeHistory && tenantIds.length > 0) {
+      parallelTasks.push(getSubscriptionHistoryByTenantIds(db, tenantIds));
+    } else {
+      parallelTasks.push(Promise.resolve(null));
+    }
+
+    const [subscriptionDocs, trialHistoryResult, paymentsResult, historyResult] = await Promise.all(parallelTasks) as [
+      FirebaseFirestore.DocumentSnapshot[],
+      FirebaseFirestore.QuerySnapshot | null,
+      (FirebaseFirestore.QuerySnapshot | null)[] | null,
+      unknown[] | null,
+    ];
+
+    // 구독 정보 매핑
     const subscriptionMap = new Map<string, {
       plan: string;
       status: string;
@@ -94,7 +155,7 @@ export async function GET(
       pendingPlan: string | null;
     }>();
 
-    subscriptionDocs.forEach((doc) => {
+    (subscriptionDocs as FirebaseFirestore.DocumentSnapshot[]).forEach((doc) => {
       if (doc.exists) {
         const data = doc.data();
         subscriptionMap.set(doc.id, {
@@ -122,7 +183,6 @@ export async function GET(
     // trialApplied인 경우 trial 구독이 있었던 매장 찾기
     let trialBrandName: string | null = null;
     if (userData.trialApplied) {
-      // 현재 또는 과거에 trial이었던 매장 찾기
       for (const tenant of tenants) {
         const sub = tenant.subscription;
         if (sub && (sub.plan === 'trial' || sub.status === 'trial')) {
@@ -130,84 +190,85 @@ export async function GET(
           break;
         }
       }
-      // 현재 trial이 없으면 subscription_history에서 찾기
-      if (!trialBrandName) {
-        try {
-          const historySnapshot = await db.collection('subscription_history')
-            .where('email', '==', email)
-            .where('plan', '==', 'trial')
-            .limit(10)
-            .get();
-          if (!historySnapshot.empty) {
-            // 가장 최근 것 찾기
-            const sortedDocs = historySnapshot.docs.sort((a, b) => {
-              const aTime = a.data().changedAt?.toDate?.()?.getTime() || 0;
-              const bTime = b.data().changedAt?.toDate?.()?.getTime() || 0;
-              return bTime - aTime;
-            });
-            trialBrandName = sortedDocs[0].data().brandName || null;
-          }
-        } catch (e) {
-          console.error('Failed to fetch trial history:', e);
-        }
+      if (!trialBrandName && trialHistoryResult && !trialHistoryResult.empty) {
+        const sortedDocs = trialHistoryResult.docs.sort((a, b) => {
+          const aTime = a.data().changedAt?.toDate?.()?.getTime() || 0;
+          const bTime = b.data().changedAt?.toDate?.()?.getTime() || 0;
+          return bTime - aTime;
+        });
+        trialBrandName = sortedDocs[0].data().brandName || null;
       }
     }
 
-    // 모든 tenantId로 결제 내역 조회
-    const tenantIds = tenantDataList.map(t => t.tenantId);
-    let payments: Array<{ id: string; [key: string]: unknown }> = [];
+    // 결과 조합
+    const result: Record<string, unknown> = {
+      member: {
+        ...member,
+        trialBrandName,
+      },
+      tenants,
+    };
 
-    if (tenantIds.length > 0) {
-      // Firestore는 'in' 쿼리에서 최대 10개의 값만 지원
-      const chunkedIds = [];
-      for (let i = 0; i < tenantIds.length; i += 10) {
-        chunkedIds.push(tenantIds.slice(i, i + 10));
+    // 결제 내역 (요청된 경우만)
+    if (includePayments && paymentsResult) {
+      let payments: Array<{ id: string; [key: string]: unknown }> = [];
+      for (const snapshot of paymentsResult) {
+        if (!snapshot) continue;
+        const chunkPayments = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+            paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
+          };
+        });
+        payments = [...payments, ...chunkPayments];
       }
 
-      for (const chunk of chunkedIds) {
-        try {
-          const paymentsSnapshot = await db.collection('payments')
-            .where('tenantId', 'in', chunk)
-            .get();
-
-          const chunkPayments = paymentsSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-              paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
-            };
-          });
-
-          payments = [...payments, ...chunkPayments];
-        } catch {
-          // 인덱스 없을 수 있음
-        }
-      }
-
-      // 결제일 기준 정렬
       payments.sort((a, b) => {
         const aTime = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
         return bTime - aTime;
       });
+
+      // 총 이용금액 계산
+      const totalAmount = payments
+        .filter((p) => p.status === 'completed' || p.status === 'done' || p.status === 'refunded')
+        .reduce((sum, p) => sum + ((p.amount as number) || 0), 0);
+
+      result.payments = payments.slice(0, 20);
+      (result.member as Record<string, unknown>).totalAmount = totalAmount;
     }
 
-    // 총 이용금액 계산 (순매출: 완료된 결제 + 환불)
-    const totalAmount = payments
-      .filter((p) => p.status === 'completed' || p.status === 'done' || p.status === 'refunded')
-      .reduce((sum, p) => sum + ((p.amount as number) || 0), 0);
+    // 구독 내역 (요청된 경우만)
+    if (includeHistory && historyResult) {
+      const tenantMap = new Map<string, string>();
+      tenantDataList.forEach(t => {
+        tenantMap.set(t.tenantId, t.brandName);
+      });
 
-    return NextResponse.json({
-      member: {
-        ...member,
-        totalAmount,
-        trialBrandName,
-      },
-      tenants,
-      payments: payments.slice(0, 20), // 최근 20건만 반환
-    });
+      const formattedHistory = (historyResult as Array<Record<string, unknown>>).map(record => ({
+        ...record,
+        brandName: tenantMap.get(record.tenantId as string) || record.tenantId,
+        periodStart: record.periodStart instanceof Date
+          ? record.periodStart.toISOString()
+          : record.periodStart,
+        periodEnd: record.periodEnd instanceof Date
+          ? record.periodEnd.toISOString()
+          : record.periodEnd,
+        billingDate: record.billingDate instanceof Date
+          ? record.billingDate.toISOString()
+          : record.billingDate,
+        changedAt: record.changedAt instanceof Date
+          ? record.changedAt.toISOString()
+          : record.changedAt,
+      }));
+
+      result.subscriptionHistory = formattedHistory;
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Get member detail error:', error);
     return NextResponse.json(

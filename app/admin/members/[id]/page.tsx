@@ -157,6 +157,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subscriptionHistory, setSubscriptionHistory] = useState<SubscriptionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({
@@ -606,7 +608,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       alert('환불이 완료되었습니다.');
 
       // 결제 내역 새로고침
-      fetchMemberDetail();
+      fetchPayments();
 
       setRefundModal({ isOpen: false, payment: null, availableAmount: 0 });
     } catch (error) {
@@ -795,7 +797,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (response.ok) {
         alert('구독 정보가 수정되었습니다.');
         setEditSubHistoryModal({ isOpen: false, tenant: null });
-        fetchMemberDetail();
+        refreshAll();
       } else {
         alert(data.error || '수정에 실패했습니다.');
       }
@@ -807,9 +809,18 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
+  // 1단계: 회원 + 매장 기본 정보 (빠른 첫 로딩)
   useEffect(() => {
     fetchMemberDetail();
   }, [id]);
+
+  // 2단계: 결제/구독 내역 지연 로딩 (기본 정보 로딩 완료 후)
+  useEffect(() => {
+    if (!loading && member) {
+      fetchPayments();
+      fetchSubscriptionHistory();
+    }
+  }, [loading, member]);
 
   // 필터 팝업 및 드롭다운 외부 클릭 감지
   useEffect(() => {
@@ -834,19 +845,15 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 회원 + 매장 기본 정보 (결제/구독 내역 제외 — 빠른 로딩)
   const fetchMemberDetail = async () => {
     try {
-      // 회원 정보와 구독 히스토리를 병렬로 가져오기
-      const [memberResponse, historyResponse] = await Promise.all([
-        fetch(`/api/admin/members/${id}`),
-        fetch(`/api/admin/members/${id}/subscription-history`),
-      ]);
+      const response = await fetch(`/api/admin/members/${id}`);
 
-      if (memberResponse.ok) {
-        const data = await memberResponse.json();
+      if (response.ok) {
+        const data = await response.json();
         setMember(data.member);
         setTenants(data.tenants || []);
-        setPayments(data.payments || []);
         setFormData({
           name: data.member.name || '',
           phone: data.member.phone || '',
@@ -855,16 +862,54 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
           group: data.member.group || 'normal',
         });
       }
-
-      if (historyResponse.ok) {
-        const historyData = await historyResponse.json();
-        setSubscriptionHistory(historyData.history || []);
-      }
     } catch (error) {
       console.error('Failed to fetch member:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // 결제 내역 별도 로딩
+  const fetchPayments = async () => {
+    setPaymentsLoading(true);
+    try {
+      const response = await fetch(`/api/admin/members/${id}?include=payments`);
+      if (response.ok) {
+        const data = await response.json();
+        setPayments(data.payments || []);
+        // totalAmount 업데이트
+        if (data.member?.totalAmount !== undefined) {
+          setMember(prev => prev ? { ...prev, totalAmount: data.member.totalAmount } : prev);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch payments:', error);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  // 구독 내역 별도 로딩
+  const fetchSubscriptionHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(`/api/admin/members/${id}?include=history`);
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionHistory(data.subscriptionHistory || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // 전체 새로고침 (액션 후 호출용)
+  const refreshAll = () => {
+    fetchMemberDetail();
+    fetchPayments();
+    fetchSubscriptionHistory();
   };
 
   const handleSave = async () => {
@@ -942,7 +987,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
       if (response.ok) {
         setPricePolicyModal(null);
-        fetchMemberDetail();
+        refreshAll();
       } else {
         const data = await response.json();
         alert(data.error || '가격 정책 변경에 실패했습니다.');
@@ -1023,7 +1068,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (response.ok && data.success) {
         alert(`결제가 완료되었습니다.\n주문번호: ${data.orderId}\n금액: ${data.amount.toLocaleString()}원`);
         setManualChargeModal(null);
-        fetchMemberDetail(); // 데이터 새로고침
+        refreshAll();
       } else {
         alert(data.error || '결제에 실패했습니다.');
       }
@@ -1057,14 +1102,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
     setAddingTenant(true);
     setAddTenantProgress(0);
 
-    // 진행률 시뮬레이션 (n8n 웹훅은 실시간 진행률 제공 안함)
+    // 진행률 시뮬레이션 (마이페이지와 동일: 0-30% +3, 30-60% +2, 60-90% +1, 500ms 간격)
     const progressInterval = setInterval(() => {
       setAddTenantProgress(prev => {
-        if (prev >= 90) return 90; // 90%에서 멈추고 완료까지 대기
-        const next = prev + 5 + Math.random() * 10;
-        return Math.min(next, 90); // 90% 초과 방지
+        if (prev >= 90) return prev;
+        const increment = prev < 30 ? 3 : prev < 60 ? 2 : 1;
+        return Math.min(prev + increment, 90);
       });
-    }, 400);
+    }, 500);
 
     try {
       const response = await fetch('/api/admin/tenants', {
@@ -1077,10 +1122,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
         }),
       });
       clearInterval(progressInterval);
-      setAddTenantProgress(100);
 
       const data = await response.json();
       if (response.ok) {
+        setAddTenantProgress(100);
         // 즉시 UI 업데이트 (새 매장 추가)
         const newTenant: TenantInfo = {
           docId: data.tenantId,
@@ -1379,7 +1424,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (response.ok && data.success) {
         alert(`결제가 완료되었습니다.\n주문번호: ${data.orderId}\n금액: ${data.amount.toLocaleString()}원`);
         setTenantDetailModal({ isOpen: false, tenant: null });
-        fetchMemberDetail();
+        refreshAll();
       } else {
         alert(data.error || '결제에 실패했습니다.');
       }
@@ -1412,7 +1457,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
       if (response.ok) {
         alert('구독 정보가 수정되었습니다.');
         setEditSubModal({ isOpen: false, tenant: null });
-        fetchMemberDetail();
+        refreshAll();
       } else {
         alert(data.error || '구독 정보 수정에 실패했습니다.');
       }
@@ -2027,6 +2072,11 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
       {/* 결제 내역 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        {paymentsLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (<>
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -2363,10 +2413,16 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             )}
           </>
         )}
+        </>)}
       </div>
 
       {/* 구독 내역 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (<>
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -2634,6 +2690,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             )}
           </>
         )}
+        </>)}
       </div>
 
       {/* 가격 정책 변경 모달 */}
@@ -3342,7 +3399,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
                     const handleFormSuccess = () => {
                       setSubscriptionInlineAction(null);
-                      fetchMemberDetail();
+                      refreshAll();
                       setTenantDetailModal({ isOpen: false, tenant: null });
                     };
 
@@ -3385,7 +3442,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
                             return;
                           }
                           alert(data.message);
-                          fetchMemberDetail();
+                          refreshAll();
                         } catch {
                           alert('예약 취소에 실패했습니다.');
                         }
@@ -4098,9 +4155,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
             email: member?.email || '',
           }}
           initialAction={subscriptionInitialAction}
-          onSuccess={async () => {
+          onSuccess={() => {
             // 데이터 새로고침
-            await fetchMemberDetail();
+            refreshAll();
             // 모달 상태 업데이트를 위해 tenant 정보도 업데이트 필요
             setTenantDetailModal({ isOpen: false, tenant: null });
           }}
