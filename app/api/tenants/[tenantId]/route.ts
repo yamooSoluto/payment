@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // 매장 정보 수정 (매장명만)
@@ -16,14 +16,14 @@ export async function PATCH(
   try {
     const { tenantId } = await params;
     const body = await request.json();
-    const { token, email: emailParam, brandName } = body;
+    const { token, brandName } = body;
 
     // 인증 확인
     let email: string | null = null;
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {
@@ -102,14 +102,14 @@ export async function DELETE(
   try {
     const { tenantId } = await params;
     const body = await request.json();
-    const { token, email: emailParam, confirmText } = body;
+    const { token, confirmText } = body;
 
     // 인증 확인
     let email: string | null = null;
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

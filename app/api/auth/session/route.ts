@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { createAuthSession } from '@/lib/auth-session';
 import { cookies } from 'next/headers';
 
@@ -51,14 +51,14 @@ export async function GET(request: NextRequest) {
 // POST: 세션 생성 (클라이언트에서 호출)
 export async function POST(request: NextRequest) {
   try {
-    const { token, email: emailParam } = await request.json();
+    const { token } = await request.json();
 
     let email: string | null = null;
 
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

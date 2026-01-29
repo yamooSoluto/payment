@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { TenantCardsDocument } from '../../route';
 
@@ -17,14 +17,14 @@ export async function PUT(
   try {
     const { cardId } = await params;
     const body = await request.json();
-    const { token, email: emailParam, tenantId } = body;
+    const { token, tenantId } = body;
 
     let email: string | null = null;
 
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

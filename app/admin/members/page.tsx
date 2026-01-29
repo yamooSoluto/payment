@@ -782,17 +782,19 @@ export default function MembersPage() {
                               <MessageText className="w-4 h-4" />
                               SMS
                             </button>
-                            <button
-                              onClick={() => {
-                                handleOpenDeleteModal([member.id]);
-                                setActionMenuOpen(null);
-                                setActionMenuPosition(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                            >
-                              <Trash className="w-4 h-4" />
-                              삭제
-                            </button>
+                            {activeTab !== 'deleted' && (
+                              <button
+                                onClick={() => {
+                                  handleOpenDeleteModal([member.id]);
+                                  setActionMenuOpen(null);
+                                  setActionMenuPosition(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                              >
+                                <Trash className="w-4 h-4" />
+                                삭제
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

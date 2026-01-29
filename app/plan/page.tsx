@@ -1,16 +1,17 @@
 import { verifyToken, getSubscription, getTenantsByEmail, getPlans, getPlanSettings } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import PricingClient from '@/components/pricing/PricingClient';
 import ComparisonTable from '@/components/pricing/ComparisonTable';
 
 export const dynamic = 'force-dynamic';
 
 interface PricingPageProps {
-  searchParams: Promise<{ token?: string; email?: string; tenantId?: string }>;
+  searchParams: Promise<{ token?: string; tenantId?: string }>;
 }
 
 export default async function PricingPage({ searchParams }: PricingPageProps) {
   const params = await searchParams;
-  const { token, email: emailParam, tenantId } = params;
+  const { token, tenantId } = params;
 
   let email: string | null = null;
 
@@ -18,13 +19,19 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
   if (token) {
     email = await verifyToken(token);
   }
-  // 2. 이메일 파라미터로 접근 (Firebase Auth)
-  else if (emailParam) {
-    email = emailParam;
+  // 2. 세션 쿠키로 인증 (SSO 후 쿠키 기반)
+  else {
+    const sessionId = await getAuthSessionIdFromCookie();
+    if (sessionId) {
+      const session = await getAuthSession(sessionId);
+      if (session) {
+        email = session.email;
+      }
+    }
   }
 
   // 비로그인 상태에서도 요금제 페이지는 볼 수 있음 (선택 시 로그인 유도)
-  const authParam = token ? `token=${token}` : email ? `email=${encodeURIComponent(email)}` : '';
+  const authParam = token ? `token=${token}` : '';
 
   // 병렬로 플랜, 구독 정보, 매장 목록, 설정 조회 (성능 최적화)
   const [plans, subscription, tenants, planSettings] = await Promise.all([

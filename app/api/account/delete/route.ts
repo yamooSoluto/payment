@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 
 export async function DELETE(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
@@ -10,7 +10,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, confirmText } = body;
+    const { token, confirmText } = body;
 
     let email: string | null = null;
 
@@ -18,9 +18,9 @@ export async function DELETE(request: NextRequest) {
     if (token) {
       email = await verifyToken(token);
     }
-    // 이메일로 직접 인증 (Firebase Auth)
-    else if (emailParam) {
-      email = emailParam;
+    // Firebase ID Token 인증
+    else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

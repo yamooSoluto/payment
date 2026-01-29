@@ -10,7 +10,6 @@ interface CheckoutPageProps {
     plan?: string;
     link?: string;      // 커스텀 결제 링크 ID
     token?: string;
-    email?: string;
     tenantId?: string;  // 매장 ID
     mode?: string;      // 'immediate' for upgrade, 'reserve' for trial reservation
     refund?: string;    // 현재 플랜 환불액
@@ -37,7 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const params = await searchParams;
-  const { plan: planParam, link, token, email: emailParam, tenantId, mode, refund, newTenant, brandName, industry, error } = params;
+  const { plan: planParam, link, token, tenantId, mode, refund, newTenant, brandName, industry, error } = params;
 
   // 커스텀 링크 또는 플랜 ID가 필요
   if (!planParam && !link) {
@@ -57,11 +56,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   if (token) {
     email = await verifyToken(token);
   }
-  // 2. 이메일 파라미터로 접근 (Firebase Auth)
-  else if (emailParam) {
-    email = emailParam;
-  }
-  // 3. 세션 쿠키로 인증 (SSO 후 쿠키 기반)
+  // 2. 세션 쿠키로 인증 (SSO 후 쿠키 기반)
   else {
     const sessionId = await getAuthSessionIdFromCookie();
     if (sessionId) {
@@ -108,7 +103,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect('/error?message=invalid_access');
   }
 
-  const authParam = token ? `token=${token}` : `email=${encodeURIComponent(email)}`;
+  const authParam = token ? `token=${token}` : '';
 
   // 병렬로 데이터 조회 (성능 최적화)
   // tenantId가 있으면 해당 tenant의 구독 정보 조회 (billingKey 확인용)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken, getPlanById } from '@/lib/auth';
+import { verifyToken, verifyBearerToken, getPlanById } from '@/lib/auth';
 
 // 예약된 플랜 변경 (billingKey가 이미 있는 경우)
 export async function POST(request: NextRequest) {
@@ -11,14 +11,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId, newPlan } = body;
+    const { token, tenantId, newPlan } = body;
 
     let email: string | null = null;
 
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

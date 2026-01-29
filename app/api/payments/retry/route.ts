@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { payWithBillingKey, getPlanName } from '@/lib/toss';
 import { syncPaymentSuccess } from '@/lib/tenant-sync';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
@@ -14,17 +14,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId } = body;
+    const { token, tenantId } = body;
 
     let email: string | null = null;
 
-    // 토큰으로 인증 (포탈 SSO)
     if (token) {
       email = await verifyToken(token);
-    }
-    // 이메일로 직접 인증 (Firebase Auth)
-    else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

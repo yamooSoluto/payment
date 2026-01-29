@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { isValidIndustry } from '@/lib/constants';
 
 // 내 매장 목록 조회 (각 매장의 구독 상태 포함, 삭제된 매장 제외)
@@ -13,15 +13,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get('token');
-    const emailParam = searchParams.get('email');
     const skipSubscription = searchParams.get('skipSubscription') === 'true';
 
     let email: string | null = null;
 
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {
@@ -143,14 +142,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, brandName, industry } = body;
+    const { token, brandName, industry } = body;
 
     // 인증 확인
     let email: string | null = null;
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {

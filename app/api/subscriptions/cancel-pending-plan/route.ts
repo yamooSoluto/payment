@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 
@@ -12,14 +12,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { token, email: emailParam, tenantId } = body;
+    const { token, tenantId } = body;
 
     let email: string | null = null;
 
     if (token) {
       email = await verifyToken(token);
-    } else if (emailParam) {
-      email = emailParam;
+    } else {
+      email = await verifyBearerToken(request.headers.get('authorization'));
     }
 
     if (!email) {
