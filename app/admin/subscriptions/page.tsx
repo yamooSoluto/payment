@@ -268,6 +268,10 @@ export default function SubscriptionsPage() {
         return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험</span>;
       case 'pending_cancel':
         return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
+      case 'past_due':
+        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제실패</span>;
+      case 'suspended':
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>일시정지</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':
@@ -556,8 +560,12 @@ export default function SubscriptionsPage() {
                                 { value: 'none', label: '미구독' },
                                 { value: 'trialing', label: '체험' },
                                 { value: 'active', label: '구독중' },
-                                { value: 'canceled', label: '해지' },
+                                { value: 'pending_cancel', label: '해지예정' },
+                                { value: 'past_due', label: '결제실패' },
+                                { value: 'suspended', label: '일시정지' },
+                                { value: 'completed', label: '완료' },
                                 { value: 'expired', label: '만료' },
+                                { value: 'canceled', label: '해지' },
                                 { value: 'deleted', label: '삭제' },
                               ].map(option => (
                                 <label key={option.value} className="flex items-center gap-2 cursor-pointer">
@@ -854,6 +862,9 @@ export default function SubscriptionsPage() {
                               {[
                                 { value: 'trialing', label: '체험' },
                                 { value: 'active', label: '구독중' },
+                                { value: 'pending_cancel', label: '해지예정' },
+                                { value: 'past_due', label: '결제실패' },
+                                { value: 'suspended', label: '일시정지' },
                                 { value: 'completed', label: '완료' },
                                 { value: 'expired', label: '만료' },
                                 { value: 'canceled', label: '해지' },

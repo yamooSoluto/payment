@@ -161,9 +161,12 @@ export const getSubStatusLabel = (status: string | undefined) => {
     case 'trial':
     case 'trialing': return '체험';
     case 'active': return '구독중';
+    case 'pending_cancel': return '해지예정';
     case 'completed': return '완료';
     case 'expired': return '만료';
     case 'canceled': return '해지';
+    case 'past_due': return '결제실패';
+    case 'suspended': return '일시정지';
     default: return status || '-';
   }
 };

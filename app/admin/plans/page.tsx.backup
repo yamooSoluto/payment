@@ -1,0 +1,817 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import useSWR from 'swr';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Package, Plus, Eye, Link as LinkIcon } from 'iconoir-react';
+import { arrayMove } from '@dnd-kit/sortable';
+import { DragEndEvent } from '@dnd-kit/core';
+
+// Component imports
+import { PlanListSection } from '@/components/admin/plan-detail/PlanListSection';
+import PlanModal, { PlanFormData } from '@/components/admin/plan-detail/PlanModal';
+import PlanPreviewModal from '@/components/admin/plan-detail/PlanPreviewModal';
+import CustomLinkTable from '@/components/admin/plan-detail/CustomLinkTable';
+import CustomLinkModal from '@/components/admin/plan-detail/CustomLinkModal';
+import GridSelector from '@/components/admin/plan-detail/GridSelector';
+
+// Type imports
+import type { Plan, CustomLink, LinkFormData } from '@/components/admin/plan-detail/types';
+
+type TabType = 'plans' | 'links';
+
+export default function PlansPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Tab state
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl === 'links' ? 'links' : 'plans');
+
+  // SWR data fetching
+  const { data: plansData, isLoading: loading, mutate: mutatePlans } = useSWR(
+    '/api/admin/plans',
+    { fallbackData: { plans: [] } }
+  );
+  const [plans, setPlans] = useState<Plan[]>([]);
+
+  // Plan modal state
+  const [showModal, setShowModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+
+  // Preview modal state
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Grid settings state
+  const [gridCols, setGridCols] = useState(4);
+  const [savingGrid, setSavingGrid] = useState(false);
+
+  // Custom links state
+  const [customLinks, setCustomLinks] = useState<CustomLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [editingLink, setEditingLink] = useState<CustomLink | null>(null);
+  const [showDisabledLinks, setShowDisabledLinks] = useState(false);
+
+  // Sync SWR data to local state for drag reordering
+  useEffect(() => {
+    if (plansData?.plans) setPlans(plansData.plans);
+  }, [plansData]);
+
+  // Fetch grid settings on mount
+  useEffect(() => {
+    fetchGridSettings();
+  }, []);
+
+  // Tab change handler
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', tab);
+    router.replace(`?${newParams.toString()}`, { scroll: false });
+  };
+
+  // Grid settings
+  const fetchGridSettings = async () => {
+    try {
+      const response = await fetch('/api/admin/settings/plans');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.gridCols) {
+          setGridCols(data.gridCols);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch grid settings:', error);
+    }
+  };
+
+  const saveGridSettings = async (cols: number) => {
+    setSavingGrid(true);
+    setGridCols(cols);
+    try {
+      const response = await fetch('/api/admin/settings/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gridCols: cols }),
+      });
+      if (!response.ok) {
+        console.error('Failed to save grid settings');
+      }
+    } catch (error) {
+      console.error('Failed to save grid settings:', error);
+    } finally {
+      setSavingGrid(false);
+    }
+  };
+
+  // Plan drag & drop handler
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = plans.findIndex((p) => p.id === active.id);
+      const newIndex = plans.findIndex((p) => p.id === over.id);
+      const newPlans = arrayMove(plans, oldIndex, newIndex);
+      setPlans(newPlans);
+
+      const orders: Record<string, number> = {};
+      newPlans.forEach((plan, index) => {
+        orders[plan.id] = index;
+      });
+
+      try {
+        const response = await fetch('/api/admin/plans/reorder', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orders }),
+        });
+        if (!response.ok) {
+          mutatePlans();
+          alert('순서 변경에 실패했습니다.');
+        }
+      } catch (error) {
+        console.error('Failed to reorder plans:', error);
+        mutatePlans();
+        alert('순서 변경에 실패했습니다.');
+      }
+    }
+  };
+
+  // Plan modal handlers
+  const handleOpenModal = (plan?: Plan) => {
+    setEditingPlan(plan || null);
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingPlan(null);
+  };
+
+  const handleSavePlan = async (formData: PlanFormData) => {
+    const url = editingPlan ? `/api/admin/plans/${editingPlan.id}` : '/api/admin/plans';
+    const body = {
+      ...formData,
+      features: formData.features.split('\n').filter(f => f.trim()),
+    };
+
+    const response = await fetch(url, {
+      method: editingPlan ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) {
+      handleCloseModal();
+      mutatePlans();
+    } else {
+      const data = await response.json();
+      alert(data.error || '저장에 실패했습니다.');
+      throw new Error(data.error || '저장에 실패했습니다.');
+    }
+  };
+
+  // Plan action handlers
+  const handleToggleActive = async (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+
+    try {
+      const response = await fetch(`/api/admin/plans/${plan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...plan, isActive: !plan.isActive }),
+      });
+      if (response.ok) {
+        mutatePlans();
+      } else {
+        const data = await response.json();
+        alert(data.error || '변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to toggle plan:', error);
+      alert('변경에 실패했습니다.');
+    }
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan || !confirm(`정말 "${plan.name}" 플랜을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/plans/${plan.id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        mutatePlans();
+      } else {
+        const data = await response.json();
+        alert(data.error || '삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to delete plan:', error);
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
+  const handleTogglePopular = async (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+
+    try {
+      const response = await fetch(`/api/admin/plans/${plan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...plan, popular: !plan.popular }),
+      });
+      if (response.ok) {
+        mutatePlans();
+      } else {
+        const data = await response.json();
+        alert(data.error || '변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to toggle popular:', error);
+      alert('변경에 실패했습니다.');
+    }
+  };
+
+  // Custom link handlers
+  const fetchCustomLinks = async (includeDisabled = false) => {
+    setLinksLoading(true);
+    try {
+      const url = includeDisabled
+        ? '/api/admin/custom-links?includeDisabled=true'
+        : '/api/admin/custom-links';
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setCustomLinks(data.links);
+      }
+    } catch (error) {
+      console.error('Failed to fetch custom links:', error);
+    } finally {
+      setLinksLoading(false);
+    }
+  };
+
+  const handleOpenLinkModal = (link?: CustomLink) => {
+    setEditingLink(link || null);
+    setShowLinkModal(true);
+  };
+
+  const handleCloseLinkModal = () => {
+    setShowLinkModal(false);
+    setEditingLink(null);
+  };
+
+  const handleSaveLink = async (linkFormData: LinkFormData) => {
+    const selectedPlan = plans.find(p => p.id === linkFormData.planId);
+    const body = {
+      planId: linkFormData.planId,
+      planName: selectedPlan?.name || linkFormData.planId,
+      customAmount: linkFormData.customAmount ? parseInt(linkFormData.customAmount) : null,
+      targetEmail: linkFormData.targetEmail.trim() || null,
+      targetUserName: linkFormData.targetUserName.trim() || null,
+      billingType: linkFormData.billingType,
+      subscriptionDays: linkFormData.billingType === 'onetime' ? parseInt(linkFormData.subscriptionDays) || 30 : null,
+      validFrom: linkFormData.validFrom,
+      validUntil: linkFormData.validUntil,
+      maxUses: parseInt(linkFormData.maxUses) || 0,
+      memo: linkFormData.memo.trim() || null,
+    };
+
+    const url = editingLink
+      ? `/api/admin/custom-links/${editingLink.id}`
+      : '/api/admin/custom-links';
+
+    const response = await fetch(url, {
+      method: editingLink ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) {
+      handleCloseLinkModal();
+      fetchCustomLinks(showDisabledLinks);
+    } else {
+      const data = await response.json();
+      alert(data.error || '저장에 실패했습니다.');
+      throw new Error(data.error || '저장에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteLink = async (link: CustomLink) => {
+    if (!confirm(`정말 이 링크를 비활성화하시겠습니까?\n(${link.planName} - ${link.id})`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/custom-links/${link.id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        fetchCustomLinks(showDisabledLinks);
+      } else {
+        const data = await response.json();
+        alert(data.error || '비활성화에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to delete link:', error);
+      alert('비활성화에 실패했습니다.');
+    }
+  };
+
+  const handleCopyLink = (linkId: string) => {
+    const baseUrl = window.location.origin;
+    const url = `${baseUrl}/checkout?link=${linkId}`;
+    navigator.clipboard.writeText(url).catch(() => {
+      alert('복사에 실패했습니다. URL: ' + url);
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Package className="w-8 h-8 text-blue-600" />
+          <h1 className="text-2xl font-bold text-gray-900">상품 관리</h1>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {activeTab === 'plans' && (
+            <>
+              <button
+                onClick={() => setShowPreview(true)}
+                className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                title="요금제 페이지 미리보기"
+              >
+                <Eye className="w-4 h-4 text-gray-600" />
+                <span className="hidden sm:inline text-sm text-gray-700">미리보기</span>
+              </button>
+              <GridSelector
+                currentCols={gridCols}
+                onSelectCols={saveGridSettings}
+                saving={savingGrid}
+              />
+              <button
+                onClick={() => handleOpenModal()}
+                className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">플랜 추가</span>
+              </button>
+            </>
+          )}
+          {activeTab === 'links' && (
+            <>
+              <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg">
+                <span className="text-sm text-gray-600 hidden sm:inline">비활성 포함</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newValue = !showDisabledLinks;
+                    setShowDisabledLinks(newValue);
+                    fetchCustomLinks(newValue);
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    showDisabledLinks ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      showDisabledLinks ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <button
+                onClick={() => handleOpenLinkModal()}
+                className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">새 링크 만들기</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-4">
+          <button
+            onClick={() => handleTabChange('plans')}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'plans'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              플랜 목록
+            </div>
+          </button>
+          <button
+            onClick={() => {
+              handleTabChange('links');
+              if (customLinks.length === 0 && !linksLoading) {
+                fetchCustomLinks(showDisabledLinks);
+              }
+            }}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'links'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4" />
+              커스텀 링크
+            </div>
+          </button>
+        </nav>
+      </div>
+
+      {/* Plans Tab */}
+      {activeTab === 'plans' && (
+        <PlanListSection
+          plans={plans}
+          loading={loading}
+          gridCols={gridCols}
+          onDragEnd={handleDragEnd}
+          onEditPlan={handleOpenModal}
+          onDeletePlan={handleDeletePlan}
+          onToggleActive={handleToggleActive}
+          onTogglePopular={handleTogglePopular}
+        />
+      )}
+
+      {/* Links Tab */}
+      {activeTab === 'links' && (
+        <CustomLinkTable
+          customLinks={customLinks}
+          loading={linksLoading}
+          onEdit={handleOpenLinkModal}
+          onDelete={handleDeleteLink}
+          onCopyLink={handleCopyLink}
+        />
+      )}
+
+      {/* Plan Modal */}
+      <PlanModal
+        showModal={showModal}
+        editingPlan={editingPlan}
+        plansLength={plans.length}
+        onClose={handleCloseModal}
+        onSave={handleSavePlan}
+      />
+
+      {/* Preview Modal */}
+      <PlanPreviewModal
+        showPreview={showPreview}
+        plans={plans}
+        gridCols={gridCols}
+        onClose={() => setShowPreview(false)}
+      />
+
+      {/* 커스텀 링크 모달 */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">
+                {editingLink ? '링크 수정' : '새 커스텀 링크'}
+              </h2>
+              <button
+                onClick={handleCloseLinkModal}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 플랜 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  플랜 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={linkFormData.planId}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, planId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">플랜을 선택하세요</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} ({plan.price.toLocaleString()}원/월)
+                      {!plan.isActive && ' [숨김]'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 커스텀 금액 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  커스텀 금액 (선택)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={linkFormData.customAmount}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, customAmount: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 pr-12"
+                    placeholder={selectedPlanForLink ? selectedPlanForLink.price.toString() : '플랜 가격 사용'}
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">원</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  비워두면 플랜의 기본 가격이 적용됩니다.
+                </p>
+              </div>
+
+              {/* 결제 유형 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  결제 유형 <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setLinkFormData({ ...linkFormData, billingType: 'recurring' })}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 transition-colors ${
+                      linkFormData.billingType === 'recurring'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className="font-medium">정기 결제</div>
+                    <div className="text-xs mt-0.5 opacity-75">매월 자동 갱신</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLinkFormData({ ...linkFormData, billingType: 'onetime' })}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 transition-colors ${
+                      linkFormData.billingType === 'onetime'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <div className="font-medium">1회성 결제</div>
+                    <div className="text-xs mt-0.5 opacity-75">지정 기간 후 해지</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* 이용 기간 (1회성일 때만) */}
+              {linkFormData.billingType === 'onetime' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-blue-700 mb-2">
+                    이용 기간 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { days: 30, label: '1개월' },
+                      { days: 60, label: '2개월' },
+                      { days: 90, label: '3개월' },
+                      { days: 180, label: '6개월' },
+                      { days: 365, label: '1년' },
+                    ].map((option) => (
+                      <button
+                        key={option.days}
+                        type="button"
+                        onClick={() => setLinkFormData({ ...linkFormData, subscriptionDays: option.days.toString() })}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                          parseInt(linkFormData.subscriptionDays) === option.days
+                            ? 'border-blue-500 bg-blue-100 text-blue-700'
+                            : 'border-blue-200 hover:border-blue-300 text-blue-600'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-blue-600 w-20">일수 입력:</span>
+                      <input
+                        type="number"
+                        value={linkFormData.subscriptionDays}
+                        onChange={(e) => setLinkFormData({ ...linkFormData, subscriptionDays: e.target.value })}
+                        className="w-24 px-3 py-1.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        min="1"
+                      />
+                      <span className="text-sm text-blue-600">일</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-blue-600 w-20">종료일:</span>
+                      <input
+                        type="date"
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            const endDate = new Date(e.target.value);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const diffDays = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays > 0) {
+                              setLinkFormData({ ...linkFormData, subscriptionDays: diffDays.toString() });
+                            }
+                          }
+                        }}
+                        className="w-40 px-3 py-1.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-500 mt-2">
+                    결제 완료 후 {linkFormData.subscriptionDays}일간 서비스 이용 후 자동 해지됩니다.
+                  </p>
+                </div>
+              )}
+
+              {/* 대상 회원 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  대상 회원 (선택)
+                </label>
+                {linkFormData.targetEmail ? (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <div className="flex-1 min-w-0">
+                      {linkFormData.targetUserName && (
+                        <p className="font-medium text-gray-900 truncate">{linkFormData.targetUserName}</p>
+                      )}
+                      <p className="text-sm text-gray-600 truncate">{linkFormData.targetEmail}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearTargetMember}
+                      className="p-1 hover:bg-blue-100 rounded"
+                    >
+                      <Xmark className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMemberSearch(!showMemberSearch)}
+                      className="w-full flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:border-gray-300 text-left"
+                    >
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">회원 검색...</span>
+                    </button>
+
+                    {showMemberSearch && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                        <div className="p-2 border-b">
+                          <input
+                            type="text"
+                            value={memberSearchQuery}
+                            onChange={(e) => {
+                              setMemberSearchQuery(e.target.value);
+                              searchMembers(e.target.value);
+                            }}
+                            placeholder="이름 또는 이메일로 검색"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {memberSearchLoading ? (
+                            <div className="p-4 text-center text-gray-500">
+                              <Spinner size="sm" />
+                            </div>
+                          ) : memberSearchResults.length > 0 ? (
+                            memberSearchResults.map((member) => (
+                              <button
+                                key={member.id}
+                                type="button"
+                                onClick={() => handleSelectMember(member)}
+                                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-left"
+                              >
+                                <User className="w-4 h-4 text-gray-400" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {member.displayName || member.name || '이름 없음'}
+                                  </p>
+                                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                                </div>
+                              </button>
+                            ))
+                          ) : memberSearchQuery ? (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              검색 결과가 없습니다
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              이름 또는 이메일을 입력하세요
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  비워두면 누구나 사용할 수 있습니다.
+                </p>
+              </div>
+
+              {/* 링크 유효기간 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    링크 유효 시작일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={linkFormData.validFrom}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, validFrom: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    링크 유효 종료일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={linkFormData.validUntil}
+                    onChange={(e) => setLinkFormData({ ...linkFormData, validUntil: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* 최대 사용 횟수 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  최대 사용 횟수
+                </label>
+                <input
+                  type="number"
+                  value={linkFormData.maxUses}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, maxUses: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0"
+                  min="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  0으로 설정하면 무제한 사용 가능합니다.
+                </p>
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  메모 (선택)
+                </label>
+                <textarea
+                  value={linkFormData.memo}
+                  onChange={(e) => setLinkFormData({ ...linkFormData, memo: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="관리용 메모 (예: ABC 기업 특가)"
+                />
+              </div>
+
+              {/* 현재 사용 횟수 (수정 모드에서만) */}
+              {editingLink && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    현재 사용 횟수: <span className="font-medium">{editingLink.currentUses}회</span>
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    생성일: {formatDateTime(editingLink.createdAt)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleCloseLinkModal}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveLink}
+                disabled={savingLink}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {savingLink ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

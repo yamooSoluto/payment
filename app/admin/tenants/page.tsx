@@ -513,10 +513,16 @@ export default function TenantsPage() {
         return <span className={`${baseClass} bg-blue-100 text-blue-700`}>체험{pendingIndicator}</span>;
       case 'pending_cancel':
         return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
+      case 'past_due':
+        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제실패</span>;
+      case 'suspended':
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>일시정지</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':
         return <span className={`${baseClass} bg-gray-100 text-gray-600`}>만료</span>;
+      case 'completed':
+        return <span className={`${baseClass} bg-gray-100 text-gray-500`}>완료</span>;
       case 'none':
         return <span className={`${baseClass} bg-gray-100 text-gray-500`}>미구독</span>;
       default:

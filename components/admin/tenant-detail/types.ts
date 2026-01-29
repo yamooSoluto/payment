@@ -131,15 +131,21 @@ export function getSubscriptionStatusBadge(status: unknown) {
     trialing: `${baseClass} bg-blue-100 text-blue-700`,
     canceled: `${baseClass} bg-red-100 text-red-700`,
     pending_cancel: `${baseClass} bg-orange-100 text-orange-700`,
+    past_due: `${baseClass} bg-red-100 text-red-700`,
+    suspended: `${baseClass} bg-yellow-100 text-yellow-700`,
     expired: `${baseClass} bg-gray-100 text-gray-600`,
+    completed: `${baseClass} bg-gray-100 text-gray-500`,
   };
   const labels: Record<string, string> = {
     active: '구독중',
     trial: '체험',
     trialing: '체험',
     canceled: '해지',
-    pending_cancel: '해지 예정',
+    pending_cancel: '해지예정',
+    past_due: '결제실패',
+    suspended: '일시정지',
     expired: '만료',
+    completed: '완료',
   };
   const style = styles[statusStr] || `${baseClass} bg-gray-100 text-gray-600`;
   const label = labels[statusStr] || '미구독';
