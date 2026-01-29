@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchTenants = useCallback(async (firebaseUser: User) => {
     try {
       const idToken = await firebaseUser.getIdToken();
-      const res = await fetch(`/api/tenants?email=${encodeURIComponent(firebaseUser.email || '')}&skipSubscription=true`, {
+      const res = await fetch('/api/tenants?skipSubscription=true', {
         headers: { 'Authorization': `Bearer ${idToken}` },
       });
       if (res.ok) {
@@ -110,6 +110,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchTenants]);
 
+  // Firebase Auth 로그인 시 서버 세션 쿠키 생성
+  const createSessionCookie = useCallback(async (firebaseUser: User) => {
+    try {
+      const idToken = await firebaseUser.getIdToken();
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+    } catch (error) {
+      console.error('세션 쿠키 생성 실패:', error);
+    }
+  }, []);
+
+  // 서버 세션 쿠키 삭제
+  const deleteSessionCookie = useCallback(async () => {
+    try {
+      await fetch('/api/auth/session', { method: 'DELETE' });
+    } catch (error) {
+      console.error('세션 쿠키 삭제 실패:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -120,7 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cached?.email === firebaseUser.email) {
           setHasTenants(cached.hasTenants);
         }
-        // 백그라운드에서 최신 정보 가져오기
+        // 서버 세션 쿠키 생성 + 최신 정보 가져오기 (병렬)
+        createSessionCookie(firebaseUser);
         fetchTenants(firebaseUser);
       } else {
         setHasTenants(false);
@@ -131,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [fetchTenants]);
+  }, [fetchTenants, createSessionCookie]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const result = await signInWithEmailAndPassword(auth, email, password);
@@ -156,8 +183,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null); // 즉시 로그아웃 상태로 변경 (UI 즉시 반영)
     setHasTenants(false);
     clearCachedAuthState();
+    deleteSessionCookie(); // 서버 세션 쿠키 삭제 (백그라운드)
     await firebaseSignOut(auth);
-  }, []);
+  }, [deleteSessionCookie]);
 
   const resetPassword = useCallback(async (email: string) => {
     await sendPasswordResetEmail(auth, email);

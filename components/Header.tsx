@@ -104,11 +104,10 @@ export default function Header({ siteSettings }: HeaderProps) {
     // 마이페이지: 로그인 시에만 표시
     if (isAccount) {
       if (!user) return null;
-      const href = user?.email ? `${item.path}?email=${encodeURIComponent(user.email)}` : item.path;
       return (
         <Link
           key={item.id}
-          href={href}
+          href={item.path}
           className={`text-gray-600 hover:text-yamoo-dark transition-colors font-medium ${isMobile ? 'py-2' : ''}`}
           onClick={isMobile ? () => setMobileMenuOpen(false) : undefined}
         >
@@ -134,16 +133,11 @@ export default function Header({ siteSettings }: HeaderProps) {
       );
     }
 
-    // 일반 내부 링크 (요금제의 경우 이메일 추가)
-    let href = item.path;
-    if (item.id === 'plan' && user?.email) {
-      href = `${item.path}?email=${encodeURIComponent(user.email)}`;
-    }
-
+    // 일반 내부 링크
     return (
       <Link
         key={item.id}
-        href={href}
+        href={item.path}
         className={`text-gray-600 hover:text-yamoo-dark transition-colors font-medium ${isMobile ? 'py-2' : ''}`}
         onClick={isMobile ? () => setMobileMenuOpen(false) : undefined}
       >

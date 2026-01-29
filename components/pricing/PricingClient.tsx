@@ -94,7 +94,7 @@ export default function PricingClient({
     const fetchTenants = async () => {
       try {
         const idToken = await user.getIdToken();
-        const response = await fetch(`/api/tenants?email=${encodeURIComponent(userEmail)}&skipSubscription=true`, {
+        const response = await fetch('/api/tenants?skipSubscription=true', {
           headers: {
             'Authorization': `Bearer ${idToken}`,
           },

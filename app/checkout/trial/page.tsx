@@ -1,16 +1,34 @@
 import { redirect } from 'next/navigation';
-import { getSubscription } from '@/lib/auth';
+import { verifyToken, getSubscription } from '@/lib/auth';
+import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { CheckCircle, NavArrowRight } from 'iconoir-react';
 import Link from 'next/link';
 
 interface TrialPageProps {
-  searchParams: Promise<{ email?: string }>;
+  searchParams: Promise<{ token?: string }>;
 }
 
 export default async function TrialPage({ searchParams }: TrialPageProps) {
   const params = await searchParams;
-  const { email } = params;
+  const { token } = params;
+
+  let email: string | null = null;
+
+  // 1. 토큰으로 인증 (포탈 SSO)
+  if (token) {
+    email = await verifyToken(token);
+  }
+  // 2. 세션 쿠키로 인증
+  else {
+    const sessionId = await getAuthSessionIdFromCookie();
+    if (sessionId) {
+      const session = await getAuthSession(sessionId);
+      if (session) {
+        email = session.email;
+      }
+    }
+  }
 
   if (!email) {
     redirect('/login?redirect=/plan');
@@ -19,7 +37,7 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
   // 이미 구독 중인지 확인
   const subscription = await getSubscription(email);
   if (subscription?.status === 'active') {
-    redirect(`/account?email=${encodeURIComponent(email)}`);
+    redirect('/account');
   }
 
   // Trial 구독 생성
@@ -71,7 +89,7 @@ export default async function TrialPage({ searchParams }: TrialPageProps) {
           </Link>
 
           <Link
-            href={`/account?email=${encodeURIComponent(email)}`}
+            href="/account"
             className="btn-secondary w-full inline-block"
           >
             마이페이지로 이동

@@ -421,7 +421,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
               포탈 이동
             </a>
             <a
-              href={`/account?email=${encodeURIComponent(formData.email)}`}
+              href="/account"
               className="inline-block bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-8 rounded-lg transition-colors"
             >
               마이페이지

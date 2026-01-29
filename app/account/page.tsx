@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 interface AccountPageProps {
-  searchParams: Promise<{ token?: string; email?: string }>;
+  searchParams: Promise<{ token?: string }>;
 }
 
 // Timestamp를 ISO string으로 변환
@@ -32,7 +32,7 @@ function serializeTimestamp(val: any): string | null {
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
-  const { token, email: emailParam } = params;
+  const { token } = params;
 
   let email: string | null = null;
   let sessionToken: string | undefined = undefined;
@@ -54,12 +54,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       // 세션 API를 통해 쿠키 설정 후 돌아오기 (URL에서 토큰 제거)
       redirect(`/api/auth/session?token=${encodeURIComponent(token)}&redirect=/account`);
     }
-  }
-
-  // 3. 이메일 파라미터로 접근 - 세션 쿠키가 없으면 로그인으로
-  if (!email && emailParam) {
-    // 이메일만으로는 세션 생성 불가, 로그인 필요
-    redirect('/login');
   }
 
   if (!email) {

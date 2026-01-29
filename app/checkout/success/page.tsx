@@ -78,7 +78,6 @@ function SuccessContent() {
   const reserved = searchParams.get('reserved') === 'true'; // 플랜 예약 모드
   const changed = searchParams.get('changed') === 'true'; // 즉시 플랜 변경 모드
   const token = searchParams.get('token');
-  const email = searchParams.get('email');
 
   // 이용 기간 계산 (URL 파라미터 사용)
   // 플랜 예약 모드에서는 start가 첫 결제일(= 이용 시작일)
@@ -99,8 +98,6 @@ function SuccessContent() {
   // 인증 정보를 마이페이지 URL에 포함
   const authQuery = token
     ? `?token=${token}`
-    : email
-    ? `?email=${encodeURIComponent(email)}`
     : '';
   // tenantId가 있으면 해당 매장 상세 페이지로, 없으면 마이페이지로
   const accountUrl = tenantId

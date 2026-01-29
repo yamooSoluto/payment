@@ -310,7 +310,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   // Trial 플랜은 무료 - 별도 처리 필요
   if (plan === 'trial') {
-    redirect(`/checkout/trial?email=${encodeURIComponent(email)}`);
+    redirect('/checkout/trial');
   }
 
   // 무료 플랜인 경우 (trial 이외) 에러 처리
