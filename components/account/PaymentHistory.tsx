@@ -410,92 +410,85 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
       <div className="divide-y">
         {displayPayments.map((payment) => (
           <div key={payment.id} className="py-4 first:pt-0 last:pb-0">
-            {/* 원결제 내역 */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5">
-                  {getStatusIcon(payment)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-gray-900 text-sm sm:text-base">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 shrink-0">
+                {getStatusIcon(payment)}
+              </div>
+              <div className="min-w-0 flex-1">
+                {/* 플랜명 + 상태뱃지 + 영수증 */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium text-gray-900 text-sm sm:text-base truncate">
                     {(payment.type === 'upgrade' || payment.type === 'plan_change') && payment.previousPlan
                       ? `${getPlanName(payment.previousPlan)} → ${getPlanName(payment.plan)} 플랜 변경`
                       : `${getPlanName(payment.plan)} 플랜`}
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-500">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusStyle(payment)}`}>
+                      {getStatusText(payment)}
+                    </span>
+                    {(payment.status === 'done' || payment.status === 'completed') && (
+                      payment.receiptUrl ? (
+                        <a
+                          href={payment.receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                          title="영수증 보기"
+                        >
+                          <Page width={14} height={14} strokeWidth={1.5} />
+                        </a>
+                      ) : (
+                        <a
+                          href={`/api/invoices/${payment.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gray-400 hover:text-yamoo-primary transition-colors"
+                          title={payment.hasRefund ? '영수증 (환불 포함)' : '인보이스'}
+                        >
+                          <Page width={14} height={14} strokeWidth={1.5} />
+                        </a>
+                      )
+                    )}
+                  </div>
+                </div>
+                {/* 결제일 + 금액 (같은 줄) */}
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-xs sm:text-sm text-gray-500">
                     {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
                     {payment.cardCompany && ` · ${payment.cardCompany}카드`}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 ml-7 sm:ml-0">
-                <span className={`font-semibold text-sm sm:text-base ${
-                  payment.hasRefund && payment.totalRefundedAmount >= payment.amount
-                    ? 'text-gray-400 line-through'
-                    : payment.status === 'canceled'
+                  </span>
+                  <span className={`font-semibold text-sm sm:text-base ${
+                    payment.hasRefund && payment.totalRefundedAmount >= payment.amount
                       ? 'text-gray-400 line-through'
-                      : 'text-gray-900'
-                }`}>
-                  {formatPrice(payment.amount)}원
-                </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusStyle(payment)}`}>
-                  {getStatusText(payment)}
-                </span>
-                {/* 영수증/인보이스 버튼 */}
-                {(payment.status === 'done' || payment.status === 'completed') && (
-                  payment.receiptUrl ? (
-                    <a
-                      href={payment.receiptUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                      title="영수증 보기"
-                    >
-                      <Page width={14} height={14} strokeWidth={1.5} />
-                    </a>
-                  ) : (
-                    <a
-                      href={`/api/invoices/${payment.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-400 hover:text-yamoo-primary transition-colors"
-                      title={payment.hasRefund ? '영수증 (환불 포함)' : '인보이스'}
-                    >
-                      <Page width={14} height={14} strokeWidth={1.5} />
-                    </a>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* 환불 내역 - 원결제 아래에 하위 행으로 표시 */}
-            {payment.hasRefund && payment.refunds.map((refund, index) => (
-              <div key={index} className="mt-2 ml-7 pl-3 border-l-2 border-red-200">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
+                      : payment.status === 'canceled'
+                        ? 'text-gray-400 line-through'
+                        : 'text-gray-900'
+                  }`}>
+                    {formatPrice(payment.amount)}원
+                  </span>
+                </div>
+                {/* 환불 내역 */}
+                {payment.hasRefund && payment.refunds.map((refund, index) => (
+                  <div key={index} className="flex items-center justify-between mt-1 pl-3 border-l-2 border-red-200">
                     <span className="text-xs sm:text-sm text-gray-500">
-                      └ {formatDate(refund.date)} 환불
-                      {refund.reason && <span className="text-gray-400"> · {refund.reason}</span>}
+                      {formatDate(refund.date)} 환불
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-red-600">
                       -{formatPrice(refund.amount)}원
                     </span>
                   </div>
-                </div>
+                ))}
+                {/* 실결제 금액 (부분 환불인 경우) */}
+                {payment.hasRefund && payment.totalRefundedAmount < payment.amount && (
+                  <div className="flex items-center justify-between mt-1 pl-3 border-l-2 border-gray-200">
+                    <span className="text-xs sm:text-sm text-gray-500">실결제</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {formatPrice(payment.amount - payment.totalRefundedAmount)}원
+                    </span>
+                  </div>
+                )}
               </div>
-            ))}
-
-            {/* 실결제 금액 표시 (환불이 있는 경우) */}
-            {payment.hasRefund && payment.totalRefundedAmount < payment.amount && (
-              <div className="mt-2 ml-7 pl-3 text-right">
-                <span className="text-xs text-gray-500">실결제: </span>
-                <span className="text-sm font-semibold text-gray-900">
-                  {formatPrice(payment.amount - payment.totalRefundedAmount)}원
-                </span>
-              </div>
-            )}
+            </div>
           </div>
         ))}
       </div>

@@ -59,7 +59,7 @@ export async function DELETE(request: NextRequest) {
       const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
       if (subscriptionDoc.exists) {
         const subscription = subscriptionDoc.data();
-        if (subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'canceled') {
+        if (subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'pending_cancel') {
           return NextResponse.json(
             { error: '활성 구독 또는 체험 중인 매장이 있는 경우 탈퇴할 수 없습니다.' },
             { status: 400 }
@@ -148,7 +148,7 @@ export async function DELETE(request: NextRequest) {
       for (const tenantId of tenantIds) {
         const paymentsSnapshot = await db.collection('payments')
           .where('tenantId', '==', tenantId)
-          .where('status', '==', 'DONE')
+          .where('status', '==', 'completed')
           .limit(1)
           .get();
         if (!paymentsSnapshot.empty) {

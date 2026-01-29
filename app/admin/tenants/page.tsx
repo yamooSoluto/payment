@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { HomeSimpleDoor, NavArrowLeft, NavArrowRight, Search, Filter, Xmark, Settings, Plus, Trash, ViewColumns3, HistoricShield, Menu } from 'iconoir-react';
 import Link from 'next/link';
@@ -96,6 +97,7 @@ export default function TenantsPage() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [moreMenuPosition, setMoreMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuDropdownRef = useRef<HTMLDivElement>(null);
   const [filterPosition, setFilterPosition] = useState<{ top: number; right: number } | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const [pagination, setPagination] = useState<Pagination>({
@@ -515,7 +517,8 @@ export default function TenantsPage() {
         setShowColumnSettings(false);
         setColumnSettingsPosition(null);
       }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node) &&
+        (!moreMenuDropdownRef.current || !moreMenuDropdownRef.current.contains(event.target as Node))) {
         setShowMoreMenu(false);
         setMoreMenuPosition(null);
       }
@@ -571,11 +574,10 @@ export default function TenantsPage() {
                     setShowMoreMenu(true);
                   }
                 }}
-                className={`w-11 h-11 flex items-center justify-center rounded-2xl transition-all duration-300 ${
-                  showMoreMenu
-                    ? 'bg-gray-900 text-white shadow-xl'
-                    : 'bg-white/80 backdrop-blur-xl text-gray-700 shadow-lg border border-white/60 hover:bg-white hover:shadow-xl hover:scale-105'
-                }`}
+                className={`w-11 h-11 flex items-center justify-center rounded-2xl transition-all duration-300 ${showMoreMenu
+                  ? 'bg-gray-900 text-white shadow-xl'
+                  : 'bg-white/80 backdrop-blur-xl text-gray-700 shadow-lg border border-white/60 hover:bg-white hover:shadow-xl hover:scale-105'
+                  }`}
               >
                 {showMoreMenu ? (
                   <Xmark className="w-5 h-5" />
@@ -583,8 +585,9 @@ export default function TenantsPage() {
                   <Menu className="w-5 h-5" />
                 )}
               </button>
-              {showMoreMenu && moreMenuPosition && (
+              {showMoreMenu && moreMenuPosition && createPortal(
                 <div
+                  ref={moreMenuDropdownRef}
                   className="fixed w-52 backdrop-blur-xl bg-white/90 rounded-2xl shadow-2xl border border-white/60 py-2 overflow-hidden"
                   style={{ top: moreMenuPosition.top, right: moreMenuPosition.right, zIndex: 9999 }}
                 >
@@ -641,7 +644,8 @@ export default function TenantsPage() {
                     </div>
                     <span>필드 설정</span>
                   </button>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           )}

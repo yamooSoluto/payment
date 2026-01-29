@@ -72,10 +72,10 @@ export async function POST(request: NextRequest) {
             const subscriptionDoc = await db.collection('subscriptions').doc(tenantId).get();
             if (subscriptionDoc.exists) {
               const subscription = subscriptionDoc.data();
-              if (subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'canceled') {
+              if (subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'pending_cancel') {
                 hasActiveSubscription = true;
                 activeReason = subscription?.status === 'trial' ? '무료체험 중' :
-                               subscription?.status === 'canceled' ? '해지 예정' : '구독 중';
+                               subscription?.status === 'pending_cancel' ? '해지 예정' : '구독 중';
                 break;
               }
             }
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
           for (const tenantId of tenantIds) {
             const paymentsSnapshot = await db.collection('payments')
               .where('tenantId', '==', tenantId)
-              .where('status', '==', 'DONE')
+              .where('status', '==', 'completed')
               .limit(1)
               .get();
             if (!paymentsSnapshot.empty) {
