@@ -47,6 +47,7 @@ export interface TenantInfo {
 export interface Payment {
   id: string;
   amount: number;
+  refundedAmount?: number;
   status: string;
   planId: string;
   plan?: string;

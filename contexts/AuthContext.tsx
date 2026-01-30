@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -77,6 +77,7 @@ function clearCachedAuthState() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const signingOut = useRef(false);
   const [hasTenants, setHasTenants] = useState(() => {
     // 초기값: 캐시에서 가져오기
     const cached = getCachedAuthState();
@@ -154,7 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCachedAuthState(null);
       }
 
-      setLoading(false);
+      if (!signingOut.current) {
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
@@ -180,9 +183,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchTenants]);
 
   const signOut = useCallback(async () => {
+    signingOut.current = true;
+    setLoading(true); // Auth guard에서 세션 검증이 트리거되지 않도록 loading 상태 유지
     setUser(null); // 즉시 로그아웃 상태로 변경 (UI 즉시 반영)
     setHasTenants(false);
     clearCachedAuthState();
+
+    // SSO 토큰들 제거
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('ssoToken');
+        localStorage.removeItem('idToken');
+        sessionStorage.removeItem('ssoToken');
+        sessionStorage.removeItem('idToken');
+      } catch {
+        // 무시
+      }
+    }
+
     deleteSessionCookie(); // 서버 세션 쿠키 삭제 (백그라운드)
     await firebaseSignOut(auth);
   }, [deleteSessionCookie]);

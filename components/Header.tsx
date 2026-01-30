@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, Xmark, OpenNewWindow } from 'iconoir-react';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 
 interface MenuItem {
@@ -36,13 +35,13 @@ interface HeaderProps {
 
 export default function Header({ siteSettings }: HeaderProps) {
   const { user, loading, hasTenants, signOut } = useAuth();
-  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      router.replace('/login');
+      // 로그아웃 후 로그인 페이지로 이동 (URL 파라미터 완전히 제거)
+      window.location.href = '/login';
     } catch (error) {
       console.error('로그아웃 실패:', error);
     }
