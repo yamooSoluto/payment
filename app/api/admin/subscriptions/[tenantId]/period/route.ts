@@ -92,9 +92,9 @@ export async function PATCH(
       changes.push(`종료일: ${currentPeriodEnd}`);
 
       // 종료일 변경 시 결제일도 자동 업데이트 (종료일 + 1일)
-      // 단, Trial 플랜(결제일 없음)이 아닌 경우에만
-      const isTrial = existingSubscription.plan === 'trial' || existingSubscription.status === 'trial';
-      if (!isTrial) {
+      // 단, Trial/Enterprise 플랜(결제일 없음)이 아닌 경우에만
+      const noBilling = existingSubscription.plan === 'trial' || existingSubscription.status === 'trial' || existingSubscription.plan === 'enterprise';
+      if (!noBilling) {
         const newBillingDate = new Date(newEndDate);
         newBillingDate.setDate(newBillingDate.getDate() + 1);
         updateData.nextBillingDate = newBillingDate;

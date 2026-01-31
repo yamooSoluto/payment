@@ -88,17 +88,20 @@ export async function POST(
     }
 
     // 다음 결제일 계산
-    // - Trial 플랜: 결제일 없음 (null)
-    // - 유료 플랜: 종료일 + 1일 (관리자가 임의 설정 불가)
+    // - Trial/Enterprise 플랜: 결제일 없음 (null)
+    //   - Trial: 무료체험이므로 결제 없음
+    //   - Enterprise: 후불 결제이므로 자동결제 없음
+    // - 기타 유료 플랜: 종료일 + 1일 (관리자가 임의 설정 불가)
     // 이유: 결제일 = 종료일 다음날이어야 기간 공백 없이 연속됨
     const isTrial = plan === 'trial';
+    const noBilling = plan === 'trial' || plan === 'enterprise';
     let billingDate: Date | null = null;
-    if (!isTrial) {
-      // 유료 플랜이면 종료일 + 1일
+    if (!noBilling) {
+      // 정기결제 플랜이면 종료일 + 1일
       billingDate = new Date(endDate);
       billingDate.setDate(billingDate.getDate() + 1);
     }
-    // trial은 null 유지
+    // trial/enterprise는 null 유지
 
     // 상태 및 금액 결정
     const status = isTrial ? 'trial' : 'active';

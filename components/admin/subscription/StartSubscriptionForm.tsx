@@ -40,6 +40,7 @@ export default function StartSubscriptionForm({
   const [error, setError] = useState('');
 
   const isTrial = plan === 'trial';
+  const noBilling = plan === 'trial' || plan === 'enterprise';
   const selectedPlan = plans.find(p => p.id === plan);
 
   // 플랜 목록 가져오기
@@ -68,7 +69,7 @@ export default function StartSubscriptionForm({
     const endDate = calculatePeriodEnd(today);
     setCurrentPeriodStart(formatDateForInput(today));
     setCurrentPeriodEnd(formatDateForInput(endDate));
-    if (!isTrial) {
+    if (!noBilling) {
       setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
     } else {
       setNextBillingDate('');
@@ -82,7 +83,7 @@ export default function StartSubscriptionForm({
       const startDate = new Date(value);
       const endDate = calculatePeriodEnd(startDate);
       setCurrentPeriodEnd(formatDateForInput(endDate));
-      if (!isTrial) {
+      if (!noBilling) {
         setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
       }
     }
@@ -91,7 +92,7 @@ export default function StartSubscriptionForm({
   // 종료일 변경 시 결제일 재계산
   const handleEndDateChange = (value: string) => {
     setCurrentPeriodEnd(value);
-    if (value && !isTrial) {
+    if (value && !noBilling) {
       const endDate = new Date(value);
       setNextBillingDate(formatDateForInput(calculateNextBillingDate(endDate)));
     }
@@ -100,7 +101,7 @@ export default function StartSubscriptionForm({
   // 플랜 변경 시 결제일 처리
   const handlePlanChange = (newPlan: PlanType) => {
     setPlan(newPlan);
-    if (newPlan === 'trial') {
+    if (newPlan === 'trial' || newPlan === 'enterprise') {
       setNextBillingDate('');
     } else if (currentPeriodEnd) {
       setNextBillingDate(formatDateForInput(calculateNextBillingDate(new Date(currentPeriodEnd))));
@@ -124,7 +125,7 @@ export default function StartSubscriptionForm({
           plan,
           currentPeriodStart: currentPeriodStart || undefined,
           currentPeriodEnd: currentPeriodEnd || undefined,
-          nextBillingDate: isTrial ? null : (nextBillingDate || undefined),
+          nextBillingDate: noBilling ? null : (nextBillingDate || undefined),
           reason: reason || undefined,
         }),
       });
@@ -194,7 +195,7 @@ export default function StartSubscriptionForm({
           />
         </div>
 
-        {!isTrial && (
+        {!noBilling && (
           <div>
             <label className="block text-xs text-gray-600 mb-1">다음 결제일</label>
             <input
@@ -209,9 +210,9 @@ export default function StartSubscriptionForm({
           </div>
         )}
 
-        {isTrial && (
+        {noBilling && (
           <p className="text-xs text-gray-500">
-            Trial은 결제일이 설정되지 않습니다.
+            {isTrial ? 'Trial은 결제일이 설정되지 않습니다.' : 'Enterprise는 후불 결제로, 결제일이 설정되지 않습니다.'}
           </p>
         )}
       </div>

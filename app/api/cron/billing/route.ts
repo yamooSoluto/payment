@@ -301,7 +301,7 @@ export async function GET(request: NextRequest) {
         const newBaseAmount = newPlanInfo?.price || newAmount;
 
         // 플랜 변경 적용
-        await db.collection('subscriptions').doc(tenantId).update({
+        const planUpdateData: Record<string, unknown> = {
           plan: newPlan,
           amount: newAmount,
           baseAmount: newBaseAmount,  // 플랜 기본 가격 (정기결제 금액, UI 표시용)
@@ -314,7 +314,14 @@ export async function GET(request: NextRequest) {
           pendingChangeAt: null,
           updatedAt: new Date(),
           updatedBy: 'system',
-        });
+        };
+
+        // Enterprise는 후불 결제이므로 자동결제일 제거
+        if (newPlan === 'enterprise') {
+          planUpdateData.nextBillingDate = null;
+        }
+
+        await db.collection('subscriptions').doc(tenantId).update(planUpdateData);
 
         // tenants 컬렉션 동기화
         await syncPlanChange(tenantId, newPlan, undefined, 'system');

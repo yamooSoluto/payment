@@ -104,15 +104,17 @@ export default function SubscriptionStatusCard({
         <div>
           <div className="text-xs text-gray-500">다음 결제일</div>
           <div className="font-medium text-gray-700">
-            {subscription.status === 'trial' || subscription.status === 'trialing'
-              ? (subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-')
-              : formatDate(subscription.nextBillingDate)}
+            {plan === 'enterprise'
+              ? '-'
+              : subscription.status === 'trial' || subscription.status === 'trialing'
+                ? (subscription.nextBillingDate ? formatDate(subscription.nextBillingDate) : '-')
+                : formatDate(subscription.nextBillingDate)}
           </div>
         </div>
         <div>
           <div className="text-xs text-gray-500">결제 금액</div>
           <div className="font-medium text-gray-700">
-            {subscription.amount?.toLocaleString() || 0}원
+            {plan === 'enterprise' ? '후불' : `${subscription.amount?.toLocaleString() || 0}원`}
           </div>
         </div>
       </div>

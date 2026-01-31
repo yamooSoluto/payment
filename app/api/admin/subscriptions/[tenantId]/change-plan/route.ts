@@ -100,6 +100,11 @@ export async function POST(
         updatedBy: 'admin',
       };
 
+      // Enterprise는 후불 결제이므로 자동결제일 제거
+      if (newPlan === 'enterprise') {
+        updateData.nextBillingDate = null;
+      }
+
       await db.collection('subscriptions').doc(tenantId).update(updateData);
 
       // tenants 컬렉션도 업데이트

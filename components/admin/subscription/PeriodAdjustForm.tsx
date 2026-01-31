@@ -35,6 +35,9 @@ export default function PeriodAdjustForm({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const plan = subscription?.plan as string;
+  const noBilling = plan === 'trial' || plan === 'enterprise';
+
   const handleSubmit = async () => {
     setError('');
     setIsSaving(true);
@@ -45,7 +48,7 @@ export default function PeriodAdjustForm({
         body: JSON.stringify({
           currentPeriodStart: currentPeriodStart || undefined,
           currentPeriodEnd: currentPeriodEnd || undefined,
-          nextBillingDate: nextBillingDate || null,
+          nextBillingDate: noBilling ? null : (nextBillingDate || null),
           reason: reason || undefined,
         }),
       });
@@ -87,7 +90,7 @@ export default function PeriodAdjustForm({
               const newEndDate = e.target.value;
               setCurrentPeriodEnd(newEndDate);
               // 종료일 변경 시 결제일 자동 계산 (종료일 + 1일)
-              if (newEndDate) {
+              if (newEndDate && !noBilling) {
                 const billing = calculateNextBillingDate(newEndDate);
                 setNextBillingDate(formatDateForInput(billing));
               }
@@ -96,16 +99,18 @@ export default function PeriodAdjustForm({
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">다음 결제일</label>
-          <input
-            type="date"
-            value={nextBillingDate}
-            disabled
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
-          />
-          <p className="text-xs text-gray-500 mt-1">종료일 + 1일로 자동 설정됩니다.</p>
-        </div>
+        {!noBilling && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">다음 결제일</label>
+            <input
+              type="date"
+              value={nextBillingDate}
+              disabled
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-1">종료일 + 1일로 자동 설정됩니다.</p>
+          </div>
+        )}
       </div>
 
       {/* 메모 */}
