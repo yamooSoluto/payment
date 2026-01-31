@@ -149,7 +149,11 @@ export function formatDateForInput(date: Date | string | null): string {
 export function calculatePeriodEnd(startDate: Date | string): Date {
   const start = typeof startDate === 'string' ? new Date(startDate) : new Date(startDate);
   const end = new Date(start);
+  const originalDay = end.getDate();
   end.setMonth(end.getMonth() + 1);
+  if (end.getDate() !== originalDay) {
+    end.setDate(0);
+  }
   end.setDate(end.getDate() - 1);
   return end;
 }
