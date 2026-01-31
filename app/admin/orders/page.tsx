@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { CreditCard, Search, Filter, Download, Calendar, Xmark, NavArrowLeft, NavArrowRight, MoreHoriz, RefreshDouble, CheckSquare, User } from 'iconoir-react';
-import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 import RefundModal from '@/components/admin/member-detail/RefundModal';
 
@@ -251,11 +250,13 @@ export default function OrdersPage() {
   };
 
   // 결제 내역 xlsx 내보내기
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filteredPayments.length === 0) {
       alert('내보낼 결제 내역이 없습니다.');
       return;
     }
+
+    const XLSX = await import('xlsx');
 
     const exportData = filteredPayments.map((payment) => {
       const isRefund = payment.type === 'refund' || payment.type === 'cancel_refund' || payment.type === 'downgrade_refund' || (payment.amount ?? 0) < 0;

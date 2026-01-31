@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { CreditCard, Calendar, Search, Xmark, Filter, Download, NavArrowLeft, NavArrowRight, MoreHoriz } from 'iconoir-react';
-import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 import { Payment, TenantInfo, Member, PAYMENT_CATEGORY_LABELS, PAYMENT_TYPE_LABELS, INITIATED_BY_LABELS, getPlanName, getThisMonthRange } from './types';
 import PaymentDetailModal from './PaymentDetailModal';
@@ -95,8 +94,9 @@ export default function PaymentHistorySection({ memberId, member, tenants }: Pay
   const totalPages = Math.ceil(filteredPayments.length / PAYMENTS_PER_PAGE);
   const paginated = filteredPayments.slice((page - 1) * PAYMENTS_PER_PAGE, page * PAYMENTS_PER_PAGE);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filteredPayments.length === 0) { alert('내보낼 결제 내역이 없습니다.'); return; }
+    const XLSX = await import('xlsx');
     const exportData = filteredPayments.map((payment) => {
       const isRefund = payment.transactionType === 'refund' || (payment.amount ?? 0) < 0;
       const tenant = tenants.find(t => t.tenantId === payment.tenantId);

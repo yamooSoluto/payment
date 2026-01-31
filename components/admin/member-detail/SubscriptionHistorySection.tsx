@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageFlip, Calendar, Search, Xmark, Filter, Download, NavArrowLeft, NavArrowRight } from 'iconoir-react';
-import * as XLSX from 'xlsx';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionHistoryItem, TenantInfo, Member, CHANGE_TYPE_LABELS, CHANGED_BY_LABELS, getPlanName, getSubStatusLabel, getThisMonthRange } from './types';
 
@@ -78,8 +77,9 @@ export default function SubscriptionHistorySection({ memberId, member, tenants }
   const totalPages = Math.ceil(filtered.length / SUBS_PER_PAGE);
   const paginated = filtered.slice((page - 1) * SUBS_PER_PAGE, page * SUBS_PER_PAGE);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filtered.length === 0) { alert('내보낼 구독 내역이 없습니다.'); return; }
+    const XLSX = await import('xlsx');
     const exportData = filtered.map((record) => ({
       '매장': record.brandName,
       '플랜': getPlanName(record.plan),

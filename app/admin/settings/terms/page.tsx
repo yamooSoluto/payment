@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Page, Check, Eye, Xmark, Clock, Calendar, Trash } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
-import Link from '@tiptap/extension-link';
-import TextAlign from '@tiptap/extension-text-align';
+import dynamic from 'next/dynamic';
+import type { TermsEditorAreaHandle } from '@/components/admin/settings/TermsEditorArea';
+
+const TermsEditorArea = dynamic(() => import('@/components/admin/settings/TermsEditorArea'), {
+  ssr: false,
+  loading: () => <div className="h-[400px] border-t border-gray-200 animate-pulse bg-gray-50" />,
+});
 
 type TabType = 'terms' | 'privacy';
 
@@ -27,99 +29,6 @@ interface HistoryItem {
   publishedBy: string;
   version: number;
   effectiveDate: string | null;
-}
-
-function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
-  if (!editor) return null;
-
-  return (
-    <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="제목"
-      >
-        H2
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="소제목"
-      >
-        H3
-      </button>
-      <div className="w-px bg-gray-300 mx-1" />
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        className={`px-2 py-1 text-sm font-bold rounded ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="굵게"
-      >
-        B
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={`px-2 py-1 text-sm italic rounded ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="기울임"
-      >
-        I
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className={`px-2 py-1 text-sm underline rounded ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="밑줄"
-      >
-        U
-      </button>
-      <div className="w-px bg-gray-300 mx-1" />
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="글머리 기호"
-      >
-        • 목록
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="번호 목록"
-      >
-        1. 목록
-      </button>
-      <div className="w-px bg-gray-300 mx-1" />
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().setTextAlign('left').run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="왼쪽 정렬"
-      >
-        ◀
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().setTextAlign('center').run()}
-        className={`px-2 py-1 text-sm rounded ${editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-          }`}
-        title="가운데 정렬"
-      >
-        ◆
-      </button>
-    </div>
-  );
 }
 
 function PreviewModal({
@@ -334,46 +243,7 @@ export default function TermsSettingsPage() {
   const [publishPrivacySuccess, setPublishPrivacySuccess] = useState(false);
   const [error, setError] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-  const termsEditor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({ openOnClick: false }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    ],
-    content: termsContent,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none min-h-[400px] p-4 focus:outline-none',
-      },
-    },
-    onUpdate: ({ editor }) => {
-      setTermsContent(editor.getHTML());
-      setHasUnsavedChanges(true);
-    },
-  });
-
-  const privacyEditor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({ openOnClick: false }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    ],
-    content: privacyContent,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none min-h-[400px] p-4 focus:outline-none',
-      },
-    },
-    onUpdate: ({ editor }) => {
-      setPrivacyContent(editor.getHTML());
-      setHasUnsavedChanges(true);
-    },
-  });
+  const editorRef = useRef<TermsEditorAreaHandle>(null);
 
   const fetchTerms = useCallback(async () => {
     setLoading(true);
@@ -384,20 +254,18 @@ export default function TermsSettingsPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setTermsContent(data.draft?.termsOfService || '');
-        setPrivacyContent(data.draft?.privacyPolicy || '');
+        const terms = data.draft?.termsOfService || '';
+        const privacy = data.draft?.privacyPolicy || '';
+        setTermsContent(terms);
+        setPrivacyContent(privacy);
         setTermsPublished(data.termsPublished);
         setPrivacyPublished(data.privacyPublished);
         setTermsHistory(data.termsHistory || []);
         setPrivacyHistory(data.privacyHistory || []);
         setHasUnsavedChanges(false);
 
-        if (termsEditor) {
-          termsEditor.commands.setContent(data.draft?.termsOfService || '');
-        }
-        if (privacyEditor) {
-          privacyEditor.commands.setContent(data.draft?.privacyPolicy || '');
-        }
+        editorRef.current?.setTermsContent(terms);
+        editorRef.current?.setPrivacyContent(privacy);
       } else {
         setError('약관을 불러오는데 실패했습니다.');
       }
@@ -407,23 +275,11 @@ export default function TermsSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [termsEditor, privacyEditor]);
+  }, []);
 
   useEffect(() => {
     fetchTerms();
   }, []);
-
-  useEffect(() => {
-    if (termsEditor && termsContent && !termsEditor.getText()) {
-      termsEditor.commands.setContent(termsContent);
-    }
-  }, [termsEditor, termsContent]);
-
-  useEffect(() => {
-    if (privacyEditor && privacyContent && !privacyEditor.getText()) {
-      privacyEditor.commands.setContent(privacyContent);
-    }
-  }, [privacyEditor, privacyContent]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -549,7 +405,6 @@ export default function TermsSettingsPage() {
     }
   };
 
-  const currentEditor = activeTab === 'terms' ? termsEditor : privacyEditor;
   const currentContent = activeTab === 'terms' ? termsContent : privacyContent;
   const currentPublished = activeTab === 'terms' ? termsPublished : privacyPublished;
   const currentHistory = activeTab === 'terms' ? termsHistory : privacyHistory;
@@ -684,16 +539,18 @@ export default function TermsSettingsPage() {
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
         ) : (
-          <div>
-            <EditorToolbar editor={currentEditor} />
-            <div className="bg-white">
-              {activeTab === 'terms' ? (
-                <EditorContent editor={termsEditor} />
-              ) : (
-                <EditorContent editor={privacyEditor} />
-              )}
-            </div>
-          </div>
+          <TermsEditorArea
+            ref={editorRef}
+            activeTab={activeTab}
+            onTermsChange={(html) => {
+              setTermsContent(html);
+              setHasUnsavedChanges(true);
+            }}
+            onPrivacyChange={(html) => {
+              setPrivacyContent(html);
+              setHasUnsavedChanges(true);
+            }}
+          />
         )}
 
         {/* 안내 메시지 */}

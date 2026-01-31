@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Timer, NavArrowLeft, NavArrowRight, Xmark, Search, Filter, Download, Calendar, PageFlip, Spark, SortUp, SortDown, MoreHoriz, FastRightCircle, WarningCircle, Plus } from 'iconoir-react';
-import * as XLSX from 'xlsx';
 import useSWR from 'swr';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription } from '@/components/admin/subscription';
@@ -368,11 +367,13 @@ export default function SubscriptionsPage() {
   };
 
   // 히스토리 xlsx 내보내기
-  const handleExportHistory = () => {
+  const handleExportHistory = async () => {
     if (history.length === 0) {
       alert('내보낼 구독 내역이 없습니다.');
       return;
     }
+
+    const XLSX = await import('xlsx');
 
     const exportData = history.map((record, index) => ({
       'No.': index + 1,
