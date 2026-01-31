@@ -6,6 +6,7 @@ import { getPlanById, verifyToken } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
+import { addOneMonth } from '@/lib/utils';
 
 // 인증 함수: Authorization 헤더 또는 body의 token 처리
 async function authenticateRequest(request: NextRequest, bodyToken?: string, bodyEmail?: string): Promise<string | null> {
@@ -140,8 +141,7 @@ export async function POST(request: NextRequest) {
 
     // 구독 정보 업데이트
     const now = new Date();
-    const nextBillingDate = new Date(now);
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+    const nextBillingDate = addOneMonth(now);
 
     // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
     const currentPeriodEnd = new Date(nextBillingDate);

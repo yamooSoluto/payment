@@ -6,6 +6,7 @@ import { getPlanById, incrementLinkUsage } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
+import { addOneMonth } from '@/lib/utils';
 
 // 카드 ID 생성
 function generateCardId(): string {
@@ -365,18 +366,19 @@ export async function GET(request: NextRequest) {
 
     // 구독 정보 저장 (tenantId를 document ID로 사용)
     const now = new Date();
-    const nextBillingDate = new Date(now);
 
     // 1회성 결제인 경우 subscriptionDays 기반으로 기간 계산
     const isOnetime = billingType === 'onetime';
     const subscriptionDays = subscriptionDaysParam ? parseInt(subscriptionDaysParam) : 30;
 
+    let nextBillingDate: Date;
     if (isOnetime && subscriptionDays > 0) {
       // 1회성: 지정된 일수 후 종료
+      nextBillingDate = new Date(now);
       nextBillingDate.setDate(nextBillingDate.getDate() + subscriptionDays);
     } else {
       // 정기: 1개월 후
-      nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+      nextBillingDate = addOneMonth(now);
     }
 
     // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)

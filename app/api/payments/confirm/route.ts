@@ -4,6 +4,7 @@ import { issueBillingKey, payWithBillingKey, getPlanName } from '@/lib/toss';
 import { getPlanById } from '@/lib/auth';
 import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment } from '@/lib/idempotency';
+import { addOneMonth } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     // 3. Firestore 구독 정보 업데이트
     const now = new Date();
-    const nextBillingDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const nextBillingDate = addOneMonth(now);
 
     // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
     const currentPeriodEnd = new Date(nextBillingDate);

@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { addSubscriptionHistoryRecord } from '@/lib/subscription-history';
 import { addAdminLog } from '@/lib/admin-log';
 import { getAdminFromRequest } from '@/lib/admin-auth';
+import { addOneMonth } from '@/lib/utils';
 
 // 플랜별 금액
 const PLAN_PRICES: Record<string, number> = {
@@ -82,8 +83,7 @@ export async function POST(
     if (currentPeriodEnd) {
       endDate = new Date(currentPeriodEnd);
     } else {
-      endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 1);
+      endDate = addOneMonth(startDate);
       endDate.setDate(endDate.getDate() - 1);
     }
 

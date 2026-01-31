@@ -4,6 +4,7 @@ import { sendAlimtalk } from '@/lib/bizm';
 import crypto from 'crypto';
 import { generateUniqueUserId } from '@/lib/user-utils';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
+import { addOneMonth } from '@/lib/utils';
 
 // 전화번호 해시 생성 (탈퇴 회원 무료체험 이력 추적용)
 function hashPhone(phone: string): string {
@@ -445,8 +446,7 @@ export async function POST(request: Request) {
     if (tenantId) {
       const now = new Date();
       // currentPeriodEnd: 시작일 + 1개월 - 1일
-      const currentPeriodEnd = new Date(now);
-      currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+      const currentPeriodEnd = addOneMonth(now);
       currentPeriodEnd.setDate(currentPeriodEnd.getDate() - 1);
 
       // subscription 생성 (trial 상태, userId 포함)

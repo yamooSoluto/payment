@@ -6,6 +6,7 @@ import { isN8NNotificationEnabled } from '@/lib/n8n';
 import { findExistingPayment, generateIdempotencyKey } from '@/lib/idempotency';
 import { getPlanById } from '@/lib/auth';
 import { handleSubscriptionChange, updateCurrentHistoryStatus } from '@/lib/subscription-history';
+import { addOneMonth } from '@/lib/utils';
 
 // Vercel Cron Job에서 호출되는 정기결제 API
 // 매일 00:00 (KST) 실행
@@ -84,8 +85,7 @@ export async function GET(request: NextRequest) {
 
           // 구독 업데이트
           const now = new Date();
-          const nextBillingDate = new Date(now);
-          nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+          const nextBillingDate = addOneMonth(now);
 
           // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
           const currentPeriodEnd = new Date(nextBillingDate);
@@ -567,8 +567,7 @@ export async function GET(request: NextRequest) {
         if (response.status === 'DONE') {
           // 새 기간 시작일 = 이전 결제일 (결제일 = 새 기간 첫 날)
           const newPeriodStart = subscription.nextBillingDate.toDate();
-          const nextBillingDate = new Date(newPeriodStart);
-          nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+          const nextBillingDate = addOneMonth(newPeriodStart);
 
           // currentPeriodEnd는 nextBillingDate - 1일 (마지막 이용 가능일)
           const currentPeriodEnd = new Date(nextBillingDate);

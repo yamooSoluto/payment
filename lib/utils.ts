@@ -58,6 +58,20 @@ export function calculateDaysLeft(endDate: Date | string | { toDate?: () => Date
   return Math.max(0, differenceInDays(d, new Date()));
 }
 
+/**
+ * 날짜에 1개월을 더합니다. 월말 날짜를 올바르게 처리합니다.
+ * 예: 1/31 → 2/28, 3/31 → 4/30, 3/30 → 4/30
+ */
+export function addOneMonth(date: Date): Date {
+  const result = new Date(date);
+  const originalDay = result.getDate();
+  result.setMonth(result.getMonth() + 1);
+  if (result.getDate() !== originalDay) {
+    result.setDate(0);
+  }
+  return result;
+}
+
 export function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
     trial: '체험 중',
