@@ -14,6 +14,7 @@ type TabType = 'active' | 'history';
 interface Subscription {
   id: string;
   tenantId: string;
+  branchNo: string | null;
   email: string;
   memberName: string;
   brandName: string;
