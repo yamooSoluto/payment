@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
     interface SubscriptionData {
       id: string;
       tenantId: string;
+      branchNo: string | null;
       email: string;
       memberName: string;
       brandName: string;
@@ -145,6 +146,7 @@ export async function GET(request: NextRequest) {
           return {
             id: tenantId,
             tenantId,
+            branchNo: tenantData.branchNo != null ? String(tenantData.branchNo) : null,
             email: currentUser?.email || tenantData.email || subscription.email || '',
             memberName: currentUser?.name || tenantData.name || tenantData.ownerName || subscription.name || '',
             brandName: tenantData.brandName || tenantData.businessName || subscription.brandName || '이름 없음',
@@ -171,6 +173,7 @@ export async function GET(request: NextRequest) {
           return {
             id: tenantId,
             tenantId,
+            branchNo: tenantData.branchNo != null ? String(tenantData.branchNo) : null,
             email: currentUser?.email || tenantData.email || '',
             memberName: currentUser?.name || tenantData.name || tenantData.ownerName || '',
             brandName: tenantData.brandName || tenantData.businessName || '이름 없음',
@@ -223,11 +226,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 생성일 내림차순 정렬 (최신순)
+    // 지점번호 오름차순 정렬 (branchNo가 없으면 맨 뒤로)
     subscriptions.sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
+      const aNo = a.branchNo ? parseInt(a.branchNo, 10) : Infinity;
+      const bNo = b.branchNo ? parseInt(b.branchNo, 10) : Infinity;
+      return aNo - bNo;
     });
 
     // 페이지네이션

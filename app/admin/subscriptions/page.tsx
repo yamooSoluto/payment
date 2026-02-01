@@ -95,10 +95,10 @@ export default function SubscriptionsPage() {
     totalPages: 0,
   });
 
-  // 활성 탭 정렬 상태 (기본값: 시작일 오름차순)
-  type SortField = 'currentPeriodStart' | 'currentPeriodEnd' | 'nextBillingDate';
+  // 활성 탭 정렬 상태 (기본값: 지점번호 오름차순)
+  type SortField = 'branchNo' | 'currentPeriodStart' | 'currentPeriodEnd' | 'nextBillingDate';
   type SortOrder = 'asc' | 'desc';
-  const [activeSortField, setActiveSortField] = useState<SortField>('currentPeriodStart');
+  const [activeSortField, setActiveSortField] = useState<SortField>('branchNo');
   const [activeSortOrder, setActiveSortOrder] = useState<SortOrder>('asc');
 
   // === 전체(내역) 탭 상태 ===
@@ -144,8 +144,14 @@ export default function SubscriptionsPage() {
   // 정렬 토글 핸들러
   const handleActiveSort = (field: SortField) => {
     if (activeSortField === field) {
-      // 같은 필드 클릭 시 정렬 순서 토글
-      setActiveSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+      if (activeSortOrder === 'asc') {
+        // asc → desc
+        setActiveSortOrder('desc');
+      } else {
+        // desc → 기본(지점번호순)으로 초기화
+        setActiveSortField('branchNo');
+        setActiveSortOrder('asc');
+      }
     } else {
       // 다른 필드 클릭 시 해당 필드로 변경, 오름차순 시작
       setActiveSortField(field);
@@ -163,15 +169,16 @@ export default function SubscriptionsPage() {
     if (!aValue) return 1;
     if (!bValue) return -1;
 
-    // 날짜 비교
-    const aDate = new Date(aValue).getTime();
-    const bDate = new Date(bValue).getTime();
-
-    if (activeSortOrder === 'asc') {
-      return aDate - bDate;
+    let result: number;
+    if (activeSortField === 'branchNo') {
+      // 지점번호는 숫자 비교
+      result = parseInt(aValue, 10) - parseInt(bValue, 10);
     } else {
-      return bDate - aDate;
+      // 날짜 비교
+      result = new Date(aValue).getTime() - new Date(bValue).getTime();
     }
+
+    return activeSortOrder === 'asc' ? result : -result;
   });
 
   // 드롭다운 메뉴 상태

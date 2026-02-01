@@ -3,6 +3,7 @@ import { cache } from 'react'
 import localFont from 'next/font/local'
 import './globals.css'
 import LayoutWrapper from '@/components/LayoutWrapper'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin'
 
 const pretendard = localFont({
@@ -135,6 +136,7 @@ export default async function RootLayout({
         <LayoutWrapper siteSettings={siteSettings}>
           {children}
         </LayoutWrapper>
+        <SpeedInsights />
       </body>
     </html>
   )
