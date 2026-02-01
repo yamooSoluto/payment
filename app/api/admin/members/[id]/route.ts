@@ -237,7 +237,7 @@ export async function GET(
 
       // 총 이용금액 계산
       const totalAmount = payments
-        .filter((p) => p.status === 'completed' || p.status === 'done' || p.status === 'refunded')
+        .filter((p) => p.status === 'done')
         .reduce((sum, p) => sum + ((p.amount as number) || 0), 0);
 
       result.payments = payments.slice(0, 20);

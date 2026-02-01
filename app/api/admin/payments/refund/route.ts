@@ -110,11 +110,10 @@ export async function POST(request: NextRequest) {
       email: paymentData.email,
       userId: paymentData.userId,
       plan: paymentData.plan || paymentData.planId,
-      planId: paymentData.plan || paymentData.planId,
 
       // 환불 상세
       refundReason,
-      status: 'refunded',
+      status: 'done',
 
       // 관리자 정보
       initiatedBy: 'admin',
@@ -128,7 +127,6 @@ export async function POST(request: NextRequest) {
       receiptUrl: tossResponse.receipt?.url || null,
 
       // 타임스탬프
-      refundedAt: now,
       paidAt: now,
       createdAt: now,
     });

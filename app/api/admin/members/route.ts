@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       const email = data.email || '';
       if (!email) return;
 
-      if (data.status === 'completed' || data.status === 'done' || data.status === 'refunded') {
+      if (data.status === 'done') {
         const amount = data.amount || 0;
         paymentsByEmail.set(email, (paymentsByEmail.get(email) || 0) + amount);
       }

@@ -179,6 +179,7 @@ export async function POST(request: NextRequest) {
       const paymentRef = db.collection('payments').doc(paymentDocId);
       transaction.set(paymentRef, {
         tenantId,
+        userId: subscription?.userId || '',
         email,
         orderId,
         orderName,

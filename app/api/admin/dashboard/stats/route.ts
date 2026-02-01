@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
       const status = data.status;
 
       // 이번 달 완료된 결제의 양수 금액 합산
-      if (createdAt && (status === 'completed' || status === 'done') && amount > 0) {
+      if (createdAt && status === 'done' && amount > 0) {
         const key = getMonthKey(createdAt);
         const idx = monthIndex.get(key);
         if (idx !== undefined) {
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 최근 결제 5건 수집 (양수 금액만)
-      if (recentPayments.length < 5 && amount > 0 && (status === 'completed' || status === 'done')) {
+      if (recentPayments.length < 5 && amount > 0 && status === 'done') {
         recentPayments.push({
           id: doc.id,
           email: data.email || '',

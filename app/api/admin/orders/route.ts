@@ -350,9 +350,9 @@ export async function GET(request: NextRequest) {
 
     // 타입 필터
     if (type === 'subscription') {
-      orders = orders.filter(o => o.status === 'completed' && !o.canceledAt);
+      orders = orders.filter(o => o.status === 'done' && o.transactionType !== 'refund' && !o.canceledAt);
     } else if (type === 'cancellation') {
-      orders = orders.filter(o => o.status === 'refunded' || o.canceledAt);
+      orders = orders.filter(o => o.transactionType === 'refund' || o.canceledAt);
     }
 
     // 검색 필터 (회원명, 이메일, 연락처)
@@ -380,12 +380,12 @@ export async function GET(request: NextRequest) {
     // 통계
     const stats = {
       total: orders.length,
-      completed: orders.filter(o => o.status === 'completed').length,
+      completed: orders.filter(o => o.status === 'done' && o.transactionType !== 'refund').length,
       pending: orders.filter(o => o.status === 'pending').length,
       failed: orders.filter(o => o.status === 'failed').length,
-      refunded: orders.filter(o => o.status === 'refunded').length,
+      refunded: orders.filter(o => o.transactionType === 'refund').length,
       totalAmount: orders
-        .filter(o => o.status === 'completed')
+        .filter(o => o.status === 'done' && o.transactionType !== 'refund')
         .reduce((sum, o) => sum + (o.amount || 0), 0),
     };
 

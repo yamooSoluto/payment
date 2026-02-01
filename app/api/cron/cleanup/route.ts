@@ -133,27 +133,7 @@ export async function GET(request: NextRequest) {
           console.log(`Deleted ${docs.length} payment records for tenant: ${tenantId}`);
         }
 
-        // 2-2. refunds 컬렉션에서 해당 tenantId의 환불 기록 삭제
-        const refundsSnapshot = await db
-          .collection('refunds')
-          .where('tenantId', '==', tenantId)
-          .get();
 
-        if (!refundsSnapshot.empty) {
-          const batchSize = 500;
-          const docs = refundsSnapshot.docs;
-
-          for (let i = 0; i < docs.length; i += batchSize) {
-            const batch = db.batch();
-            const chunk = docs.slice(i, i + batchSize);
-            chunk.forEach((refundDoc) => {
-              batch.delete(refundDoc.ref);
-            });
-            await batch.commit();
-          }
-
-          console.log(`Deleted ${docs.length} refund records for tenant: ${tenantId}`);
-        }
 
         // tenant_deletions 문서에 결제 기록 삭제 완료 표시
         await doc.ref.update({

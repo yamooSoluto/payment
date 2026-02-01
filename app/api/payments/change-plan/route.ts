@@ -358,6 +358,7 @@ export async function POST(request: NextRequest) {
           : `YAMOO ${getPlanName(previousPlan)} 환불 - ${getPlanName(newPlan)} 변경`;
         transaction.set(refundRef, {
           tenantId,
+          userId: subscription?.userId || '',
           email: authenticatedEmail,
           orderId: refundOrderId,
           orderName: refundOrderName,
@@ -370,8 +371,7 @@ export async function POST(request: NextRequest) {
           initiatedBy: 'user',
           changeGroupId,
           previousPlan,
-          newPlan,
-          status: 'refunded',
+          status: 'done',
           refundAmount: actualRefundedAmount,
           refundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경 (미사용분)`,
           originalPaymentId,

@@ -96,7 +96,7 @@ export default function OrdersPage() {
 
   // 페이지네이션 및 필터 상태
   const [page, setPage] = useState(1);
-  const [filterType, setFilterType] = useState<'thisMonth' | 'custom'>('thisMonth');
+  const [filterType, setFilterType] = useState<'recent3Months' | 'custom'>('recent3Months');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
   const [tempDateRange, setTempDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
@@ -166,11 +166,11 @@ export default function OrdersPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 이번달 시작/끝 날짜 계산
-  const getThisMonthRange = () => {
+  // 최근 3개월 시작/끝 날짜 계산
+  const getRecent3MonthsRange = () => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     return { start, end };
   };
 
@@ -205,8 +205,8 @@ export default function OrdersPage() {
     // 날짜 필터
     const paymentDate = new Date(payment.paidAt || payment.createdAt);
 
-    if (filterType === 'thisMonth') {
-      const { start, end } = getThisMonthRange();
+    if (filterType === 'recent3Months') {
+      const { start, end } = getRecent3MonthsRange();
       return paymentDate >= start && paymentDate <= end;
     } else if (filterType === 'custom' && dateRange.start && dateRange.end) {
       const start = new Date(dateRange.start);
@@ -224,9 +224,9 @@ export default function OrdersPage() {
     page * PAYMENTS_PER_PAGE
   );
 
-  // 이번달 필터 선택
-  const handleThisMonthFilter = () => {
-    setFilterType('thisMonth');
+  // 최근 3개월 필터 선택
+  const handleRecent3MonthsFilter = () => {
+    setFilterType('recent3Months');
     setDateRange({ start: '', end: '' });
     setPage(1);
   };
@@ -506,13 +506,13 @@ export default function OrdersPage() {
                 )}
               </div>
               <button
-                onClick={handleThisMonthFilter}
-                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${filterType === 'thisMonth'
+                onClick={handleRecent3MonthsFilter}
+                className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${filterType === 'recent3Months'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
               >
-                이번달
+                최근 3개월
               </button>
               <button
                 onClick={handleOpenDatePicker}

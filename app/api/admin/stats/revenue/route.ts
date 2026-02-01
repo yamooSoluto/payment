@@ -12,12 +12,10 @@ const planNames: Record<string, string> = {
 
 // 결제 상태명 매핑
 const statusNames: Record<string, string> = {
-  completed: '완료',
   done: '완료',
   pending: '대기',
   failed: '실패',
   refunded: '환불',
-  canceled: '취소',
 };
 
 // 기간 계산
@@ -108,13 +106,13 @@ export async function GET(request: NextRequest) {
       return paidAt && paidAt >= start && paidAt <= end;
     });
 
-    // 완료된 결제 (completed 또는 done 상태)
-    const completedPayments = allPayments.filter(p => p.status === 'completed' || p.status === 'done');
-    const periodCompletedPayments = periodPayments.filter(p => p.status === 'completed' || p.status === 'done');
+    // 완료된 결제 (charge 거래 중 done 상태)
+    const completedPayments = allPayments.filter(p => p.status === 'done' && p.transactionType !== 'refund');
+    const periodCompletedPayments = periodPayments.filter(p => p.status === 'done' && p.transactionType !== 'refund');
 
-    // 환불된 결제
-    const refundedPayments = allPayments.filter(p => p.status === 'refunded');
-    const periodRefundedPayments = periodPayments.filter(p => p.status === 'refunded');
+    // 환불된 결제 (refund 거래)
+    const refundedPayments = allPayments.filter(p => p.transactionType === 'refund');
+    const periodRefundedPayments = periodPayments.filter(p => p.transactionType === 'refund');
 
     // 총 매출
     const totalRevenue = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -180,19 +178,15 @@ export async function GET(request: NextRequest) {
       count: data.count,
     })).sort((a, b) => b.amount - a.amount);
 
-    // 결제 상태별 (환불 금액은 절대값으로 처리, done과 completed는 통합)
+    // 결제 상태별 (환불은 transactionType으로 구분)
     const byStatusMap: Record<string, { amount: number; count: number }> = {};
     periodPayments.forEach(p => {
-      // done과 completed를 'completed'로 통합
-      let status = p.status || 'pending';
-      if (status === 'done') {
-        status = 'completed';
+      const label = p.transactionType === 'refund' ? 'refunded' : (p.status || 'pending');
+      if (!byStatusMap[label]) {
+        byStatusMap[label] = { amount: 0, count: 0 };
       }
-      if (!byStatusMap[status]) {
-        byStatusMap[status] = { amount: 0, count: 0 };
-      }
-      byStatusMap[status].amount += Math.abs(p.amount || 0);
-      byStatusMap[status].count += 1;
+      byStatusMap[label].amount += Math.abs(p.amount || 0);
+      byStatusMap[label].count += 1;
     });
 
     const byStatus = Object.entries(byStatusMap).map(([status, data]) => ({

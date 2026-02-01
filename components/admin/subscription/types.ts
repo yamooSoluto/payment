@@ -71,6 +71,9 @@ export interface AdjustPeriodRequest {
 export interface CancelSubscriptionRequest {
   cancelMode: 'scheduled' | 'immediate';
   reason: string;
+  processRefund?: boolean;
+  refundAmount?: number;
+  refundReason?: string;
 }
 
 // 모달 Props

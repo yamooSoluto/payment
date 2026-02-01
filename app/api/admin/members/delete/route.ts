@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
           for (const tenantId of tenantIds) {
             const paymentsSnapshot = await db.collection('payments')
               .where('tenantId', '==', tenantId)
-              .where('status', '==', 'completed')
+              .where('status', '==', 'done')
               .limit(1)
               .get();
             if (!paymentsSnapshot.empty) {
