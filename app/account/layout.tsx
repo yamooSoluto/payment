@@ -216,13 +216,13 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, hasToken, hasSsoToken, hasIdToken, hasEmail, authChecked, ssoProcessing, sessionVerified, sessionChecking, router]);
 
-  // SSO 처리 중, 세션 검증 중, 또는 ssoToken/idToken이 있을 때 로딩 표시
-  if (ssoProcessing || sessionChecking || ((hasSsoToken || hasIdToken) && !authChecked)) {
+  // SSO 처리 중, 세션 검증 중(Firebase Auth로 인증 안 된 경우만), 또는 ssoToken/idToken이 있을 때 로딩 표시
+  if (ssoProcessing || (sessionChecking && !user) || ((hasSsoToken || hasIdToken) && !authChecked)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-yamoo-accent border-t-yamoo-primary mx-auto mb-2"></div>
-          <p className="text-sm text-gray-500">자동 로그인 중...</p>
+          <p className="text-sm text-gray-500">로딩중...</p>
         </div>
       </div>
     );

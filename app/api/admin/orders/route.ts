@@ -273,10 +273,10 @@ export async function GET(request: NextRequest) {
       }
 
       const amount = data.amount || 0;
-      // 문서에 저장된 refundedAmount + 연결된 환불 기록의 환불 금액 합산
+      // 문서에 저장된 refundedAmount와 연결된 환불 기록 중 큰 값 사용 (동일 환불이므로 합산하면 이중 계산됨)
       const storedRefundedAmount = data.refundedAmount || 0;
       const linkedRefundAmount = refundsByOriginalPayment.get(doc.id) || 0;
-      const totalRefundedAmount = storedRefundedAmount + linkedRefundAmount;
+      const totalRefundedAmount = Math.max(storedRefundedAmount, linkedRefundAmount);
       const remainingAmount = Math.max(0, amount - totalRefundedAmount);
 
       // 기존 데이터의 type 추론 (레거시 데이터 지원)

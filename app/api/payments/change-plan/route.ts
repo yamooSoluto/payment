@@ -217,10 +217,14 @@ export async function POST(request: NextRequest) {
         .get();
 
       if (!paymentsSnapshot.empty) {
-        // 환불 레코드 타입만 제외하고 원결제 찾기 (plan_change도 환불 가능한 결제임)
+        // 환불 레코드 제외하고 실제 결제(charge) 찾기
         const excludeTypes = ['plan_change_refund', 'refund', 'cancel_refund', 'downgrade_refund'];
         const originalPaymentDoc = paymentsSnapshot.docs.find(doc => {
           const data = doc.data();
+          // transactionType이 'refund'인 레코드 제외 (플랜 변경 환불 레코드는 type이 'upgrade'/'downgrade'라 excludeTypes에 안 걸림)
+          if (data.transactionType === 'refund') return false;
+          // 음수 금액 레코드 제외 (환불 레코드 안전장치)
+          if ((data.amount || 0) < 0) return false;
           return !excludeTypes.includes(data.type || '');
         });
 

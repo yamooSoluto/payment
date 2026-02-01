@@ -462,13 +462,13 @@ export default function TossPaymentWidget({
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-600">환불</span>
                 <span className="text-lg font-semibold text-green-600">
-                  +{formatPrice(calculationDetails?.currentRefund || 0)}원
+                  -{formatPrice(calculationDetails?.currentRefund || 0)}원
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">결제</span>
                 <span className="text-lg font-semibold text-gray-900">
-                  -{formatPrice(calculationDetails?.newPlanRemaining || 0)}원
+                  {formatPrice(calculationDetails?.newPlanRemaining || 0)}원
                 </span>
               </div>
               {/* 계산 상세 내역 토글 */}
@@ -585,13 +585,13 @@ export default function TossPaymentWidget({
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-600">환불</span>
                 <span className="text-lg font-semibold text-green-600">
-                  +{formatPrice(calculationDetails?.currentRefund || 0)}원
+                  -{formatPrice(calculationDetails?.currentRefund || 0)}원
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">결제</span>
                 <span className="text-lg font-semibold text-gray-900">
-                  -{formatPrice(calculationDetails?.newPlanRemaining || 0)}원
+                  {formatPrice(calculationDetails?.newPlanRemaining || 0)}원
                 </span>
               </div>
               {/* 업그레이드 계산 상세 내역 토글 */}

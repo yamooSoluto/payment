@@ -91,7 +91,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   // 포탈 버튼 카운트다운 (로그인 상태에서 무료체험 신청 완료 시)
   useEffect(() => {
     if (isSuccess && user) {
-      setPortalButtonCountdown(15);
+      setPortalButtonCountdown(5);
     }
   }, [isSuccess, user]);
 

@@ -225,7 +225,7 @@ export default function CancelModal({ onClose, onConfirm, isLoading, currentPeri
                                 <div>
                                   <div className="text-gray-500 mb-1">이용 기간</div>
                                   <div className="font-medium text-gray-900 mb-1">
-                                    {currentPeriodStart && formatDate(currentPeriodStart)} ~ {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    {currentPeriodStart && formatDate(currentPeriodStart)} ~ {formatDate(new Date().toISOString())}
                                   </div>
                                   <div className="font-medium text-gray-400 line-through">
                                     {currentPeriodStart && formatDate(currentPeriodStart)} ~ {actualEndDate && formatDate(actualEndDate)}
