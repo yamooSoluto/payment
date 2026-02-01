@@ -91,7 +91,8 @@ export async function POST(request: Request) {
       userId = await generateUniqueUserId(db);
     }
 
-    await db.collection('users').doc(email).set({
+    // Google 비밀번호 설정이 필요하면 Firestore 저장과 getUserByEmail을 병렬 실행
+    const userDocData = {
       userId,
       email,
       name,
@@ -108,23 +109,29 @@ export async function POST(request: Request) {
         previousDeletionAt: existingData.deletedAt,
       }),
       // deleted 플래그 제거 (재가입이므로)
-    });
+    };
 
-    // Google 로그인 사용자의 경우 비밀번호 설정 (포탈 로그인용)
     if (provider === 'google' && password) {
+      // Firestore 저장 + getUserByEmail 병렬 실행 (네트워크 round-trip 절약)
       try {
         const adminAuth = getAdminAuth();
         if (adminAuth) {
-          const userRecord = await adminAuth.getUserByEmail(email);
+          const [, userRecord] = await Promise.all([
+            db.collection('users').doc(email).set(userDocData),
+            adminAuth.getUserByEmail(email),
+          ]);
           await adminAuth.updateUser(userRecord.uid, {
             password: password,
           });
+        } else {
+          await db.collection('users').doc(email).set(userDocData);
         }
       } catch (authError) {
         console.error('비밀번호 설정 오류:', authError);
-        // 비밀번호 설정 실패해도 회원가입은 성공으로 처리
-        // 사용자에게 나중에 비밀번호 재설정하라고 안내 가능
+        // 비밀번호 설정 실패해도 Firestore 저장은 이미 완료됨
       }
+    } else {
+      await db.collection('users').doc(email).set(userDocData);
     }
 
     // 로그인 토큰 생성 (account 페이지 접근용)

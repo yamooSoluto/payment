@@ -17,6 +17,7 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
   const ssoAttempted = useRef(false);
   const tokenCleanupAttempted = useRef(false);
   const sessionCheckAttempted = useRef(false);
+  const sessionCheckPending = useRef(false); // 세션 검증 시작~완료 동기 추적 (state 업데이트 지연 대응)
 
   // 토큰 기반 인증(포탈 SSO)
   const hasToken = searchParams.get('token');
@@ -61,14 +62,16 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     cleanupToken();
   }, [hasToken]);
 
-  // 세션 쿠키 검증 (새로고침 시 - 토큰 없고 Firebase Auth 없는 경우)
+  // 세션 쿠키 검증 (Firebase Auth와 병렬로 즉시 시작)
+  // loading 대기 제거: Firebase Auth 복구 실패 시(구글 가입 후 토큰 revoke) 대기 시간 제거
   useEffect(() => {
     // 이미 인증 방법이 있으면 스킵
-    if (hasToken || hasSsoToken || hasIdToken || user || loading) return;
+    if (hasToken || hasSsoToken || hasIdToken || user) return;
     // 이미 세션 검증 완료되었으면 스킵
     if (sessionVerified || sessionCheckAttempted.current) return;
 
     sessionCheckAttempted.current = true;
+    sessionCheckPending.current = true;
     setSessionChecking(true);
 
     const verifySession = async () => {
@@ -89,12 +92,13 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('[Session] Verification error:', error);
       } finally {
+        sessionCheckPending.current = false;
         setSessionChecking(false);
       }
     };
 
     verifySession();
-  }, [hasToken, hasSsoToken, hasIdToken, user, loading, sessionVerified]);
+  }, [hasToken, hasSsoToken, hasIdToken, user, sessionVerified]);
 
   // ssoToken으로 Firebase 로그인 (POST SSO 후 리다이렉트된 경우)
   // 기존 로그인 세션이 있어도 SSO 토큰으로 새로 로그인 (다른 계정일 수 있음)
@@ -175,8 +179,8 @@ function AccountAuthGuard({ children }: { children: React.ReactNode }) {
     // SSO 처리 중이면 대기
     if (ssoProcessing || hasSsoToken || hasIdToken) return;
 
-    // 세션 검증 중이면 대기
-    if (sessionChecking) return;
+    // 세션 검증 중이면 대기 (ref로 동기 체크 - 같은 렌더 사이클에서 state 반영 전에도 감지)
+    if (sessionChecking || sessionCheckPending.current) return;
 
     // 토큰이 있거나 세션 쿠키 인증 성공이면 포탈 SSO 인증이므로 Firebase Auth 체크 스킵
     if (hasToken || sessionVerified) return;

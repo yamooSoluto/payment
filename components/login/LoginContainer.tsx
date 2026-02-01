@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth as firebaseAuth } from '@/lib/firebase';
 import { Mail, Lock, Eye, EyeClosed, WarningCircle, CheckCircle, User, Phone, Refresh } from 'iconoir-react';
 import DynamicTermsModal from '@/components/modals/DynamicTermsModal';
 
@@ -436,23 +437,26 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
         authToken = saveData.token;
       } else {
         await signIn(email, password);
-
-        // 로그인 시 토큰 발급
-        const tokenRes = await fetch('/api/auth/login-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, rememberMe }),
-        });
-
-        if (tokenRes.ok) {
-          const tokenData = await tokenRes.json();
-          authToken = tokenData.token;
-        }
       }
 
-      // 세션 API를 통해 쿠키 설정 후 리다이렉트
-      if (authToken) {
-        // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+      // Firebase ID 토큰으로 세션 생성 (login-token API 호출 생략 → 1 round-trip 절약)
+      const currentUser = firebaseAuth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
+        const sessionRes = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (!sessionRes.ok) {
+          throw new Error('세션 생성에 실패했습니다. 다시 시도해주세요.');
+        }
+      } else if (authToken) {
+        // Firebase Auth가 없는 경우 (회원가입 시 save-user 토큰 사용 fallback)
         const sessionRes = await fetch('/api/auth/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -462,13 +466,14 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
         if (!sessionRes.ok) {
           throw new Error('세션 생성에 실패했습니다. 다시 시도해주세요.');
         }
-
-        // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
-        window.location.href = redirectUrl;
-        return; // 이후 코드 실행 방지
       } else {
-        throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
+        throw new Error('인증 정보를 확인할 수 없습니다. 다시 시도해주세요.');
       }
+
+      // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
+      // 회원가입 시에는 항상 마이페이지로 이동 (redirect 파라미터 무시)
+      window.location.href = mode === 'signup' ? '/account' : redirectUrl;
+      return; // 이후 코드 실행 방지
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string };
       if (error.code === 'auth/email-already-in-use') {
@@ -512,15 +517,16 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
       const checkData = await checkRes.json();
 
       if (checkData.needsProfile) {
-        // Google 로그인 시 기본 정보 먼저 저장 (email, provider만)
-        await fetch('/api/auth/save-google-user', {
+        // Google 로그인 시 기본 정보 저장 (비동기 - 완료를 기다리지 않음)
+        // 프로필 완성 시 save-user가 덮어쓰므로 대기 불필요
+        fetch('/api/auth/save-google-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: userEmail,
             displayName: user.displayName || '',
           }),
-        });
+        }).catch(() => {}); // 실패해도 프로필 완성 시 저장됨
 
         // 프로필 완성 필요 - 이름/연락처 입력 모드로 전환
         setGoogleUser({ email: userEmail, displayName: user.displayName || '' });
@@ -531,24 +537,14 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
         return;
       }
 
-      // 프로필 완성됨 - 토큰 발급 후 세션 생성
-      const tokenRes = await fetch('/api/auth/login-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, rememberMe }),
-      });
-
-      if (!tokenRes.ok) {
-        throw new Error('인증 토큰 발급에 실패했습니다.');
-      }
-
-      const tokenData = await tokenRes.json();
-
-      // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+      // 프로필 완성됨 - Firebase ID 토큰으로 세션 생성 (login-token API 생략)
       const sessionRes = await fetch('/api/auth/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tokenData.token }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
       });
 
       if (!sessionRes.ok) {
@@ -612,24 +608,29 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
         throw new Error(saveData.error || '프로필 저장에 실패했습니다.');
       }
 
-      // 프로필 저장 완료 - 세션 API를 통해 쿠키 설정 후 리다이렉트
-      if (saveData.token) {
-        // POST 방식으로 세션 생성 (쿠키 설정이 더 안정적)
+      // 비밀번호 설정으로 Firebase Auth 토큰이 revoke되므로 재인증
+      // (Header 등 Firebase Auth 의존 컴포넌트가 정상 동작하도록)
+      await signIn(googleUser.email, password);
+
+      // Firebase ID 토큰으로 세션 생성
+      const currentUser = firebaseAuth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
         const sessionRes = await fetch('/api/auth/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: saveData.token }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({}),
         });
 
         if (!sessionRes.ok) {
-          throw new Error('세션 생성에 실패했습니다. 다시 시도해주세요.');
+          throw new Error('세션 생성에 실패했습니다.');
         }
-
-        // 세션 생성 성공 - 전체 페이지 새로고침으로 이동 (쿠키 적용 보장)
-        window.location.href = redirectUrl;
-      } else {
-        throw new Error('인증 토큰 발급에 실패했습니다. 다시 시도해주세요.');
       }
+
+      window.location.href = '/account';
     } catch (err: unknown) {
       const error = err as { message?: string };
       setError(error.message || '프로필 저장 중 오류가 발생했습니다.');
