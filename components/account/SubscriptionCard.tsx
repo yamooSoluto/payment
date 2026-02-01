@@ -927,7 +927,13 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
           )}
           {isActive && (
             <button
-              onClick={() => setShowCancelModal(true)}
+              onClick={() => {
+                if (subscription.pendingPlan) {
+                  alert('예약된 플랜이 있습니다. 먼저 예약을 취소해주세요.');
+                  return;
+                }
+                setShowCancelModal(true);
+              }}
               className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
             >
               구독 해지

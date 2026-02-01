@@ -1089,6 +1089,7 @@ export default function SubscriptionsPage() {
             currentPeriodStart: selectedSubscription.currentPeriodStart,
             currentPeriodEnd: selectedSubscription.currentPeriodEnd,
             nextBillingDate: selectedSubscription.nextBillingDate,
+            pendingPlan: selectedSubscription.pendingPlan as SubscriptionInfo['plan'] | null,
           }}
           tenant={{
             tenantId: selectedSubscription.tenantId,

@@ -63,10 +63,6 @@ export default function SortablePlanCard({
                 <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">인기</span>
               )}
             </div>
-            <p className="text-sm text-gray-500">ID: {plan.id}</p>
-            {plan.tagline && (
-              <p className="text-sm text-blue-600 mt-1">{plan.tagline}</p>
-            )}
           </div>
         </div>
         <div className="flex gap-1">
