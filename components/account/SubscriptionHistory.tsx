@@ -173,18 +173,12 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
     }
   }
 
-  // 정렬: 상태 우선 (체험중/사용중 > 해지예정 > 사용완료 > 해지됨), 같은 상태면 시작일 내림차순
-  const statusPriority: Record<SubscriptionPeriod['status'], number> = {
-    trial: 1,
-    active: 1,
-    pending_cancel: 2,
-    completed: 3,
-    canceled: 4,
-  };
-
+  // 정렬: 사용중/체험중 맨 위, 나머지는 시작일 내림차순 (최신순)
   subscriptionPeriods.sort((a, b) => {
-    const statusDiff = statusPriority[a.status] - statusPriority[b.status];
-    if (statusDiff !== 0) return statusDiff;
+    const aActive = a.status === 'active' || a.status === 'trial' || a.status === 'pending_cancel';
+    const bActive = b.status === 'active' || b.status === 'trial' || b.status === 'pending_cancel';
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
     return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
   });
 
