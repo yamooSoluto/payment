@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // ========== 1. 90일 지난 매장 영구 삭제 ==========
-    // tenant_deletions에서 permanentDeleteAt <= today인 항목 조회
+    try {
     const permanentDeleteDocs = await db
       .collection('tenant_deletions')
       .where('permanentDeleteAt', '<=', now)
@@ -92,9 +92,13 @@ export async function GET(request: NextRequest) {
         results.errors.push({ tenantId, error: errorMessage });
       }
     }
+    } catch (error) {
+      console.error('Section 1 (permanent delete) failed:', error);
+      results.errors.push({ error: `permanent_delete_query: ${error instanceof Error ? error.message : 'Unknown'}` });
+    }
 
     // ========== 2. 5년 지난 결제 기록 삭제 ==========
-    // tenant_deletions에서 paymentDeleteAt <= today인 항목 조회
+    try {
     const paymentDeleteDocs = await db
       .collection('tenant_deletions')
       .where('paymentDeleteAt', '<=', now)
@@ -147,9 +151,13 @@ export async function GET(request: NextRequest) {
         results.errors.push({ tenantId, error: `payments: ${errorMessage}` });
       }
     }
+    } catch (error) {
+      console.error('Section 2 (payment delete) failed:', error);
+      results.errors.push({ error: `payment_delete_query: ${error instanceof Error ? error.message : 'Unknown'}` });
+    }
 
     // ========== 3. 보관 기간 만료 회원 데이터 영구 삭제 ==========
-    // users 컬렉션에서 deleted == true && retentionEndDate <= today인 항목 조회
+    try {
     const expiredUserDocs = await db
       .collection('users')
       .where('deleted', '==', true)
@@ -185,6 +193,10 @@ export async function GET(request: NextRequest) {
         console.error(`Failed to permanently delete user ${email}:`, error);
         results.errors.push({ email, error: errorMessage });
       }
+    }
+    } catch (error) {
+      console.error('Section 3 (user delete) failed:', error);
+      results.errors.push({ error: `user_delete_query: ${error instanceof Error ? error.message : 'Unknown'}` });
     }
 
     return NextResponse.json({
