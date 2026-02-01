@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           orderId: existingPayment.orderId,
-          refundAmount: existingPayment.refundAmount || 0,
+          refundAmount: 0,
           paidAmount: existingPayment.amount || 0,
           message: `이미 처리된 플랜 변경입니다.`,
           duplicate: true,
@@ -372,7 +372,6 @@ export async function POST(request: NextRequest) {
           changeGroupId,
           previousPlan,
           status: 'done',
-          refundAmount: actualRefundedAmount,
           refundReason: `${getPlanName(previousPlan)} → ${getPlanName(newPlan)} 플랜 변경 (미사용분)`,
           originalPaymentId,
           receiptUrl: refundResult.receipt?.url || null,

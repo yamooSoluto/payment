@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
 import { CreditCard, Search, Filter, Download, Calendar, Xmark, NavArrowLeft, NavArrowRight, MoreHoriz, RefreshDouble, CheckSquare, User } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -319,25 +319,41 @@ export default function OrdersPage() {
     mutate();
   };
 
-  // 새 환불처리 모달 - 회원 검색
-  const searchMembersForRefund = async (query: string) => {
+  // 새 환불처리 모달 - 회원 검색 (디바운스 + race condition 방지)
+  const memberSearchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const memberSearchQueryRef = useRef('');
+
+  const searchMembersForRefund = useCallback((query: string) => {
+    memberSearchQueryRef.current = query;
+
+    if (memberSearchTimerRef.current) {
+      clearTimeout(memberSearchTimerRef.current);
+    }
+
     if (!query.trim()) {
       setNewRefundMemberResults([]);
+      setNewRefundMemberLoading(false);
       return;
     }
+
     setNewRefundMemberLoading(true);
-    try {
-      const response = await fetch(`/api/admin/members?search=${encodeURIComponent(query)}&limit=10`);
-      if (response.ok) {
-        const data = await response.json();
-        setNewRefundMemberResults(data.members || []);
+
+    memberSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/admin/members?search=${encodeURIComponent(query)}&limit=10`);
+        if (response.ok && memberSearchQueryRef.current === query) {
+          const data = await response.json();
+          setNewRefundMemberResults(data.members || []);
+        }
+      } catch (error) {
+        console.error('Failed to search members:', error);
+      } finally {
+        if (memberSearchQueryRef.current === query) {
+          setNewRefundMemberLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Failed to search members:', error);
-    } finally {
-      setNewRefundMemberLoading(false);
-    }
-  };
+    }, 300);
+  }, []);
 
   // 새 환불처리 모달 - 회원 선택 시 결제 내역 조회
   const selectMemberForRefund = async (member: { id: string; email: string; name: string; phone: string }) => {
@@ -438,6 +454,9 @@ export default function OrdersPage() {
 
   // 새 환불처리 모달 닫기
   const closeNewRefundModal = () => {
+    if (memberSearchTimerRef.current) {
+      clearTimeout(memberSearchTimerRef.current);
+    }
     setShowNewRefundModal(false);
     setNewRefundMemberSearch('');
     setNewRefundMemberResults([]);

@@ -118,8 +118,6 @@ export async function POST(
       // subscription_history 상태 업데이트 (기존 레코드 수정)
       try {
         await updateCurrentHistoryStatus(db, tenantId, 'pending_cancel', {
-          changeType: 'cancel',
-          changedBy: 'admin',
           note: `관리자에 의해 해지 예약. 해지 예정일: ${cancelAt.toISOString().split('T')[0]}${reasonText ? `. 사유: ${reasonText}` : ''}`,
         });
       } catch (historyError) {
@@ -291,8 +289,6 @@ export async function POST(
       try {
         await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
           periodEnd: now,
-          changeType: 'cancel',
-          changedBy: 'admin',
           note: `관리자에 의해 즉시 해지${reasonText ? `. 사유: ${reasonText}` : ''}${refundNote}`,
         });
       } catch (historyError) {

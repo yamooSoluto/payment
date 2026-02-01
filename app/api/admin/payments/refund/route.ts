@@ -3,7 +3,7 @@ import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { cancelPayment } from '@/lib/toss';
 import { FieldValue } from 'firebase-admin/firestore';
-import { syncSubscriptionExpired } from '@/lib/tenant-sync';
+import { syncSubscriptionCancellation } from '@/lib/tenant-sync';
 import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
 import { addAdminLog } from '@/lib/admin-log';
 
@@ -139,33 +139,33 @@ export async function POST(request: NextRequest) {
 
         if (subscriptionDoc.exists) {
           await subscriptionRef.update({
-            status: 'expired',
+            status: 'canceled',
             canceledAt: now,
-            expiredAt: now,
             currentPeriodEnd: now,
             cancelReason: `환불 처리 (${refundReason})`,
             cancelMode: 'immediate',
+            cancelRequestedAt: now,
+            cancelRequestedBy: 'admin',
             refundAmount: refundAmount,
             refundProcessed: true,
+            nextBillingDate: null,
             // 예약된 플랜 삭제
             pendingPlan: FieldValue.delete(),
             pendingAmount: FieldValue.delete(),
             pendingMode: FieldValue.delete(),
             pendingChangeAt: FieldValue.delete(),
             updatedAt: now,
-            updatedBy: admin.adminId,
+            updatedBy: 'admin',
+            updatedByAdminId: admin.adminId,
           });
 
-          // tenants 컬렉션에 만료 상태 동기화
-          await syncSubscriptionExpired(tenantId);
+          // tenants 컬렉션에 취소 상태 동기화
+          await syncSubscriptionCancellation(tenantId, 'admin');
 
           // subscription_history 상태 업데이트
           try {
-            await updateCurrentHistoryStatus(db, tenantId, 'expired', {
+            await updateCurrentHistoryStatus(db, tenantId, 'canceled', {
               periodEnd: now,
-              changedAt: now,
-              changedBy: 'admin',
-              changedByAdminId: admin.adminId,
               note: `관리자 환불 처리 (${refundReason})`,
             });
           } catch (historyError) {

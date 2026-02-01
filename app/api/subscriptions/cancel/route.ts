@@ -3,7 +3,7 @@ import { adminDb, initializeFirebaseAdmin, getAdminAuth } from '@/lib/firebase-a
 import { verifyToken } from '@/lib/auth';
 import { cancelPayment, PLAN_PRICES } from '@/lib/toss';
 import { syncSubscriptionCancellation, syncSubscriptionPendingCancel } from '@/lib/tenant-sync';
-import { isN8NNotificationEnabled } from '@/lib/n8n';
+
 import { FieldValue } from 'firebase-admin/firestore';
 import { updateCurrentHistoryStatus } from '@/lib/subscription-history';
 import { calculateRefundAmount } from '@/lib/refund';
@@ -191,6 +191,8 @@ export async function POST(request: NextRequest) {
           cancelRequestedBy: 'user',
           refundAmount: refundAmount || 0,
           refundProcessed: !!refundResult,
+          // 다음 결제일 제거
+          nextBillingDate: null,
           // 예약된 플랜 삭제
           pendingPlan: FieldValue.delete(),
           pendingAmount: FieldValue.delete(),
@@ -214,27 +216,6 @@ export async function POST(request: NextRequest) {
         console.log('✅ Subscription history updated for immediate cancellation');
       } catch (historyError) {
         console.error('Failed to update subscription history:', historyError);
-      }
-
-      // n8n 웹훅 호출 (즉시 해지 알림)
-      if (isN8NNotificationEnabled()) {
-        try {
-          await fetch(process.env.N8N_WEBHOOK_URL!, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'subscription_canceled_immediate',
-              tenantId,
-              email,
-              plan: subscription.plan,
-              reason: reason || 'User requested',
-              refundAmount: refundAmount || 0,
-              refundProcessed: !!refundResult,
-            }),
-          });
-        } catch (webhookError) {
-          console.error('Webhook call failed:', webhookError);
-        }
       }
 
       return NextResponse.json({
@@ -278,26 +259,6 @@ export async function POST(request: NextRequest) {
         console.log('✅ Subscription history updated for scheduled cancellation');
       } catch (historyError) {
         console.error('Failed to update subscription history:', historyError);
-      }
-
-      // n8n 웹훅 호출 (해지 예약 알림)
-      if (isN8NNotificationEnabled()) {
-        try {
-          await fetch(process.env.N8N_WEBHOOK_URL!, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'subscription_canceled_scheduled',
-              tenantId,
-              email,
-              plan: subscription.plan,
-              reason: reason || 'User requested',
-              effectiveDate: subscription.currentPeriodEnd,
-            }),
-          });
-        } catch (webhookError) {
-          console.error('Webhook call failed:', webhookError);
-        }
       }
 
       return NextResponse.json({
