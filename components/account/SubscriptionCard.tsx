@@ -1032,7 +1032,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
         onUpdatePendingPlan={handleUpdatePendingPlan}
         isActiveSubscription={isActive}
         currentPlan={subscription.plan}
-        isExpired={isExpired}
+        isExpired={isExpired || isCanceled}
         activePlans={activePlans}
       />
     </>

@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
-      if (data.type === 'refund' && data.amount < 0) {
+      if ((data.type === 'refund' || data.transactionType === 'refund' || data.category === 'refund') && data.amount < 0) {
         const refundAmount = Math.abs(data.amount || 0);
 
         if (data.originalPaymentId) {

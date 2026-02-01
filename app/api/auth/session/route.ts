@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, verifyBearerToken } from '@/lib/auth';
 import { createAuthSession } from '@/lib/auth-session';
-import { cookies } from 'next/headers';
 
 const AUTH_SESSION_COOKIE = 'auth_session';
 const SESSION_EXPIRY_HOURS = 24;
@@ -73,9 +72,9 @@ export async function POST(request: NextRequest) {
     // 세션 생성
     const sessionId = await createAuthSession({ email, token, ip: ip || undefined });
 
-    // 쿠키 설정
-    const cookieStore = await cookies();
-    cookieStore.set(AUTH_SESSION_COOKIE, sessionId, {
+    // 쿠키 설정 (response.cookies.set으로 Set-Cookie 헤더 보장)
+    const response = NextResponse.json({ success: true, sessionId });
+    response.cookies.set(AUTH_SESSION_COOKIE, sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -83,7 +82,7 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
 
-    return NextResponse.json({ success: true, sessionId });
+    return response;
   } catch (error) {
     console.error('Session creation error:', error);
     return NextResponse.json({ error: 'Session creation failed' }, { status: 500 });
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
 
 // DELETE: 로그아웃 (세션 삭제)
 export async function DELETE() {
-  const cookieStore = await cookies();
-  cookieStore.delete(AUTH_SESSION_COOKIE);
-  return NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true });
+  response.cookies.delete(AUTH_SESSION_COOKIE);
+  return response;
 }

@@ -845,7 +845,7 @@ export default function TossPaymentWidget({
             {(isChangePlan || (hasBillingKey && isTrialImmediate) || (hasBillingKey && isReserve) || hasBillingKey) ? '처리 중...' : '카드 등록 페이지로 이동 중...'}
           </span>
         ) : isChangePlan ? (
-          isDowngrade ? '플랜 변경하기' : `${formatPrice(amount)}원 결제하기`
+          '플랜 변경하기'
         ) : hasBillingKey && isTrialImmediate ? (
           `${formatPrice(amount)}원 즉시 결제하기`
         ) : hasBillingKey && isReserve ? (

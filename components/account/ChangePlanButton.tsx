@@ -57,6 +57,7 @@ export default function ChangePlanButton({
     title: string;
     message: string;
     refundAmount?: number;
+    showCardLink?: boolean;
   }>({
     isOpen: false,
     type: 'success',
@@ -134,12 +135,16 @@ export default function ChangePlanButton({
             refundAmount: hasRefund ? data.refundAmount : undefined,
           });
         } else {
+          const isBillingKeyError = data.error?.includes('Billing key') || data.error?.includes('billing key');
           setShowModal(false);
           setResultModal({
             isOpen: true,
             type: 'error',
             title: '플랜 변경 실패',
-            message: data.error || '플랜 변경에 실패했습니다.',
+            message: isBillingKeyError
+              ? '등록된 카드가 없습니다. 카드를 먼저 등록해주세요.'
+              : (data.error || '플랜 변경에 실패했습니다.'),
+            showCardLink: isBillingKeyError,
           });
         }
       } else {
@@ -172,12 +177,16 @@ export default function ChangePlanButton({
             message: `${nextBillingDate ? formatDate(nextBillingDate) : '다음 결제일'}부터 ${newPlanName} 플랜이 적용됩니다.`,
           });
         } else {
+          const isBillingKeyError = data.error?.includes('Billing key') || data.error?.includes('billing key');
           setShowModal(false);
           setResultModal({
             isOpen: true,
             type: 'error',
             title: '플랜 변경 실패',
-            message: data.error || '플랜 변경에 실패했습니다.',
+            message: isBillingKeyError
+              ? '등록된 카드가 없습니다. 카드를 먼저 등록해주세요.'
+              : (data.error || '플랜 변경에 실패했습니다.'),
+            showCardLink: isBillingKeyError,
           });
         }
       }
@@ -391,21 +400,38 @@ export default function ChangePlanButton({
               )}
 
               {/* Button */}
-              <button
-                onClick={() => {
-                  setResultModal(prev => ({ ...prev, isOpen: false }));
-                  if (resultModal.type === 'success') {
-                    window.location.href = tenantId ? `/account/${tenantId}${authParam ? `?${authParam}` : ''}` : `/account${authParam ? `?${authParam}` : ''}`;
-                  }
-                }}
-                className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
-                  resultModal.type === 'success'
-                    ? 'bg-gray-900 text-white hover:bg-gray-800'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                확인
-              </button>
+              {resultModal.showCardLink ? (
+                <div className="space-y-2">
+                  <a
+                    href={`/account/change-card${tenantId ? `?tenantId=${tenantId}` : ''}${authParam ? `${tenantId ? '&' : '?'}${authParam}` : ''}`}
+                    className="block w-full py-3 px-4 rounded-lg font-semibold transition-colors bg-yamoo-primary text-gray-900 hover:bg-yellow-400 text-center"
+                  >
+                    카드 등록하러 가기
+                  </a>
+                  <button
+                    onClick={() => setResultModal(prev => ({ ...prev, isOpen: false }))}
+                    className="w-full py-3 px-4 rounded-lg font-semibold transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  >
+                    닫기
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setResultModal(prev => ({ ...prev, isOpen: false }));
+                    if (resultModal.type === 'success') {
+                      window.location.href = tenantId ? `/account/${tenantId}${authParam ? `?${authParam}` : ''}` : `/account${authParam ? `?${authParam}` : ''}`;
+                    }
+                  }}
+                  className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
+                    resultModal.type === 'success'
+                      ? 'bg-gray-900 text-white hover:bg-gray-800'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  확인
+                </button>
+              )}
             </div>
           </div>
         </div>
