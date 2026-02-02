@@ -493,6 +493,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
   const isPendingCancel = subscription.status === 'pending_cancel'; // 해지 예정 (서비스 이용 가능)
   const isCanceled = subscription.status === 'canceled'; // 즉시 해지됨 (서비스 종료)
   const isPastDue = subscription.status === 'past_due';
+  const isSuspended = subscription.status === 'suspended';
   const isExpired = subscription.status === 'expired';
 
   // authParam 파싱 헬퍼
@@ -856,6 +857,19 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
           </div>
         )}
 
+        {/* Suspended Warning */}
+        {isSuspended && (
+          <div className="bg-red-50 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2 text-red-700">
+              <WarningCircle width={20} height={20} strokeWidth={1.5} />
+              <span className="font-medium">이용 정지</span>
+            </div>
+            <p className="text-sm text-red-600 mt-1">
+              결제 실패로 서비스 이용이 정지되었습니다. 결제 수단을 확인하고 재결제해주세요.
+            </p>
+          </div>
+        )}
+
         {/* Canceled Info - 예정 해지 (scheduled) */}
         {isPendingCancel && subscription.currentPeriodEnd && (
           <div className="bg-yellow-50 rounded-lg p-4 mb-6">
@@ -939,21 +953,21 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
               구독 해지
             </button>
           )}
-          {isPastDue && (
+          {(isPastDue || isSuspended) && (
             <>
               <button
                 onClick={handleRetryPayment}
                 disabled={isRetrying}
-                className="btn-primary"
+                className="btn-secondary hover:!bg-yamoo-primary hover:!text-white hover:!border-yamoo-primary"
               >
                 {isRetrying ? '결제 중...' : '재결제하기'}
               </button>
-              <a
-                href={`/checkout?plan=${subscription.plan}${authParam ? `&${authParam}` : ''}${tenantId ? `&tenantId=${tenantId}` : ''}`}
+              <button
+                onClick={() => { window.location.hash = 'cards'; }}
                 className="btn-secondary"
               >
                 카드 변경하기
-              </a>
+              </button>
             </>
           )}
           {/* 예정 해지: 다시 이용하기 (재활성화) */}

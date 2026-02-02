@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // past_due 상태인 경우에만 재시도 허용
-    if (subscription?.status !== 'past_due') {
-      return NextResponse.json({ error: 'Only past_due subscriptions can be retried' }, { status: 400 });
+    // past_due 또는 suspended 상태인 경우에만 재시도 허용
+    if (subscription?.status !== 'past_due' && subscription?.status !== 'suspended') {
+      return NextResponse.json({ error: 'Only past_due or suspended subscriptions can be retried' }, { status: 400 });
     }
 
     if (!subscription?.billingKey) {

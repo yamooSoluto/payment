@@ -79,6 +79,7 @@ export function getStatusText(status: string): string {
     pending_cancel: '해지예정',
     canceled: '해지됨',
     past_due: '결제 실패',
+    suspended: '이용 정지',
     expired: '만료됨',
   };
   return statusMap[status] || status;
@@ -91,6 +92,7 @@ export function getStatusColor(status: string): string {
     pending_cancel: 'text-orange-600 bg-orange-100',
     canceled: 'text-gray-600 bg-gray-100',
     past_due: 'text-red-600 bg-red-100',
+    suspended: 'text-red-600 bg-red-100',
     expired: 'text-orange-600 bg-orange-100',
   };
   return colorMap[status] || 'text-gray-600 bg-gray-100';

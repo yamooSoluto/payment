@@ -130,6 +130,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   pending_cancel: { label: '해지 예정', color: 'text-orange-600 bg-orange-50', icon: Clock },
   canceled: { label: '해지됨', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
   past_due: { label: '결제 실패', color: 'text-red-600 bg-red-50', icon: WarningCircle },
+  suspended: { label: '이용 정지', color: 'text-red-600 bg-red-50', icon: WarningCircle },
   trial: { label: '체험 중', color: 'text-blue-600 bg-blue-50', icon: Clock },
   expired: { label: '미구독', color: 'text-gray-600 bg-gray-100', icon: WarningCircle },
 };
@@ -292,33 +293,23 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                     {hasValidSubscription ? (
                       <div className="flex items-center gap-2 mt-1">
                         {status === 'expired' || !statusConfig ? (
-                          // 만료(즉시해지) 또는 상태 미인식 - 미구독만 표시
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100">
+                          <span className="px-2 py-0.5 rounded text-xs font-medium text-gray-600 bg-gray-100">
                             미구독
                           </span>
                         ) : (
                           <>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
+                            <span className="text-xs font-medium text-gray-900">
+                              {PLAN_CONFIG[plan]?.label || plan}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusConfig.color}`}>
                               <StatusIcon width={12} height={12} strokeWidth={2} />
                               {statusConfig.label}
-                              {/* 해지 예정 또는 체험 중인 경우 종료일 표시 */}
-                              {(status === 'pending_cancel' || status === 'trial') && tenant.subscription!.currentPeriodEnd && (
-                                <span className="ml-0.5">
-                                  (~{new Date(tenant.subscription!.currentPeriodEnd).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Seoul' })})
-                                </span>
-                              )}
                             </span>
-                            {/* 플랜 라벨 (trial은 상태 라벨에서 이미 표시되므로 제외) */}
-                            {plan !== 'trial' && (
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PLAN_CONFIG[plan]?.color || 'text-gray-600 bg-gray-100'}`}>
-                                {PLAN_CONFIG[plan]?.label || plan}
-                              </span>
-                            )}
                           </>
                         )}
                       </div>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-600 bg-gray-100 mt-1">
+                      <span className="px-2 py-0.5 rounded text-xs font-medium text-gray-600 bg-gray-100 mt-1">
                         미구독
                       </span>
                     )}
@@ -327,14 +318,6 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
                 <NavArrowRight width={20} height={20} strokeWidth={2} className="text-gray-400" />
               </div>
 
-              {/* 추가 정보 */}
-              {tenant.subscription && tenant.subscription.status === 'active' && tenant.subscription.nextBillingDate && (
-                <div className="mt-3 ml-16 text-sm text-gray-500">
-                  <p>
-                    다음 결제일: {new Date(tenant.subscription.nextBillingDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
-                  </p>
-                </div>
-              )}
             </Link>
           );
         })}
