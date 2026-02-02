@@ -523,7 +523,7 @@ export async function POST(request: Request) {
 
       if (!userExists && tempPassword) {
         // 신규 사용자: 임시 비밀번호 포함
-        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n임시 비밀번호: ${tempPassword}\n\n포탈: ${portalUrl}\n\n위 포탈에서 ID/PW 접속 후 이용해 주세요.`;
+        const message = `[YAMOO] 무료체험 신청이 완료되었습니다.\n\n아이디: ${email}\n임시 비밀번호: ${tempPassword}\n\n포탈: ${portalUrl}\n\n위 ID/PW로 포탈에 접속해 이용해 주세요.\n\nPW는 홈페이지 로그인 후 마이페이지에서 변경 가능합니다.`;
 
         if (useAlimtalk) {
           const templateCode = process.env.BIZM_TRIAL_TEMPLATE_CODE || 'TRIAL_WELCOME';

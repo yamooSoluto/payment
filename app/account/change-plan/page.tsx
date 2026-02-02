@@ -107,8 +107,8 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
   // authParam: 세션 토큰 우선, 없으면 빈 문자열 (쿠키 인증 사용)
   const authParam = sessionToken ? `token=${sessionToken}` : '';
   const currentPlan = subscription.plan;
-  // 구독자가 결제한 금액 사용 (플랜 가격이 변경되어도 기존 금액 유지)
-  const currentAmount = subscription.amount || PLAN_PRICES[currentPlan] || 0;
+  // Enterprise는 협의 금액이라 환불 대상이 아님 → 0으로 처리
+  const currentAmount = currentPlan === 'enterprise' ? 0 : (subscription.amount || PLAN_PRICES[currentPlan] || 0);
   const nextBillingDate = subscription.nextBillingDate;
   const currentPeriodStart = subscription.currentPeriodStart;
 
@@ -149,7 +149,7 @@ export default async function ChangePlanPage({ searchParams }: ChangePlanPagePro
         <h1 className="text-3xl font-bold text-gray-900 mb-2">플랜 변경</h1>
         <p className="text-gray-600">
           현재 플랜: <span className="font-semibold">{getPlanName(currentPlan)}</span>
-          {currentAmount > 0 && (
+          {currentPlan !== 'enterprise' && currentAmount > 0 && (
             <span className="ml-2">({formatPrice(currentAmount)}원/월)</span>
           )}
         </p>

@@ -144,23 +144,19 @@ export async function GET(
               const phoneTenantData = phoneTenantsSnapshot.docs[0].data();
               const phoneTenantId = phoneTenantData.tenantId || phoneTenantsSnapshot.docs[0].id;
 
-              const phoneSubDoc = await db.collection('subscriptions').doc(phoneTenantId).get();
-              if (phoneSubDoc.exists && phoneSubDoc.data()?.plan === 'trial') {
-                const phoneSubData = phoneSubDoc.data()!;
-                phoneTrialInfo = {
-                  brandName: phoneTenantData.brandName,
-                  startDate: phoneSubData.currentPeriodStart?.toDate?.()?.toISOString() ||
-                             phoneSubData.startDate?.toDate?.()?.toISOString() ||
-                             phoneTenantData.createdAt?.toDate?.()?.toISOString(),
-                };
-              }
+              // subscription_history에서 trial 레코드 조회
+              const phoneTrialHistorySnapshot = await db
+                .collection('subscription_history').doc(phoneTenantId).collection('records')
+                .where('plan', '==', 'trial')
+                .orderBy('changedAt', 'asc')
+                .limit(1)
+                .get();
 
-              if (!phoneTrialInfo && phoneTenantData.subscription?.plan === 'trial') {
+              if (!phoneTrialHistorySnapshot.empty) {
+                const record = phoneTrialHistorySnapshot.docs[0].data();
                 phoneTrialInfo = {
                   brandName: phoneTenantData.brandName,
-                  startDate: phoneTenantData.subscription?.currentPeriodStart?.toDate?.()?.toISOString() ||
-                             phoneTenantData.subscription?.startDate?.toDate?.()?.toISOString() ||
-                             phoneTenantData.createdAt?.toDate?.()?.toISOString(),
+                  startDate: record.periodStart?.toDate?.()?.toISOString(),
                 };
               }
             }
@@ -201,7 +197,7 @@ export async function GET(
 
     await Promise.all(parallelQueries);
 
-    // 3. 단일 루프: trialApplied, trialInfo, hasPaidSubscription 모두 확인
+    // 3. 단일 루프: trialApplied, hasPaidSubscription 확인
     for (const { tenantData, subData } of tenantSubPairs) {
       // trialApplied 체크 — embedded subscription
       if (!trialApplied) {
@@ -220,28 +216,6 @@ export async function GET(
         }
       }
 
-      // trialInfo 추출 — embedded subscription
-      if (!trialInfo && tenantData.subscription?.plan === 'trial') {
-        trialInfo = {
-          brandName: tenantData.brandName,
-          startDate: tenantData.subscription?.currentPeriodStart?.toDate?.()?.toISOString() ||
-                     tenantData.subscription?.startDate?.toDate?.()?.toISOString() ||
-                     tenantData.createdAt?.toDate?.()?.toISOString(),
-          endDate: tenantData.subscription?.currentPeriodEnd?.toDate?.()?.toISOString(),
-        };
-      }
-
-      // trialInfo 추출 — subscriptions 컬렉션
-      if (!trialInfo && subData?.plan === 'trial') {
-        trialInfo = {
-          brandName: tenantData.brandName,
-          startDate: subData.currentPeriodStart?.toDate?.()?.toISOString() ||
-                     subData.startDate?.toDate?.()?.toISOString() ||
-                     tenantData.createdAt?.toDate?.()?.toISOString(),
-          endDate: subData.currentPeriodEnd?.toDate?.()?.toISOString(),
-        };
-      }
-
       // hasPaidSubscription 체크
       if (!hasPaidSubscription) {
         if (subData?.plan && subData.plan !== 'trial') {
@@ -249,6 +223,29 @@ export async function GET(
         } else if (tenantData.subscription?.plan && tenantData.subscription.plan !== 'trial') {
           hasPaidSubscription = true;
         }
+      }
+    }
+
+    // 4. trialInfo 추출 — subscription_history에서 trial 레코드 조회
+    for (const { tenantData } of tenantSubPairs) {
+      if (trialInfo) break;
+      const tenantId = tenantData.tenantId || tenantData.id;
+      if (!tenantId) continue;
+
+      const trialHistorySnapshot = await db
+        .collection('subscription_history').doc(tenantId).collection('records')
+        .where('plan', '==', 'trial')
+        .orderBy('changedAt', 'asc')
+        .limit(1)
+        .get();
+
+      if (!trialHistorySnapshot.empty) {
+        const record = trialHistorySnapshot.docs[0].data();
+        trialInfo = {
+          brandName: tenantData.brandName,
+          startDate: record.periodStart?.toDate?.()?.toISOString(),
+          endDate: record.periodEnd?.toDate?.()?.toISOString(),
+        };
       }
     }
 

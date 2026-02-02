@@ -127,18 +127,19 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
             if (userData.phone) {
               setIsPhoneVerified(true);
             }
-            // 유료 구독 이력이 있는 경우 (우선 체크)
-            if (userData.hasPaidSubscription) {
+            // 무료체험 신청한 경우 (우선 체크)
+            if (userData.trialApplied && userData.trialInfo) {
+              setAlreadyApplied(true);
+              setTrialInfo(userData.trialInfo);
+            }
+            // 무료체험 없이 유료 구독만 있는 경우
+            else if (userData.hasPaidSubscription) {
               setHasPaidSubscription(true);
               setAlreadyApplied(true);
             }
-            // 무료체험만 신청한 경우
+            // trialInfo 없이 trialApplied만 있는 경우
             else if (userData.trialApplied) {
               setAlreadyApplied(true);
-              // 무료체험 상세 정보 저장
-              if (userData.trialInfo) {
-                setTrialInfo(userData.trialInfo);
-              }
             }
           }
         } catch (error) {
@@ -473,8 +474,8 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
 
           {!user && (
             <p className="text-gray-500 text-xs sm:text-sm mb-6">
-              카카오톡을 확인해 주세요.<br />
-              <span className="text-gray-400">(카카오톡 미사용 시 문자를 확인해 주세요)</span>
+              문자를 확인해 주세요.<br />
+              <span className="text-gray-400">(수신이 안 된 경우 스팸 메시지함 또는 차단된 메시지 목록을 확인해 주세요)</span>
             </p>
           )}
 

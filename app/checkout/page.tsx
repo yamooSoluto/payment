@@ -224,8 +224,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       originalBillingCycleStart.setMonth(originalBillingCycleStart.getMonth() - 1);
       billingCycleTotalDays = Math.round((nextDateOnly.getTime() - originalBillingCycleStart.getTime()) / (1000 * 60 * 60 * 24));
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // KST(UTC+9) 기준 오늘 날짜
+      const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+      const today = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate()));
       usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       daysLeft = Math.max(0, totalDays - usedDays);
       newPlanDays = daysLeft + 1;
@@ -237,9 +238,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     }
 
     // 실제 결제한 금액 조회
-    // 우선순위: 1) payments에서 조회 → 2) 일할계산 → 3) subscription.amount → 4) 플랜 기본가
+    // Enterprise는 협의 금액이라 환불 대상이 아님
     let currentAmount = 0;
-    if (tenantId) {
+    if (subscription.plan === 'enterprise') {
+      currentAmount = 0;
+    } else if (tenantId) {
       const payments = await getPaymentHistoryByTenantId(tenantId, 10);
       // 현재 플랜의 마지막 결제 (charge 타입) 찾기
       const lastPaymentForCurrentPlan = payments.find(
@@ -251,13 +254,14 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       }
     }
     // payments에서 못 찾은 경우: 일할계산 수행 (다운그레이드 후 재변경 케이스)
-    if (!currentAmount && totalDays > 0 && billingCycleTotalDays > 0) {
+    // Enterprise는 위에서 0으로 설정했으므로 fallback 건너뜀
+    if (subscription.plan !== 'enterprise' && !currentAmount && totalDays > 0 && billingCycleTotalDays > 0) {
       const planPrice = currentPlanInfo?.price || 0;
       // 현재 기간에 해당하는 플랜 가치 = 플랜기본가 * (현재기간일수 / 원래결제주기일수)
       currentAmount = Math.round((planPrice / billingCycleTotalDays) * totalDays);
     }
     // 그래도 없으면 subscription.amount 또는 플랜 기본가 사용 (최후의 fallback)
-    if (!currentAmount) {
+    if (subscription.plan !== 'enterprise' && !currentAmount) {
       currentAmount = subscription.amount || currentPlanInfo?.price || 0;
     }
 

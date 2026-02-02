@@ -34,7 +34,7 @@ interface TenantSelectModalProps {
 
 interface AlertModalState {
   isOpen: boolean;
-  type: 'same-plan' | 'change-plan' | 'trial-upgrade' | 'active-change';
+  type: 'same-plan' | 'change-plan' | 'trial-upgrade' | 'active-change' | 'enterprise';
   currentPlan: string;
   targetPlan: string;
   tenantId: string;
@@ -166,6 +166,16 @@ export default function TenantSelectModal({
         setAlertModal({
           isOpen: true,
           type: 'trial-upgrade',
+          currentPlan,
+          targetPlan: selectedPlan,
+          tenantId: tenant.tenantId,
+        });
+        return;
+      } else if (currentPlan === 'enterprise') {
+        // Enterprise는 셀프 플랜 변경 불가
+        setAlertModal({
+          isOpen: true,
+          type: 'enterprise',
           currentPlan,
           targetPlan: selectedPlan,
           tenantId: tenant.tenantId,
@@ -518,13 +528,13 @@ export default function TenantSelectModal({
             <div className="pt-8 pb-4 flex justify-center">
               <div className={cn(
                 "w-16 h-16 rounded-full flex items-center justify-center",
-                alertModal.type === 'same-plan'
+                (alertModal.type === 'same-plan' || alertModal.type === 'enterprise')
                   ? "bg-amber-100"
                   : alertModal.type === 'trial-upgrade'
                   ? "bg-cyan-100"
                   : "bg-blue-100"
               )}>
-                {alertModal.type === 'same-plan' ? (
+                {(alertModal.type === 'same-plan' || alertModal.type === 'enterprise') ? (
                   <WarningCircle width={32} height={32} strokeWidth={1.5} className="text-amber-600" />
                 ) : alertModal.type === 'trial-upgrade' ? (
                   <Sparks width={32} height={32} strokeWidth={1.5} className="text-cyan-600" />
@@ -537,14 +547,22 @@ export default function TenantSelectModal({
             {/* Content */}
             <div className="px-6 pb-6 text-center">
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                {alertModal.type === 'same-plan'
+                {alertModal.type === 'enterprise'
+                  ? 'Enterprise 구독중입니다'
+                  : alertModal.type === 'same-plan'
                   ? '이미 구독중인 플랜입니다'
                   : (alertModal.type === 'trial-upgrade' || alertModal.type === 'active-change')
                   ? '플랜 전환 방식을 선택해주세요'
                   : '플랜을 변경하시겠습니까?'}
               </h3>
               <p className="text-gray-600 text-sm mb-6">
-                {alertModal.type === 'same-plan' ? (
+                {alertModal.type === 'enterprise' ? (
+                  <>
+                    Enterprise 플랜을 구독중인 경우<br />
+                    플랜 변경 또는 구독 해지가 불가합니다.<br />
+                    관련 내용은 담당자에게 문의 부탁드립니다.
+                  </>
+                ) : alertModal.type === 'same-plan' ? (
                   <>
                     현재 <span className="font-semibold text-gray-900">{alertModal.currentPlan}</span> 플랜을 구독중입니다.<br />
                     플랜 변경 또는 구독 해지는<br />
@@ -564,7 +582,14 @@ export default function TenantSelectModal({
               </p>
 
               {/* Buttons */}
-              {(alertModal.type === 'trial-upgrade' || alertModal.type === 'active-change') ? (
+              {alertModal.type === 'enterprise' ? (
+                <button
+                  onClick={handleAlertClose}
+                  className="w-full py-3 px-4 rounded-lg font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+                >
+                  닫기
+                </button>
+              ) : (alertModal.type === 'trial-upgrade' || alertModal.type === 'active-change') ? (
                 <div className="space-y-3">
                   <button
                     onClick={handleSchedule}

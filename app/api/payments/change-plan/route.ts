@@ -53,9 +53,9 @@ function calculateProration(
   // 현재 기간의 총 일수 (currentPeriodStart ~ nextBillingDate) - 실제 기간
   const totalDaysInPeriod = Math.round((nextDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
 
-  // 사용 일수 (오늘 포함)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // 사용 일수 (오늘 포함, KST 기준)
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const today = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate()));
   const usedDays = Math.round((today.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   // 남은 일수
@@ -153,7 +153,8 @@ export async function POST(request: NextRequest) {
     }
 
     const previousPlan = subscription.plan;
-    const previousAmount = subscription.amount || PLAN_PRICES[previousPlan] || 0;
+    // Enterprise는 협의 금액이라 환불 대상이 아님
+    const previousAmount = previousPlan === 'enterprise' ? 0 : (subscription.amount || PLAN_PRICES[previousPlan] || 0);
     const now = new Date();
     const timestamp = Date.now();
 

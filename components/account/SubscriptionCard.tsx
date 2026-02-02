@@ -696,7 +696,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
                 {isCanceled ? '해지됨' : getStatusText(subscription.status)}
               </span>
             </div>
-            {isActive && (subscription.baseAmount || subscription.amount) && (
+            {isActive && subscription.plan !== 'enterprise' && (subscription.baseAmount || subscription.amount) && (
               <p className="text-2xl font-bold text-blue-900">
                 {formatPrice(subscription.baseAmount ?? subscription.amount ?? 0)}원<span className="text-sm font-normal text-gray-500"> / 월</span>
               </p>
@@ -749,8 +749,8 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
                 </p>
               </div>
             </div>
-            {/* 예약된 플랜이 없고 active 상태일 때만 다음 결제일 표시 */}
-            {isActive && !subscription.pendingPlan && (
+            {/* 예약된 플랜이 없고 active 상태일 때만 다음 결제일 표시 (Enterprise 제외) */}
+            {isActive && !subscription.pendingPlan && subscription.plan !== 'enterprise' && (
               <>
                 <div className="flex items-center gap-3 text-gray-600">
                   <Calendar width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
@@ -916,8 +916,8 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
               </button>
             </>
           )}
-          {/* 플랜이 3개 이상이거나 예약된 플랜이 없을 때만 플랜 변경 버튼 표시 */}
-          {isActive && ((activePlans?.length || DEFAULT_PLANS.length) > 2 || !subscription.pendingPlan) && (
+          {/* 플랜이 3개 이상이거나 예약된 플랜이 없을 때만 플랜 변경 버튼 표시 (Enterprise 제외) */}
+          {isActive && subscription.plan !== 'enterprise' && ((activePlans?.length || DEFAULT_PLANS.length) > 2 || !subscription.pendingPlan) && (
             <button
               onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
               className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
@@ -925,7 +925,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
               플랜 변경
             </button>
           )}
-          {isActive && (
+          {isActive && subscription.plan !== 'enterprise' && (
             <button
               onClick={() => {
                 if (subscription.pendingPlan) {
