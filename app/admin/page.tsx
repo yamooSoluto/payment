@@ -210,12 +210,12 @@ export default function AdminDashboard() {
   const memberTrend = trend?.signups?.length === 3 ? trend.signups : [newSignups, newSignups, newSignups];
 
   return (
-    <div className="relative space-y-8">
+    <div className="relative space-y-8 overflow-hidden">
       <div className="pointer-events-none absolute -right-10 -top-20 h-52 w-52 rounded-full bg-yamoo-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute left-10 top-48 h-64 w-64 rounded-full bg-[#ff5e9a]/10 blur-3xl" />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_360px] xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-2 xl:row-span-2 xl:h-full">
+        <section className="order-3 overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-2 xl:row-span-2 xl:h-full">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">최근 현황</h2>
@@ -268,7 +268,7 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <section className="relative overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] order-first xl:order-1 xl:row-span-2 xl:h-full">
+        <section className="order-1 relative overflow-hidden rounded-[28px] border border-white/20 bg-white/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-1 xl:row-span-2 xl:h-full">
           <div className="relative flex h-full flex-col gap-6 px-6 py-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -310,7 +310,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-3 xl:h-full">
+        <section className="order-2 rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-3 xl:h-full">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">구독 상태</h2>
@@ -354,7 +354,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-4 xl:h-full">
+        <section className="order-4 rounded-[28px] border border-white/20 bg-white/70 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] xl:order-4 xl:h-full">
           <h2 className="text-lg font-semibold text-slate-900">바로가기</h2>
           <div className="mt-5 space-y-4 text-sm">
             <Link
