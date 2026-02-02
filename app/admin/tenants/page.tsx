@@ -514,9 +514,9 @@ export default function TenantsPage() {
       case 'pending_cancel':
         return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
       case 'past_due':
-        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제실패</span>;
+        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제 실패</span>;
       case 'suspended':
-        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>일시정지</span>;
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>이용 정지</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':

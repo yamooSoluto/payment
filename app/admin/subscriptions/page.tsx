@@ -276,9 +276,9 @@ export default function SubscriptionsPage() {
       case 'pending_cancel':
         return <span className={`${baseClass} bg-orange-100 text-orange-700`}>해지예정</span>;
       case 'past_due':
-        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제실패</span>;
+        return <span className={`${baseClass} bg-red-100 text-red-700`}>결제 실패</span>;
       case 'suspended':
-        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>일시정지</span>;
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>이용 정지</span>;
       case 'canceled':
         return <span className={`${baseClass} bg-red-100 text-red-700`}>해지</span>;
       case 'expired':
@@ -570,8 +570,8 @@ export default function SubscriptionsPage() {
                                 { value: 'trialing', label: '체험' },
                                 { value: 'active', label: '구독중' },
                                 { value: 'pending_cancel', label: '해지예정' },
-                                { value: 'past_due', label: '결제실패' },
-                                { value: 'suspended', label: '일시정지' },
+                                { value: 'past_due', label: '결제 실패' },
+                                { value: 'suspended', label: '이용 정지' },
                                 { value: 'completed', label: '완료' },
                                 { value: 'expired', label: '만료' },
                                 { value: 'canceled', label: '해지' },
@@ -872,8 +872,8 @@ export default function SubscriptionsPage() {
                                 { value: 'trialing', label: '체험' },
                                 { value: 'active', label: '구독중' },
                                 { value: 'pending_cancel', label: '해지예정' },
-                                { value: 'past_due', label: '결제실패' },
-                                { value: 'suspended', label: '일시정지' },
+                                { value: 'past_due', label: '결제 실패' },
+                                { value: 'suspended', label: '이용 정지' },
                                 { value: 'completed', label: '완료' },
                                 { value: 'expired', label: '만료' },
                                 { value: 'canceled', label: '해지' },

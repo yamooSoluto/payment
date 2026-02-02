@@ -142,8 +142,8 @@ export function getSubscriptionStatusBadge(status: unknown) {
     trialing: '체험',
     canceled: '해지',
     pending_cancel: '해지예정',
-    past_due: '결제실패',
-    suspended: '일시정지',
+    past_due: '결제 실패',
+    suspended: '이용 정지',
     expired: '만료',
     completed: '완료',
   };

@@ -163,8 +163,8 @@ export default function SubscriptionHistorySection({ memberId, member, tenants }
                           <option value="trialing">체험</option>
                           <option value="active">구독중</option>
                           <option value="pending_cancel">해지예정</option>
-                          <option value="past_due">결제실패</option>
-                          <option value="suspended">일시정지</option>
+                          <option value="past_due">결제 실패</option>
+                          <option value="suspended">이용 정지</option>
                           <option value="completed">완료</option>
                           <option value="expired">만료</option>
                           <option value="canceled">해지</option>

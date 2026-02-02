@@ -9,7 +9,7 @@ export type SubscriptionStatus =
   | 'canceled'       // 해지됨
   | 'expired'        // 만료
   | 'past_due'       // 결제 실패
-  | 'suspended';     // 일시 정지
+  | 'suspended';     // 이용 정지
 
 export type PlanType = 'trial' | 'basic' | 'business' | 'enterprise';
 
@@ -128,7 +128,7 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   canceled: '해지',
   expired: '만료',
   past_due: '결제 실패',
-  suspended: '일시 정지',
+  suspended: '이용 정지',
 };
 
 // 구독이 활성 상태인지 확인
