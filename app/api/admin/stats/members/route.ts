@@ -5,6 +5,7 @@ import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 // 회원 그룹명 매핑
 const groupNames: Record<string, string> = {
   general: '일반',
+  internal: '내부',
   vip: 'VIP',
   premium: '프리미엄',
   partner: '파트너',
@@ -93,13 +94,26 @@ export async function GET(request: NextRequest) {
       id: doc.id,
     }));
 
-    // 구독 데이터 조회 (구독 보유 회원 확인용)
+    // 구독 데이터 조회 (구독 회원 확인용)
     const subscriptionsSnapshot = await db.collection('subscriptions').get();
-    const activeSubscriptionUserIds = new Set(
+    const subscribingStatuses = ['active', 'trial', 'pending_cancel'];
+    const subscribingUserIds = new Set(
       subscriptionsSnapshot.docs
-        .filter(doc => doc.data().status === 'active')
+        .filter(doc => subscribingStatuses.includes(doc.data().status))
         .map(doc => doc.data().userId)
     );
+
+    // 디버그: 구독 회원 매칭 확인
+    const allSubStatuses = subscriptionsSnapshot.docs.map(doc => doc.data().status);
+    const allSubUserIds = subscriptionsSnapshot.docs.map(doc => doc.data().userId);
+    const userDocIds = allUsers.map(u => u.id).slice(0, 5);
+    console.log('[member-stats-debug]', {
+      totalSubscriptions: subscriptionsSnapshot.docs.length,
+      statuses: [...new Set(allSubStatuses)],
+      subscribingCount: subscribingUserIds.size,
+      subscribingUserIdsSample: [...subscribingUserIds].slice(0, 3),
+      userDocIdsSample: userDocIds,
+    });
 
     // 전체 회원 수
     const total = allUsers.length;
@@ -119,18 +133,23 @@ export async function GET(request: NextRequest) {
     });
     const newSignups = periodNewUsers.length;
 
-    // 구독 보유 회원
-    const withSubscription = allUsers.filter(u => activeSubscriptionUserIds.has(u.id)).length;
+    // 구독 회원 (구독중/체험중/해지예정) - users.userId와 subscriptions.userId 매칭
+    const subscribingMembers = allUsers.filter(u => subscribingUserIds.has(u.userId)).length;
 
-    // 월별 가입 추이
-    const labels = getMonthlyLabels(start, end);
+    // 월별 가입 추이 (전체 기간)
+    let trendStart = new Date();
+    allUsers.forEach(u => {
+      const createdAt = u.createdAt?.toDate?.() || (u.createdAt ? new Date(u.createdAt) : null);
+      if (createdAt && createdAt < trendStart) trendStart = createdAt;
+    });
+    const labels = getMonthlyLabels(trendStart, new Date());
     const signupsByMonth: Record<string, number> = {};
 
     labels.forEach(label => {
       signupsByMonth[label] = 0;
     });
 
-    periodNewUsers.forEach(u => {
+    allUsers.forEach(u => {
       const createdAt = u.createdAt?.toDate?.() || (u.createdAt ? new Date(u.createdAt) : null);
       if (createdAt) {
         const label = `${createdAt.getFullYear()}.${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
@@ -138,6 +157,17 @@ export async function GET(request: NextRequest) {
           signupsByMonth[label] += 1;
         }
       }
+    });
+
+    // 월말 기준 전체 회원 수
+    const totalByMonth: Record<string, number> = {};
+    labels.forEach(label => {
+      const [y, m] = label.split('.').map(Number);
+      const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+      totalByMonth[label] = allUsers.filter(u => {
+        const createdAt = u.createdAt?.toDate?.() || (u.createdAt ? new Date(u.createdAt) : null);
+        return createdAt && createdAt <= monthEnd;
+      }).length;
     });
 
     // 그룹별 분포
@@ -156,13 +186,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       summary: {
         total,
-        active,
+        subscribingMembers,
         newSignups,
-        withSubscription,
       },
       trend: {
         labels,
         signups: labels.map(l => signupsByMonth[l] || 0),
+        totalCount: labels.map(l => totalByMonth[l] || 0),
       },
       byGroup,
     });

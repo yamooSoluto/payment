@@ -12,7 +12,7 @@ const planNames: Record<string, string> = {
 
 // 결제 상태명 매핑
 const statusNames: Record<string, string> = {
-  done: '완료',
+  done: '결제',
   pending: '대기',
   failed: '실패',
   refunded: '환불',
@@ -130,8 +130,13 @@ export async function GET(request: NextRequest) {
       ? periodRevenue / periodCompletedPayments.length
       : 0;
 
-    // 월별 추이
-    const labels = getMonthlyLabels(start, end);
+    // 월별 추이 (전체 기간)
+    let trendStart = new Date();
+    allPayments.forEach(p => {
+      const paidAt = p.paidAt?.toDate?.() || (p.paidAt ? new Date(p.paidAt) : null);
+      if (paidAt && paidAt < trendStart) trendStart = paidAt;
+    });
+    const labels = getMonthlyLabels(trendStart, new Date());
     const revenueByMonth: Record<string, number> = {};
     const refundsByMonth: Record<string, number> = {};
 
@@ -140,7 +145,7 @@ export async function GET(request: NextRequest) {
       refundsByMonth[label] = 0;
     });
 
-    periodCompletedPayments.forEach(p => {
+    completedPayments.forEach(p => {
       const paidAt = p.paidAt?.toDate?.() || (p.paidAt ? new Date(p.paidAt) : null);
       if (paidAt) {
         const label = `${paidAt.getFullYear()}.${String(paidAt.getMonth() + 1).padStart(2, '0')}`;
@@ -150,7 +155,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    periodRefundedPayments.forEach(p => {
+    refundedPayments.forEach(p => {
       const paidAt = p.paidAt?.toDate?.() || (p.paidAt ? new Date(p.paidAt) : null);
       if (paidAt) {
         const label = `${paidAt.getFullYear()}.${String(paidAt.getMonth() + 1).padStart(2, '0')}`;

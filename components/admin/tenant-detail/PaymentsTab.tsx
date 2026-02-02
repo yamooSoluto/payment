@@ -68,7 +68,8 @@ export default function PaymentsTab({ tenantId }: PaymentsTabProps) {
       {/* 누적 금액 요약 */}
       {payments.length > 0 && (
         <div className="bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          {/* Desktop: 3열 그리드 */}
+          <div className="hidden sm:grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-xs text-gray-500 mb-1">총 결제</p>
               <p className="text-lg font-semibold text-gray-900">{totalCharge.toLocaleString()}원</p>
@@ -82,6 +83,23 @@ export default function PaymentsTab({ tenantId }: PaymentsTabProps) {
               <p className={`text-lg font-semibold ${netTotal >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                 {netTotal.toLocaleString()}원
               </p>
+            </div>
+          </div>
+          {/* Mobile: 한 줄씩 왼쪽 정렬 */}
+          <div className="flex flex-col gap-2 sm:hidden">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 w-14">총 결제</span>
+              <span className="text-sm font-semibold text-gray-900">{totalCharge.toLocaleString()}원</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 w-14">총 환불</span>
+              <span className="text-sm font-semibold text-red-600">-{totalRefund.toLocaleString()}원</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 w-14">순 결제</span>
+              <span className={`text-sm font-semibold ${netTotal >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                {netTotal.toLocaleString()}원
+              </span>
             </div>
           </div>
         </div>

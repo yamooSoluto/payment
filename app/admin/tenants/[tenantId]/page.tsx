@@ -436,7 +436,7 @@ export default function TenantDetailPage() {
 
       {/* 탭 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="flex border-b border-gray-100 overflow-x-auto">
+        <div className="flex border-b border-gray-100 overflow-x-auto touch-pan-x overscroll-x-contain">
           {[
             { id: 'basic' as TabType, label: '기본 정보', icon: <InfoCircle className="w-4 h-4" /> },
             { id: 'ai' as TabType, label: 'AI 설정', icon: <Spark className="w-4 h-4" /> },

@@ -10,6 +10,7 @@ import {
   Line,
   BarChart,
   Bar,
+  ComposedChart,
   PieChart,
   Pie,
   Cell,
@@ -18,7 +19,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 
 // 탭 타입
@@ -55,11 +55,13 @@ interface SubscriptionStats {
     canceled: number;
     expired: number;
     mrr: number;
+    firstSubscription: number;
   };
   trend: {
     labels: string[];
     newSubscriptions: number[];
     cancellations: number[];
+    activeCount: number[];
   };
   byPlan: { plan: string; planName: string; count: number }[];
   byStatus: { status: string; statusName: string; count: number }[];
@@ -69,13 +71,13 @@ interface SubscriptionStats {
 interface MemberStats {
   summary: {
     total: number;
-    active: number;
+    subscribingMembers: number;
     newSignups: number;
-    withSubscription: number;
   };
   trend: {
     labels: string[];
     signups: number[];
+    totalCount: number[];
   };
   byGroup: { group: string; groupName: string; count: number }[];
 }
@@ -84,13 +86,13 @@ interface MemberStats {
 interface TenantStats {
   summary: {
     total: number;
-    active: number;
-    trial: number;
-    canceled: number;
+    subscribing: number;
     newTenants: number;
   };
   trend: {
     labels: string[];
+    totalCount: number[];
+    subscribingCount: number[];
     newTenants: number[];
   };
   byPlan: { plan: string; planName: string; count: number }[];
@@ -120,6 +122,24 @@ const periods = [
 // 숫자 포맷
 const formatNumber = (num: number) => num.toLocaleString('ko-KR');
 const formatCurrency = (num: number) => `${num.toLocaleString('ko-KR')}원`;
+
+// 추이 데이터에서 연도 목록 추출
+function getYearsFromLabels(labels: string[]): string[] {
+  const years = [...new Set(labels.map(l => l.split('.')[0]))];
+  return years.sort((a, b) => b.localeCompare(a));
+}
+
+// 추이 데이터 연도별 필터링 + 1~12월 모두 표시
+function filterTrendByYear<T extends { name: string }>(data: T[], year: string): (Omit<T, 'name'> & { name: string; month: string })[] {
+  const dataMap = new Map(data.filter(d => d.name.startsWith(year)).map(d => [d.name, d]));
+  return Array.from({ length: 12 }, (_, i) => {
+    const key = `${year}.${String(i + 1).padStart(2, '0')}`;
+    const existing = dataMap.get(key);
+    if (existing) return { ...existing, month: `${i + 1}월` };
+    const empty = Object.fromEntries(Object.keys(data[0] || {}).map(k => [k, k === 'name' ? key : 0])) as T;
+    return { ...empty, name: key, month: `${i + 1}월` };
+  });
+}
 
 // StatCard 컴포넌트
 function StatCard({
@@ -155,6 +175,7 @@ export default function StatsPage() {
   const [period, setPeriod] = useState<PeriodType>('thisMonth');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [trendYear, setTrendYear] = useState(new Date().getFullYear().toString());
   // 탭 변경 시 URL 업데이트
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -189,17 +210,15 @@ export default function StatsPage() {
 
     const trendData = revenueData.trend.labels.map((label, index) => ({
       name: label,
-      매출: revenueData.trend.revenue[index],
-      환불: revenueData.trend.refunds[index],
+      순매출: revenueData.trend.revenue[index] - revenueData.trend.refunds[index],
     }));
 
     return (
       <div className="space-y-6">
         {/* 요약 카드 */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard label="매출" value={formatCurrency(revenueData.summary.periodRevenue)} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <StatCard label="순매출" value={formatCurrency(revenueData.summary.periodRevenue - revenueData.summary.refundAmount)} />
           <StatCard label="결제 건수" value={revenueData.summary.completedCount} suffix="건" />
-          <StatCard label="환불액" value={formatCurrency(revenueData.summary.refundAmount)} />
         </div>
 
         {/* 플랜별 / 상태별 */}
@@ -208,12 +227,12 @@ export default function StatsPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold mb-4">플랜별 매출</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={revenueData.byPlan} layout="vertical">
+              <BarChart data={revenueData.byPlan}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
-                <YAxis type="category" dataKey="planName" tick={{ fontSize: 12 }} width={80} />
+                <XAxis dataKey="planName" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
                 <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                <Bar dataKey="amount" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="amount" name="매출" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -246,18 +265,79 @@ export default function StatsPage() {
 
         {/* 매출 추이 차트 */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">매출 추이</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">매출 추이</h3>
+            <select
+              value={trendYear}
+              onChange={(e) => setTrendYear(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600"
+            >
+              {getYearsFromLabels(revenueData.trend.labels).map(y => (
+                <option key={y} value={y}>{y}년</option>
+              ))}
+            </select>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={trendData}>
+            <LineChart data={filterTrendByYear(trendData, trendYear)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Legend />
-              <Bar dataKey="매출" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="환불" fill="#ef4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Line type="linear" dataKey="순매출" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+            </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* 매출 상세 테이블 */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold mb-4">매출 상세</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-gray-500">
+                  <th className="text-center py-2 font-medium">기간</th>
+                  <th className="text-center py-2 font-medium">매출</th>
+                  <th className="text-center py-2 font-medium">환불</th>
+                  <th className="text-center py-2 font-medium">순매출</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const yearMap = new Map<string, { revenue: number; refunds: number; months: { label: string; month: string; revenue: number; refunds: number }[] }>();
+                  revenueData.trend.labels.forEach((label, i) => {
+                    const year = label.split('.')[0];
+                    const month = `${Number(label.split('.')[1])}월`;
+                    if (!yearMap.has(year)) yearMap.set(year, { revenue: 0, refunds: 0, months: [] });
+                    const entry = yearMap.get(year)!;
+                    const rev = revenueData.trend.revenue[i] || 0;
+                    const ref = revenueData.trend.refunds[i] || 0;
+                    entry.revenue += rev;
+                    entry.refunds += ref;
+                    entry.months.push({ label, month, revenue: rev, refunds: ref });
+                  });
+                  const years = [...yearMap.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+                  return years.map(([year, data]) => (
+                    <>
+                      <tr key={year} className="bg-gray-50 font-semibold border-b border-gray-100">
+                        <td className="text-center py-2.5">{year}년</td>
+                        <td className="text-center py-2.5">{formatCurrency(data.revenue)}</td>
+                        <td className="text-center py-2.5 text-red-500">{formatCurrency(data.refunds)}</td>
+                        <td className="text-center py-2.5">{formatCurrency(data.revenue - data.refunds)}</td>
+                      </tr>
+                      {data.months.map(m => (
+                        <tr key={m.label} className="border-b border-gray-50 text-gray-600">
+                          <td className="text-center py-2">{m.month}</td>
+                          <td className="text-center py-2">{formatCurrency(m.revenue)}</td>
+                          <td className="text-center py-2 text-red-400">{m.refunds > 0 ? formatCurrency(m.refunds) : '-'}</td>
+                          <td className="text-center py-2">{formatCurrency(m.revenue - m.refunds)}</td>
+                        </tr>
+                      ))}
+                    </>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -269,36 +349,18 @@ export default function StatsPage() {
 
     const trendData = subscriptionData.trend.labels.map((label, index) => ({
       name: label,
+      활성: subscriptionData.trend.activeCount[index],
       신규: subscriptionData.trend.newSubscriptions[index],
-      취소: subscriptionData.trend.cancellations[index],
+      해지: subscriptionData.trend.cancellations[index],
     }));
 
     return (
       <div className="space-y-6">
         {/* 요약 카드 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <StatCard label="전체 구독" value={subscriptionData.summary.total} suffix="건" />
-          <StatCard label="활성 구독" value={subscriptionData.summary.active} suffix="건" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard label="구독중" value={subscriptionData.summary.active} suffix="건" />
           <StatCard label="체험중" value={subscriptionData.summary.trial} suffix="건" />
-          <StatCard label="취소" value={subscriptionData.summary.canceled} suffix="건" />
-          <StatCard label="만료" value={subscriptionData.summary.expired} suffix="건" />
-          <StatCard label="MRR" value={formatCurrency(subscriptionData.summary.mrr)} />
-        </div>
-
-        {/* 구독 추이 차트 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">구독 추이</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="신규" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="취소" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <StatCard label="첫 구독" value={subscriptionData.summary.firstSubscription} suffix="건" />
         </div>
 
         {/* 플랜별 / 상태별 */}
@@ -324,16 +386,21 @@ export default function StatsPage() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-            <div className="mt-4 space-y-2">
-              {subscriptionData.byPlan.map((item, index) => (
-                <div key={item.plan} className="flex justify-between items-center text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                    <span>{item.planName}</span>
+            <div className="mt-4 border-t border-gray-200">
+              {subscriptionData.byPlan.map((item, index) => {
+                const total = subscriptionData.byPlan.reduce((sum, s) => sum + s.count, 0);
+                const percentage = total > 0 ? (item.count / total) * 100 : 0;
+                return (
+                  <div key={item.plan} className="flex items-center text-sm py-2.5 border-b border-gray-100">
+                    <div className="flex items-center gap-2 w-1/3">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                      <span className="font-medium">{item.planName}</span>
+                    </div>
+                    <span className="w-1/3 text-gray-600">{item.count}건</span>
+                    <span className="w-1/3 text-gray-500">{percentage.toFixed(1)}%</span>
                   </div>
-                  <span className="text-gray-500">{item.count}건</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -362,6 +429,38 @@ export default function StatsPage() {
             </div>
           </div>
         </div>
+
+        {/* 구독 추이 차트 */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold">구독 추이</h3>
+            <select
+              value={trendYear}
+              onChange={(e) => setTrendYear(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600"
+            >
+              {getYearsFromLabels(subscriptionData.trend.labels).map(y => (
+                <option key={y} value={y}>{y}년</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-4">
+            <span><span className="inline-block w-3 h-3 rounded-sm bg-blue-500 opacity-70 align-middle mr-1" />활성: 월말 기준 구독 수</span>
+            <span><span className="inline-block w-3 h-0.5 bg-emerald-500 align-middle mr-1" />신규: 월별 신규 구독</span>
+            <span><span className="inline-block w-3 h-0.5 bg-red-500 align-middle mr-1" />해지: 월별 해지 구독</span>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="활성" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
+              <Line type="linear" dataKey="신규" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="linear" dataKey="해지" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     );
   };
@@ -372,52 +471,142 @@ export default function StatsPage() {
 
     const trendData = memberData.trend.labels.map((label, index) => ({
       name: label,
-      가입: memberData.trend.signups[index],
+      전체: memberData.trend.totalCount?.[index] ?? 0,
+      신규: memberData.trend.signups[index],
     }));
 
     return (
       <div className="space-y-6">
         {/* 요약 카드 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard label="전체 회원" value={memberData.summary.total} suffix="명" />
-          <StatCard label="활성 회원" value={memberData.summary.active} suffix="명" />
+          <StatCard label="구독 회원" value={memberData.summary.subscribingMembers} suffix="명" />
           <StatCard label="신규 가입" value={memberData.summary.newSignups} suffix="명" />
-          <StatCard label="구독 보유" value={memberData.summary.withSubscription} suffix="명" />
         </div>
 
-        {/* 가입 추이 차트 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">가입 추이</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="가입" fill="#10b981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* 그룹별 분포 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">그룹별 분포</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {memberData.byGroup.map((item, index) => {
-              const total = memberData.byGroup.reduce((sum, g) => sum + g.count, 0);
-              const percentage = total > 0 ? (item.count / total) * 100 : 0;
-              return (
-                <div key={item.group} className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="w-8 h-8 mx-auto mb-2 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS[index % COLORS.length] + '20' }}>
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+        {/* 그룹별 / 구독별 분포 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold mb-4">그룹별 분포</h3>
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie
+                  data={memberData.byGroup.map(g => ({ name: g.groupName, value: g.count }))}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={70}
+                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                >
+                  {memberData.byGroup.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-4 border-t border-gray-200">
+              {memberData.byGroup.map((item, index) => {
+                const total = memberData.byGroup.reduce((sum, g) => sum + g.count, 0);
+                const percentage = total > 0 ? (item.count / total) * 100 : 0;
+                return (
+                  <div key={item.group} className="flex items-center text-sm py-2.5 border-b border-gray-100">
+                    <div className="flex items-center gap-2 w-1/3">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                      <span className="font-medium">{item.groupName}</span>
+                    </div>
+                    <span className="w-1/3 text-gray-600">{item.count}명</span>
+                    <span className="w-1/3 text-gray-500">{percentage.toFixed(1)}%</span>
                   </div>
-                  <p className="text-xl font-bold text-gray-900">{item.count}명</p>
-                  <p className="text-sm text-gray-500">{item.groupName}</p>
-                  <p className="text-xs text-gray-400">{percentage.toFixed(1)}%</p>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold mb-4">구독별 분포</h3>
+            {(() => {
+              const subscribing = memberData.summary.subscribingMembers;
+              const nonSubscribing = memberData.summary.total - subscribing;
+              const subPct = memberData.summary.total > 0 ? (subscribing / memberData.summary.total) * 100 : 0;
+              const nonPct = memberData.summary.total > 0 ? (nonSubscribing / memberData.summary.total) * 100 : 0;
+              return (
+                <div className="space-y-6">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: '구독', value: subscribing },
+                          { name: '미구독', value: nonSubscribing },
+                        ]}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={70}
+                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      >
+                        <Cell fill="#3b82f6" />
+                        <Cell fill="#94a3b8" />
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="border-t border-gray-200">
+                    <div className="flex items-center text-sm py-2.5 border-b border-gray-100">
+                      <div className="flex items-center gap-2 w-1/3">
+                        <div className="w-3 h-3 rounded-full bg-blue-500" />
+                        <span className="font-medium">구독</span>
+                      </div>
+                      <span className="w-1/3 text-gray-600">{subscribing}명</span>
+                      <span className="w-1/3 text-gray-500">{subPct.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex items-center text-sm py-2.5 border-b border-gray-100">
+                      <div className="flex items-center gap-2 w-1/3">
+                        <div className="w-3 h-3 rounded-full bg-slate-400" />
+                        <span className="font-medium">미구독</span>
+                      </div>
+                      <span className="w-1/3 text-gray-600">{nonSubscribing}명</span>
+                      <span className="w-1/3 text-gray-500">{nonPct.toFixed(1)}%</span>
+                    </div>
+                  </div>
                 </div>
               );
-            })}
+            })()}
           </div>
+        </div>
+
+        {/* 회원수 추이 차트 */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold">회원수 추이</h3>
+            <select
+              value={trendYear}
+              onChange={(e) => setTrendYear(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600"
+            >
+              {getYearsFromLabels(memberData.trend.labels).map(y => (
+                <option key={y} value={y}>{y}년</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-4">
+            <span><span className="inline-block w-3 h-3 rounded-sm bg-blue-500 opacity-70 align-middle mr-1" />전체: 월말 기준 누적 회원 수</span>
+            <span><span className="inline-block w-3 h-0.5 bg-emerald-500 align-middle mr-1" />신규: 월별 신규 가입</span>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="전체" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
+              <Line type="linear" dataKey="신규" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );
@@ -429,32 +618,18 @@ export default function StatsPage() {
 
     const trendData = tenantData.trend.labels.map((label, index) => ({
       name: label,
-      신규: tenantData.trend.newTenants[index],
+      전체: tenantData.trend.totalCount?.[index] ?? 0,
+      구독: tenantData.trend.subscribingCount?.[index] ?? 0,
+      신규: tenantData.trend.newTenants?.[index] ?? 0,
     }));
 
     return (
       <div className="space-y-6">
         {/* 요약 카드 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard label="전체 매장" value={tenantData.summary.total} suffix="개" />
-          <StatCard label="활성 매장" value={tenantData.summary.active} suffix="개" />
-          <StatCard label="체험중" value={tenantData.summary.trial} suffix="개" />
-          <StatCard label="취소" value={tenantData.summary.canceled} suffix="개" />
+          <StatCard label="구독 매장" value={tenantData.summary.subscribing} suffix="개" />
           <StatCard label="신규 매장" value={tenantData.summary.newTenants} suffix="개" />
-        </div>
-
-        {/* 신규 매장 추이 차트 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">신규 매장 추이</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="신규" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
         </div>
 
         {/* 플랜별 / 업종별 */}
@@ -517,6 +692,38 @@ export default function StatsPage() {
               })}
             </div>
           </div>
+        </div>
+
+        {/* 매장 추이 차트 */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold">매장 추이</h3>
+            <select
+              value={trendYear}
+              onChange={(e) => setTrendYear(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600"
+            >
+              {getYearsFromLabels(tenantData.trend.labels).map(y => (
+                <option key={y} value={y}>{y}년</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-4">
+            <span><span className="inline-block w-3 h-3 rounded-sm bg-blue-500 opacity-70 align-middle mr-1" />전체: 월말 기준 누적 매장 수</span>
+            <span><span className="inline-block w-3 h-0.5 bg-emerald-500 align-middle mr-1" />구독: 구독중 매장 수</span>
+            <span><span className="inline-block w-3 h-0.5 bg-amber-500 align-middle mr-1 border-t border-dashed border-amber-500" />신규: 월별 신규 등록</span>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="전체" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
+              <Line type="linear" dataKey="구독" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="linear" dataKey="신규" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 4 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );

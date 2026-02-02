@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import useSWR from 'swr';
 import {
-  DocMagnifyingGlassIn,
+  InfoCircle,
   Plus,
   Edit,
   BinMinusIn,
@@ -373,7 +373,7 @@ function SortableCategory({
                 className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                 title="FAQ 추가"
               >
-                <DocMagnifyingGlassIn className="w-3.5 h-3.5" />
+                <InfoCircle className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={onStartEdit}
@@ -1141,7 +1141,7 @@ export default function FAQManagementPage() {
         {/* 헤더 */}
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
-            <DocMagnifyingGlassIn className="w-6 h-6 text-blue-600" />
+            <InfoCircle className="w-6 h-6 text-blue-600" />
             <h1 className="text-lg font-bold text-gray-900">FAQ</h1>
           </div>
 
@@ -1483,7 +1483,7 @@ export default function FAQManagementPage() {
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400">
             <div className="text-center">
-              <DocMagnifyingGlassIn className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <InfoCircle className="w-16 h-16 mx-auto mb-4 opacity-30" />
               <p>FAQ를 선택하거나 새로 추가해주세요.</p>
             </div>
           </div>

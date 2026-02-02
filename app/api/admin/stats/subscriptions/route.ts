@@ -12,9 +12,12 @@ const planNames: Record<string, string> = {
 
 // 구독 상태명 매핑
 const statusNames: Record<string, string> = {
-  active: '활성',
-  trial: '체험',
-  canceled: '취소',
+  active: '구독중',
+  trial: '체험중',
+  none: '미구독',
+  canceled: '해지',
+  past_due: '결제실패',
+  suspended: '이용정지',
   expired: '만료',
   pending: '대기',
 };
@@ -119,6 +122,14 @@ export async function GET(request: NextRequest) {
     const canceled = allSubscriptions.filter(s => s.status === 'canceled').length;
     const expired = allSubscriptions.filter(s => s.status === 'expired').length;
 
+    // 기간 내 첫 구독 (체험 → 유료 전환)
+    const firstSubscription = allSubscriptions.filter(s => {
+      const firstPaidAt = s.firstPaidAt?.toDate?.() || (s.firstPaidAt ? new Date(s.firstPaidAt) : null);
+      const createdAt = s.createdAt?.toDate?.() || (s.createdAt ? new Date(s.createdAt) : null);
+      const date = firstPaidAt || createdAt;
+      return date && date >= start && date <= end && s.plan !== 'trial';
+    }).length;
+
     // MRR 계산 (활성 구독의 월간 반복 매출)
     const mrr = allSubscriptions
       .filter(s => s.status === 'active')
@@ -127,20 +138,13 @@ export async function GET(request: NextRequest) {
         return sum + (plan?.price || 0);
       }, 0);
 
-    // 기간 내 신규 구독
-    const periodNewSubscriptions = allSubscriptions.filter(s => {
+    // 월별 추이 (전체 기간)
+    let trendStart = new Date();
+    allSubscriptions.forEach(s => {
       const createdAt = s.createdAt?.toDate?.() || (s.createdAt ? new Date(s.createdAt) : null);
-      return createdAt && createdAt >= start && createdAt <= end;
+      if (createdAt && createdAt < trendStart) trendStart = createdAt;
     });
-
-    // 기간 내 취소된 구독
-    const periodCancellations = allSubscriptions.filter(s => {
-      const canceledAt = s.canceledAt?.toDate?.() || (s.canceledAt ? new Date(s.canceledAt) : null);
-      return canceledAt && canceledAt >= start && canceledAt <= end;
-    });
-
-    // 월별 추이
-    const labels = getMonthlyLabels(start, end);
+    const labels = getMonthlyLabels(trendStart, new Date());
     const newByMonth: Record<string, number> = {};
     const canceledByMonth: Record<string, number> = {};
 
@@ -149,7 +153,7 @@ export async function GET(request: NextRequest) {
       canceledByMonth[label] = 0;
     });
 
-    periodNewSubscriptions.forEach(s => {
+    allSubscriptions.forEach(s => {
       const createdAt = s.createdAt?.toDate?.() || (s.createdAt ? new Date(s.createdAt) : null);
       if (createdAt) {
         const label = `${createdAt.getFullYear()}.${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
@@ -159,7 +163,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    periodCancellations.forEach(s => {
+    allSubscriptions.forEach(s => {
       const canceledAt = s.canceledAt?.toDate?.() || (s.canceledAt ? new Date(s.canceledAt) : null);
       if (canceledAt) {
         const label = `${canceledAt.getFullYear()}.${String(canceledAt.getMonth() + 1).padStart(2, '0')}`;
@@ -169,10 +173,25 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // 월말 기준 활성 구독 수 (active + trial + past_due)
+    const activeByMonth: Record<string, number> = {};
+    labels.forEach(label => {
+      const [y, m] = label.split('.').map(Number);
+      const monthEnd = new Date(y, m, 0, 23, 59, 59, 999); // 해당 월 말일
+      const count = allSubscriptions.filter(s => {
+        const createdAt = s.createdAt?.toDate?.() || (s.createdAt ? new Date(s.createdAt) : null);
+        if (!createdAt || createdAt > monthEnd) return false;
+        const canceledAt = s.canceledAt?.toDate?.() || (s.canceledAt ? new Date(s.canceledAt) : null);
+        if (canceledAt && canceledAt <= monthEnd) return false;
+        return true;
+      }).length;
+      activeByMonth[label] = count;
+    });
+
     // 플랜별 분포
     const byPlanMap: Record<string, number> = {};
     allSubscriptions.forEach(s => {
-      const planId = s.planId || 'unknown';
+      const planId = s.plan || 'unknown';
       byPlanMap[planId] = (byPlanMap[planId] || 0) + 1;
     });
 
@@ -203,11 +222,13 @@ export async function GET(request: NextRequest) {
         canceled,
         expired,
         mrr,
+        firstSubscription,
       },
       trend: {
         labels,
         newSubscriptions: labels.map(l => newByMonth[l] || 0),
         cancellations: labels.map(l => canceledByMonth[l] || 0),
+        activeCount: labels.map(l => activeByMonth[l] || 0),
       },
       byPlan,
       byStatus,

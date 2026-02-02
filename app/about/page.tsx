@@ -91,19 +91,19 @@ export default function AboutPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8">
             <div className="text-center">
               <p className="text-2xl sm:text-5xl font-bold text-[#ff5e9a] mb-1 sm:mb-2">24H</p>
-              <p className="text-gray-400 text-xs sm:text-sm">24시간 상시응답</p>
+              <p className="text-gray-400 text-sm sm:text-base">24시간 상시응답</p>
             </div>
             <div className="text-center">
               <p className="text-2xl sm:text-5xl font-bold text-[#ec8c00] mb-1 sm:mb-2">98%</p>
-              <p className="text-gray-400 text-xs sm:text-sm">데이터기반 응답 정확도</p>
+              <p className="text-gray-400 text-sm sm:text-base">데이터기반 응답 정확도</p>
             </div>
             <div className="text-center">
               <p className="text-2xl sm:text-5xl font-bold text-[#56d52d] mb-1 sm:mb-2">80%</p>
-              <p className="text-gray-400 text-xs sm:text-sm">운영 스트레스 해소</p>
+              <p className="text-gray-400 text-sm sm:text-base">운영 스트레스 해소</p>
             </div>
             <div className="text-center">
               <p className="text-2xl sm:text-5xl font-bold text-[#2fadff] mb-1 sm:mb-2">50%</p>
-              <p className="text-gray-400 text-xs sm:text-sm">인건 운영비 절약</p>
+              <p className="text-gray-400 text-sm sm:text-base">인건 운영비 절약</p>
             </div>
           </div>
         </div>
@@ -203,18 +203,18 @@ export default function AboutPage() {
       {/* 문제점 섹션 - 검정 배경 */}
       <section className="bg-black py-12 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-xl sm:text-4xl font-bold text-white text-center mb-8 sm:mb-12">
+          <h2 className="text-2xl sm:text-4xl font-bold text-white text-center mb-8 sm:mb-12">
             그런데 왜 이렇게 힘들까요 ?
           </h2>
 
           <div className="grid md:grid-cols-3 gap-3 sm:gap-6">
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤷</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-lg sm:text-xl">
                 <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 즉각 대응 보장이 안 돼요
               </p>
-              <p className="text-gray-400 text-xs sm:text-sm">
+              <p className="text-gray-400 text-sm sm:text-base">
                 &ldquo;늘 최대한 빠르게 답하려고는 하지만<br />
                 100% 해낼 수 있다고는 장담못해요.&rdquo;
               </p>
@@ -222,11 +222,11 @@ export default function AboutPage() {
 
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤯</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-lg sm:text-xl">
                 <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 감정이 개입되기 쉬워요
               </p>
-              <p className="text-gray-400 text-xs sm:text-sm">
+              <p className="text-gray-400 text-sm sm:text-base">
                 &ldquo;가끔은 답답하기도 하고 저도 화가나는데<br />
                 아무리 감추고 좋게 말하려 해도 티가나요.&rdquo;
               </p>
@@ -234,11 +234,11 @@ export default function AboutPage() {
 
             <div className="bg-gray-900 rounded-2xl p-5 sm:p-8 border border-gray-800">
               <div className="text-3xl sm:text-5xl mb-3 sm:mb-4">🤖</div>
-              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-base sm:text-lg">
+              <p className="text-red-400 font-bold mb-2 sm:mb-3 text-lg sm:text-xl">
                 <Xmark width={16} height={16} strokeWidth={1.5} className="inline mr-1 sm:w-5 sm:h-5" />
                 빠른 답변, 그러나 융통성이 없어요
               </p>
-              <p className="text-gray-400 text-xs sm:text-sm">
+              <p className="text-gray-400 text-sm sm:text-base">
                 &ldquo;자동응답, 요즘 말하는 ai 챗봇 써보긴 했는데<br />
                 원하는 만큼 기능하지 못하더라고요.&rdquo;
               </p>

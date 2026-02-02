@@ -38,7 +38,8 @@
       "Bash(bun:*)",
       "Bash(node -r dotenv/config -r ts-node/register:*)",
       "Bash(npx next build:*)",
-      "Bash(del \"c:\\\\Users\\\\catki\\\\yamoo-payment\\\\scripts\\\\delete-payments.ts\")"
+      "Bash(del \"c:\\\\Users\\\\catki\\\\yamoo-payment\\\\scripts\\\\delete-payments.ts\")",
+      "Bash(git diff:*)"
     ]
   }
 }

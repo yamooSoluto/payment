@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Page, Settings } from 'iconoir-react';
+import { Page, Settings, InfoCircle } from 'iconoir-react';
 
 const settingsMenus = [
   {
@@ -15,6 +15,12 @@ const settingsMenus = [
     description: '이용약관 및 개인정보처리방침을 관리합니다.',
     href: '/admin/settings/terms',
     icon: Page,
+  },
+  {
+    name: 'FAQ',
+    description: '자주 묻는 질문을 관리합니다.',
+    href: '/admin/settings/faq',
+    icon: InfoCircle,
   },
 ];
 

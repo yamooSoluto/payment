@@ -15,7 +15,6 @@ import {
   Timer,
   StatsUpSquare,
   Mail,
-  DocMagnifyingGlassIn,
   Settings,
   Xmark,
   NavArrowLeft,
@@ -34,7 +33,6 @@ const prefetchMap: Record<string, string> = {
   '/admin/subscriptions': '/api/admin/subscriptions/list',
   '/admin/stats': '/api/admin/stats',
   '/admin/notifications': '/api/admin/notifications/sms-history',
-  '/admin/faq': '/api/admin/faq',
 };
 
 const fetcher = (url: string) => fetch(url).then(res => {
@@ -104,12 +102,6 @@ const menuItems = [
     href: '/admin/notifications',
     icon: Mail,
     permission: 'notifications:read',
-  },
-  {
-    name: 'FAQ',
-    href: '/admin/faq',
-    icon: DocMagnifyingGlassIn,
-    permission: 'settings:read',
   },
   {
     name: '설정',

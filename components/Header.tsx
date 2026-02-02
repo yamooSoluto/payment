@@ -222,10 +222,17 @@ export default function Header({ siteSettings }: HeaderProps) {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-100">
-            <div className="flex flex-col space-y-3">
+      </div>
+
+      {/* Mobile Navigation Overlay */}
+      {mobileMenuOpen && (
+        <>
+          <div
+            className="md:hidden fixed inset-0 top-16 bg-black/30 z-40"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="md:hidden fixed left-0 right-0 top-16 bg-white border-b border-gray-200 shadow-lg z-50 px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-col space-y-3 max-w-7xl mx-auto">
               {visibleMenuItems.map(item => renderMenuItem(item, true))}
               {!loading && user && (
                 <div className="pt-3 border-t border-gray-100">
@@ -243,8 +250,8 @@ export default function Header({ siteSettings }: HeaderProps) {
               )}
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </header>
   );
 }

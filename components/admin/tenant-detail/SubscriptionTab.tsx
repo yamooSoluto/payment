@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Check, RefreshDouble, FastRightCircle, Calendar, WarningCircle, Plus, NavArrowDown, NavArrowUp, PageFlip } from 'iconoir-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Check, RefreshDouble, FastRightCircle, Calendar, WarningCircle, Plus, NavArrowDown, NavArrowUp, PageFlip, Menu, Xmark } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import { SubscriptionActionModal, SubscriptionActionType, SubscriptionInfo, canStartSubscription, isSubscriptionActive } from '@/components/admin/subscription';
 import {
@@ -29,6 +29,10 @@ export default function SubscriptionTab({ tenantId, subscription, tenant, adminN
   const [actionModal, setActionModal] = useState(false);
   const [initialAction, setInitialAction] = useState<SubscriptionActionType | undefined>(undefined);
 
+  // 모바일 햄버거 메뉴
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
@@ -47,6 +51,18 @@ export default function SubscriptionTab({ tenantId, subscription, tenant, adminN
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setShowActionMenu(false);
+      }
+    };
+    if (showActionMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showActionMenu]);
 
   const resolveAdminName = (uid: unknown): string => {
     if (!uid || typeof uid !== 'string') return String(uid || '-');
@@ -82,27 +98,75 @@ export default function SubscriptionTab({ tenantId, subscription, tenant, adminN
               <div className="flex items-center gap-2">
                 {isSubscriptionActive(subscription.status as SubscriptionInfo['status']) ? (
                   <>
-                    <button
-                      onClick={() => { setInitialAction('change_plan'); setActionModal(true); }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      <FastRightCircle className="w-3.5 h-3.5" />
-                      플랜 변경
-                    </button>
-                    <button
-                      onClick={() => { setInitialAction('adjust_period'); setActionModal(true); }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      기간 조정
-                    </button>
-                    <button
-                      onClick={() => { setInitialAction('cancel'); setActionModal(true); }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                    >
-                      <WarningCircle className="w-3.5 h-3.5" />
-                      해지
-                    </button>
+                    {/* Desktop: 버튼 직접 표시 */}
+                    <div className="hidden sm:flex items-center gap-2">
+                      <button
+                        onClick={() => { setInitialAction('change_plan'); setActionModal(true); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        <FastRightCircle className="w-3.5 h-3.5" />
+                        플랜 변경
+                      </button>
+                      <button
+                        onClick={() => { setInitialAction('adjust_period'); setActionModal(true); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        기간 조정
+                      </button>
+                      <button
+                        onClick={() => { setInitialAction('cancel'); setActionModal(true); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        <WarningCircle className="w-3.5 h-3.5" />
+                        해지
+                      </button>
+                    </div>
+                    {/* Mobile: 햄버거 메뉴 */}
+                    <div className="relative sm:hidden" ref={actionMenuRef}>
+                      <button
+                        onClick={() => setShowActionMenu(!showActionMenu)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 ${
+                          showActionMenu
+                            ? 'bg-gray-900 text-white shadow-lg'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {showActionMenu ? <Xmark className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                      </button>
+                      {showActionMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-44 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100/60 py-2 z-50 overflow-hidden">
+                          <button
+                            onClick={() => { setInitialAction('change_plan'); setActionModal(true); setShowActionMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                              <FastRightCircle className="w-3.5 h-3.5 text-gray-600" />
+                            </div>
+                            플랜 변경
+                          </button>
+                          <button
+                            onClick={() => { setInitialAction('adjust_period'); setActionModal(true); setShowActionMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                              <Calendar className="w-3.5 h-3.5 text-gray-600" />
+                            </div>
+                            기간 조정
+                          </button>
+                          <div className="border-t border-gray-100 my-1 mx-3" />
+                          <button
+                            onClick={() => { setInitialAction('cancel'); setActionModal(true); setShowActionMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
+                              <WarningCircle className="w-3.5 h-3.5 text-red-500" />
+                            </div>
+                            해지
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 ) : canStartSubscription(subscription.status as SubscriptionInfo['status']) ? (
                   <button
