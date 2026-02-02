@@ -120,15 +120,17 @@ export interface TermsEditorAreaHandle {
 
 interface TermsEditorAreaProps {
   activeTab: 'terms' | 'privacy';
+  initialTermsContent?: string;
+  initialPrivacyContent?: string;
   onTermsChange: (html: string) => void;
   onPrivacyChange: (html: string) => void;
 }
 
 export default forwardRef<TermsEditorAreaHandle, TermsEditorAreaProps>(
-  function TermsEditorArea({ activeTab, onTermsChange, onPrivacyChange }, ref) {
+  function TermsEditorArea({ activeTab, initialTermsContent, initialPrivacyContent, onTermsChange, onPrivacyChange }, ref) {
     const termsEditor = useEditor({
       extensions: editorExtensions,
-      content: '',
+      content: initialTermsContent || '',
       immediatelyRender: false,
       editorProps,
       onUpdate: ({ editor }) => {
@@ -138,7 +140,7 @@ export default forwardRef<TermsEditorAreaHandle, TermsEditorAreaProps>(
 
     const privacyEditor = useEditor({
       extensions: editorExtensions,
-      content: '',
+      content: initialPrivacyContent || '',
       immediatelyRender: false,
       editorProps,
       onUpdate: ({ editor }) => {

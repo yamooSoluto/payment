@@ -542,6 +542,8 @@ export default function TermsSettingsPage() {
           <TermsEditorArea
             ref={editorRef}
             activeTab={activeTab}
+            initialTermsContent={termsContent}
+            initialPrivacyContent={privacyContent}
             onTermsChange={(html) => {
               setTermsContent(html);
               setHasUnsavedChanges(true);
