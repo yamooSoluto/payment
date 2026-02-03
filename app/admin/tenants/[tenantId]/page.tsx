@@ -436,7 +436,7 @@ export default function TenantDetailPage() {
 
       {/* 탭 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="flex border-b border-gray-100 overflow-x-auto touch-pan-x overscroll-x-contain">
+        <div className="flex border-b border-gray-100 overflow-x-auto overflow-y-hidden touch-pan-x overscroll-x-contain">
           {[
             { id: 'basic' as TabType, label: '기본 정보', icon: <InfoCircle className="w-4 h-4" /> },
             { id: 'ai' as TabType, label: 'AI 설정', icon: <Spark className="w-4 h-4" /> },
@@ -447,11 +447,10 @@ export default function TenantDetailPage() {
             <button
               key={tab.id}
               onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
-                activeTab === tab.id
+              className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab.id
                   ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               {tab.icon}
               {tab.label}
@@ -479,7 +478,7 @@ export default function TenantDetailPage() {
                       <DynamicFieldGroup
                         title="회원 정보 (회원 상세 페이지에서 수정)"
                         fields={memberFieldsData}
-                        onChange={() => {}}
+                        onChange={() => { }}
                         disabled={true}
                       />
                     ) : null;

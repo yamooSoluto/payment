@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { StatsUpSquare, Calendar, CreditCards, Timer, Group, HomeSimpleDoor, ChatBubble } from 'iconoir-react';
@@ -199,6 +199,69 @@ export default function StatsPage() {
     statsSwrKey
   );
 
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const renderSmartPieLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
+    const isLarge = percent >= 0.25;
+    const RADIAN = Math.PI / 180;
+
+    if (isLarge) {
+      // Inside label
+      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+      return (
+        <text
+          x={x}
+          y={y}
+          fill="#fff"
+          textAnchor="middle"
+          dominantBaseline="central"
+          style={{ fontSize: window.innerWidth < 640 ? '10px' : '12px', fontWeight: 'bold', pointerEvents: 'none' }}
+        >
+          <tspan x={x} dy="-0.6em">{name}</tspan>
+          <tspan x={x} dy="1.2em">{`${(percent * 100).toFixed(0)}%`}</tspan>
+        </text>
+      );
+    }
+
+    // Outside label
+    const { x, y, cx: centerX } = props;
+    return (
+      <text
+        x={x}
+        y={y}
+        fill="#666"
+        textAnchor={x > centerX ? 'start' : 'end'}
+        dominantBaseline="central"
+        style={{ fontSize: '12px' }}
+      >
+        {`${name} ${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  const renderCustomLabelLine = (props: any) => {
+    if (props.percent >= 0.25) return <></>;
+    const { points, stroke } = props;
+    return (
+      <polyline
+        stroke={stroke || "#666"}
+        fill="none"
+        points={points.map((p: any) => `${p.x},${p.y}`).join(' ')}
+      />
+    );
+  };
+
   const revenueData: RevenueStats | null = activeTab === 'revenue' ? statsData : null;
   const subscriptionData: SubscriptionStats | null = activeTab === 'subscription' ? statsData : null;
   const memberData: MemberStats | null = activeTab === 'member' ? statsData : null;
@@ -230,7 +293,7 @@ export default function StatsPage() {
               <BarChart data={revenueData.byPlan}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="planName" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} width={isMobile ? 30 : 60} />
                 <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                 <Bar dataKey="amount" name="매출" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} />
               </BarChart>
@@ -281,7 +344,7 @@ export default function StatsPage() {
             <LineChart data={filterTrendByYear(trendData, trendYear)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} width={isMobile ? 30 : 60} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               <Line type="linear" dataKey="순매출" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
             </LineChart>
@@ -376,8 +439,10 @@ export default function StatsPage() {
                   nameKey="planName"
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  innerRadius={isMobile ? 15 : 40}
+                  outerRadius={isMobile ? 70 : 80}
+                  label={renderSmartPieLabel}
+                  labelLine={renderCustomLabelLine}
                 >
                   {subscriptionData.byPlan.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -453,7 +518,7 @@ export default function StatsPage() {
             <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} width={isMobile ? 30 : 60} />
               <Tooltip />
               <Bar dataKey="활성" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
               <Line type="linear" dataKey="신규" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
@@ -496,9 +561,10 @@ export default function StatsPage() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  innerRadius={isMobile ? 15 : 40}
+                  outerRadius={isMobile ? 70 : 70}
+                  label={renderSmartPieLabel}
+                  labelLine={renderCustomLabelLine}
                 >
                   {memberData.byGroup.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -545,9 +611,10 @@ export default function StatsPage() {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        innerRadius={40}
-                        outerRadius={70}
-                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                        innerRadius={isMobile ? 15 : 40}
+                        outerRadius={isMobile ? 70 : 70}
+                        label={renderSmartPieLabel}
+                        labelLine={renderCustomLabelLine}
                       >
                         <Cell fill="#3b82f6" />
                         <Cell fill="#94a3b8" />
@@ -601,7 +668,7 @@ export default function StatsPage() {
             <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} width={isMobile ? 30 : 60} />
               <Tooltip />
               <Bar dataKey="전체" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
               <Line type="linear" dataKey="신규" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
@@ -645,8 +712,10 @@ export default function StatsPage() {
                   nameKey="planName"
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  innerRadius={isMobile ? 15 : 40}
+                  outerRadius={isMobile ? 70 : 80}
+                  label={renderSmartPieLabel}
+                  labelLine={renderCustomLabelLine}
                 >
                   {tenantData.byPlan.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -717,7 +786,7 @@ export default function StatsPage() {
             <ComposedChart data={filterTrendByYear(trendData, trendYear)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} width={isMobile ? 30 : 60} />
               <Tooltip />
               <Bar dataKey="전체" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} opacity={0.7} />
               <Line type="linear" dataKey="구독" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
@@ -818,7 +887,7 @@ export default function StatsPage() {
 
       {/* 탭 네비게이션 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="flex border-b border-gray-100 overflow-x-auto scrollbar-hide">
+        <div className="flex border-b border-gray-100 overflow-x-auto overflow-y-hidden scrollbar-hide touch-pan-x">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -826,8 +895,8 @@ export default function StatsPage() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2 px-4 sm:px-6 py-4 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex-none ${activeTab === tab.id
-                    ? 'text-blue-600 border-blue-600'
-                    : 'text-gray-500 border-transparent hover:text-gray-700'
+                  ? 'text-blue-600 border-blue-600'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
                   }`}
               >
                 <Icon className="w-5 h-5" />
