@@ -466,11 +466,10 @@ export default function MembersPage() {
           <div className="relative" ref={filterRef}>
             <button
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className={`relative p-2 border rounded-lg transition-colors ${
-                filterGroup.length > 0
+              className={`relative p-2 border rounded-lg transition-colors ${filterGroup.length > 0
                   ? 'bg-blue-50 border-blue-300 text-blue-700'
                   : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <Filter className="w-5 h-5" />
               {filterGroup.length > 0 && (
@@ -508,11 +507,10 @@ export default function MembersPage() {
                         }}
                         className="w-4 h-4 text-blue-600 rounded border-gray-300"
                       />
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        option.value === 'internal'
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${option.value === 'internal'
                           ? 'bg-purple-100 text-purple-800'
                           : 'bg-gray-100 text-gray-800'
-                      }`}>
+                        }`}>
                         {option.label}
                       </span>
                     </label>
@@ -537,21 +535,19 @@ export default function MembersPage() {
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
         <button
           onClick={() => handleTabChange('active')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'active'
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'active'
               ? 'bg-white text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
-          }`}
+            }`}
         >
           활성
         </button>
         <button
           onClick={() => handleTabChange('deleted')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'deleted'
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'deleted'
               ? 'bg-white text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
-          }`}
+            }`}
         >
           삭제
         </button>
@@ -580,39 +576,48 @@ export default function MembersPage() {
       </div>
 
       {/* 일괄 작업 버튼 */}
+      {/* 일괄 작업 버튼 */}
       {selectedMembers.size > 0 && activeTab === 'active' && (
-        <div className="bg-blue-50 rounded-xl p-4 border border-blue-200 flex items-center gap-4">
-          <span className="text-sm font-medium text-blue-700">
-            {selectedMembers.size}명 선택됨
-          </span>
-          <div className="flex gap-2">
+        <div className="fixed bottom-6 left-4 right-4 z-50 md:static md:z-auto bg-white md:bg-blue-50 rounded-xl p-4 border border-blue-200 shadow-lg md:shadow-none flex flex-col md:flex-row md:items-center gap-4 animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center justify-between md:justify-start">
+            <span className="text-sm font-medium text-blue-700">
+              {selectedMembers.size}명 선택됨
+            </span>
+            <button
+              onClick={() => setSelectedMembers(new Set())}
+              className="md:hidden text-xs text-gray-500 hover:text-gray-700"
+            >
+              선택 해제
+            </button>
+          </div>
+          <div className="grid grid-cols-4 md:flex gap-2">
             <button
               onClick={handleOpenGroupModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+              className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-2 md:py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-xs md:text-sm whitespace-nowrap"
             >
-              <Group className="w-4 h-4" />
-              그룹지정
+              <Group className="w-4 h-4 md:w-4 md:h-4" />
+              <span>그룹지정</span>
             </button>
             <button
               onClick={() => handleOpenSmsModal()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+              className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-2 md:py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-xs md:text-sm whitespace-nowrap"
             >
-              <MessageText className="w-4 h-4" />
-              SMS
+              <MessageText className="w-4 h-4 md:w-4 md:h-4" />
+              <span>SMS</span>
             </button>
             <button
               onClick={() => handleOpenDeleteModal()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm"
+              className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-2 md:py-1.5 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-xs md:text-sm whitespace-nowrap"
             >
-              <Trash className="w-4 h-4" />
-              삭제
+              <Trash className="w-4 h-4 md:w-4 md:h-4" />
+              <span>삭제</span>
             </button>
             <button
               onClick={handleExportExcel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+              className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-2 md:py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-xs md:text-sm whitespace-nowrap"
             >
-              <Download className="w-4 h-4" />
-              내보내기
+              <Download className="w-4 h-4 md:w-4 md:h-4" />
+              <span>내보내기</span>
             </button>
           </div>
         </div>
@@ -699,11 +704,10 @@ export default function MembersPage() {
                       {member.phone || '-'}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        member.group === 'internal'
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${member.group === 'internal'
                           ? 'bg-purple-100 text-purple-800'
                           : 'bg-gray-100 text-gray-800'
-                      }`}>
+                        }`}>
                         {MEMBER_GROUPS[member.group as keyof typeof MEMBER_GROUPS] || '일반'}
                       </span>
                     </td>
@@ -1009,11 +1013,10 @@ export default function MembersPage() {
                       onChange={(e) => setSelectedGroup(e.target.value)}
                       className="w-4 h-4 text-blue-600"
                     />
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      option.value === 'internal'
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${option.value === 'internal'
                         ? 'bg-purple-100 text-purple-800'
                         : 'bg-gray-100 text-gray-800'
-                    }`}>
+                      }`}>
                       {option.label}
                     </span>
                   </label>
