@@ -103,156 +103,166 @@ export async function GET(
       });
     }
 
-    // === 병렬 조회: phone 체크 + tenants 조회를 동시에 실행 ===
+    // 기본 사용자 정보 (이 부분은 반드시 반환)
+    const basicInfo = {
+      email: userData?.email || decodedEmail,
+      name: userData?.name || userData?.displayName || '',
+      phone: userData?.phone || '',
+    };
+
+    // === 부가 정보: 무료체험/구독 이력 (실패해도 기본 정보는 반환) ===
     let trialApplied = userData?.trialApplied || false;
     let trialInfo: { brandName?: string; startDate?: string; endDate?: string } | null = null;
     let phoneTrialInfo: { brandName?: string; startDate?: string } | null = null;
     let hasPaidSubscription = !!userData?.paidSubscriptionAt;
 
-    // 1. phone 기반 체크 + email 기반 tenants 조회를 병렬 실행
-    const parallelQueries: Promise<void>[] = [];
+    try {
+      // 1. phone 기반 체크 + email 기반 tenants 조회를 병렬 실행
+      const parallelQueries: Promise<void>[] = [];
 
-    // phone 기반 무료체험 이력 체크 (병렬)
-    if (!trialApplied && userData?.phone) {
-      parallelQueries.push((async () => {
-        const [phoneTrialCheck, previousPhoneCheck] = await Promise.all([
-          db.collection('users')
-            .where('phone', '==', userData!.phone)
-            .where('trialApplied', '==', true)
-            .limit(1)
-            .get(),
-          db.collection('users')
-            .where('previousPhones', 'array-contains', userData!.phone)
-            .where('trialApplied', '==', true)
-            .limit(1)
-            .get(),
-        ]);
-
-        if (!phoneTrialCheck.empty || !previousPhoneCheck.empty) {
-          trialApplied = true;
-
-          const matchedDoc = !phoneTrialCheck.empty ? phoneTrialCheck.docs[0] : previousPhoneCheck.docs[0];
-          const phoneUserEmail = matchedDoc.data().email;
-
-          if (phoneUserEmail) {
-            const phoneTenantsSnapshot = await db.collection('tenants')
-              .where('email', '==', phoneUserEmail)
+      // phone 기반 무료체험 이력 체크 (병렬)
+      if (!trialApplied && userData?.phone) {
+        parallelQueries.push((async () => {
+          const [phoneTrialCheck, previousPhoneCheck] = await Promise.all([
+            db.collection('users')
+              .where('phone', '==', userData!.phone)
+              .where('trialApplied', '==', true)
               .limit(1)
-              .get();
+              .get(),
+            db.collection('users')
+              .where('previousPhones', 'array-contains', userData!.phone)
+              .where('trialApplied', '==', true)
+              .limit(1)
+              .get(),
+          ]);
 
-            if (!phoneTenantsSnapshot.empty) {
-              const phoneTenantData = phoneTenantsSnapshot.docs[0].data();
-              const phoneTenantId = phoneTenantData.tenantId || phoneTenantsSnapshot.docs[0].id;
+          if (!phoneTrialCheck.empty || !previousPhoneCheck.empty) {
+            trialApplied = true;
 
-              // subscription_history에서 trial 레코드 조회
-              const phoneTrialHistorySnapshot = await db
-                .collection('subscription_history').doc(phoneTenantId).collection('records')
-                .where('plan', '==', 'trial')
-                .orderBy('changedAt', 'asc')
+            const matchedDoc = !phoneTrialCheck.empty ? phoneTrialCheck.docs[0] : previousPhoneCheck.docs[0];
+            const phoneUserEmail = matchedDoc.data().email;
+
+            if (phoneUserEmail) {
+              const phoneTenantsSnapshot = await db.collection('tenants')
+                .where('email', '==', phoneUserEmail)
                 .limit(1)
                 .get();
 
-              if (!phoneTrialHistorySnapshot.empty) {
-                const record = phoneTrialHistorySnapshot.docs[0].data();
-                phoneTrialInfo = {
-                  brandName: phoneTenantData.brandName,
-                  startDate: record.periodStart?.toDate?.()?.toISOString(),
-                };
+              if (!phoneTenantsSnapshot.empty) {
+                const phoneTenantData = phoneTenantsSnapshot.docs[0].data();
+                const phoneTenantId = phoneTenantData.tenantId || phoneTenantsSnapshot.docs[0].id;
+
+                // subscription_history에서 trial 레코드 조회
+                const phoneTrialHistorySnapshot = await db
+                  .collection('subscription_history').doc(phoneTenantId).collection('records')
+                  .where('plan', '==', 'trial')
+                  .orderBy('changedAt', 'asc')
+                  .limit(1)
+                  .get();
+
+                if (!phoneTrialHistorySnapshot.empty) {
+                  const record = phoneTrialHistorySnapshot.docs[0].data();
+                  phoneTrialInfo = {
+                    brandName: phoneTenantData.brandName,
+                    startDate: record.periodStart?.toDate?.()?.toISOString(),
+                  };
+                }
               }
             }
           }
-        }
+        })());
+      }
+
+      // 2. email 기반 tenants 1회 조회 + subscriptions 병렬 조회 (단일 루프로 통합)
+      interface TenantSubPair {
+        tenantData: FirebaseFirestore.DocumentData;
+        subData: FirebaseFirestore.DocumentData | null;
+      }
+      let tenantSubPairs: TenantSubPair[] = [];
+
+      parallelQueries.push((async () => {
+        const tenantsSnapshot = await db.collection('tenants')
+          .where('email', '==', decodedEmail)
+          .get();
+
+        if (tenantsSnapshot.empty) return;
+
+        // 모든 subscriptions를 병렬로 조회
+        const subResults = await Promise.all(
+          tenantsSnapshot.docs.map(async (doc) => {
+            const tenantData = doc.data();
+            const tenantId = tenantData.tenantId || doc.id;
+            const subDoc = await db.collection('subscriptions').doc(tenantId).get();
+            return {
+              tenantData,
+              subData: subDoc.exists ? subDoc.data()! : null,
+            };
+          })
+        );
+
+        tenantSubPairs = subResults;
       })());
-    }
 
-    // 2. email 기반 tenants 1회 조회 + subscriptions 병렬 조회 (단일 루프로 통합)
-    interface TenantSubPair {
-      tenantData: FirebaseFirestore.DocumentData;
-      subData: FirebaseFirestore.DocumentData | null;
-    }
-    let tenantSubPairs: TenantSubPair[] = [];
+      await Promise.all(parallelQueries);
 
-    parallelQueries.push((async () => {
-      const tenantsSnapshot = await db.collection('tenants')
-        .where('email', '==', decodedEmail)
-        .get();
+      // 3. 단일 루프: trialApplied, hasPaidSubscription 확인
+      for (const { tenantData, subData } of tenantSubPairs) {
+        // trialApplied 체크 — embedded subscription
+        if (!trialApplied) {
+          const hasRealSubscription = tenantData.subscription?.plan ||
+            (tenantData.subscription?.status && tenantData.subscription.status !== 'expired');
+          if (hasRealSubscription) {
+            trialApplied = true;
+          }
+        }
 
-      if (tenantsSnapshot.empty) return;
+        // trialApplied 체크 — subscriptions 컬렉션
+        if (!trialApplied && subData) {
+          const hasRealSubHistory = subData.plan || (subData.status && subData.status !== 'expired');
+          if (hasRealSubHistory) {
+            trialApplied = true;
+          }
+        }
 
-      // 모든 subscriptions를 병렬로 조회
-      const subResults = await Promise.all(
-        tenantsSnapshot.docs.map(async (doc) => {
-          const tenantData = doc.data();
-          const tenantId = tenantData.tenantId || doc.id;
-          const subDoc = await db.collection('subscriptions').doc(tenantId).get();
-          return {
-            tenantData,
-            subData: subDoc.exists ? subDoc.data()! : null,
+        // hasPaidSubscription 체크
+        if (!hasPaidSubscription) {
+          if (subData?.plan && subData.plan !== 'trial') {
+            hasPaidSubscription = true;
+          } else if (tenantData.subscription?.plan && tenantData.subscription.plan !== 'trial') {
+            hasPaidSubscription = true;
+          }
+        }
+      }
+
+      // 4. trialInfo 추출 — subscription_history에서 trial 레코드 조회
+      for (const { tenantData } of tenantSubPairs) {
+        if (trialInfo) break;
+        const tenantId = tenantData.tenantId || tenantData.id;
+        if (!tenantId) continue;
+
+        const trialHistorySnapshot = await db
+          .collection('subscription_history').doc(tenantId).collection('records')
+          .where('plan', '==', 'trial')
+          .orderBy('changedAt', 'asc')
+          .limit(1)
+          .get();
+
+        if (!trialHistorySnapshot.empty) {
+          const record = trialHistorySnapshot.docs[0].data();
+          trialInfo = {
+            brandName: tenantData.brandName,
+            startDate: record.periodStart?.toDate?.()?.toISOString(),
+            endDate: record.periodEnd?.toDate?.()?.toISOString(),
           };
-        })
-      );
-
-      tenantSubPairs = subResults;
-    })());
-
-    await Promise.all(parallelQueries);
-
-    // 3. 단일 루프: trialApplied, hasPaidSubscription 확인
-    for (const { tenantData, subData } of tenantSubPairs) {
-      // trialApplied 체크 — embedded subscription
-      if (!trialApplied) {
-        const hasRealSubscription = tenantData.subscription?.plan ||
-          (tenantData.subscription?.status && tenantData.subscription.status !== 'expired');
-        if (hasRealSubscription) {
-          trialApplied = true;
         }
       }
-
-      // trialApplied 체크 — subscriptions 컬렉션
-      if (!trialApplied && subData) {
-        const hasRealSubHistory = subData.plan || (subData.status && subData.status !== 'expired');
-        if (hasRealSubHistory) {
-          trialApplied = true;
-        }
-      }
-
-      // hasPaidSubscription 체크
-      if (!hasPaidSubscription) {
-        if (subData?.plan && subData.plan !== 'trial') {
-          hasPaidSubscription = true;
-        } else if (tenantData.subscription?.plan && tenantData.subscription.plan !== 'trial') {
-          hasPaidSubscription = true;
-        }
-      }
-    }
-
-    // 4. trialInfo 추출 — subscription_history에서 trial 레코드 조회
-    for (const { tenantData } of tenantSubPairs) {
-      if (trialInfo) break;
-      const tenantId = tenantData.tenantId || tenantData.id;
-      if (!tenantId) continue;
-
-      const trialHistorySnapshot = await db
-        .collection('subscription_history').doc(tenantId).collection('records')
-        .where('plan', '==', 'trial')
-        .orderBy('changedAt', 'asc')
-        .limit(1)
-        .get();
-
-      if (!trialHistorySnapshot.empty) {
-        const record = trialHistorySnapshot.docs[0].data();
-        trialInfo = {
-          brandName: tenantData.brandName,
-          startDate: record.periodStart?.toDate?.()?.toISOString(),
-          endDate: record.periodEnd?.toDate?.()?.toISOString(),
-        };
-      }
+    } catch (trialCheckError) {
+      // 부가 정보 조회 실패해도 기본 사용자 정보는 반환
+      console.error('무료체험/구독 이력 조회 오류 (기본 정보는 정상 반환):', trialCheckError);
     }
 
     return NextResponse.json({
-      email: userData?.email || decodedEmail,
-      name: userData?.name || '',
-      phone: userData?.phone || '',
+      ...basicInfo,
       trialApplied,
       hasPaidSubscription,
       trialInfo: trialInfo || phoneTrialInfo,

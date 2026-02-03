@@ -70,7 +70,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
   const [hasPaidSubscription, setHasPaidSubscription] = useState(false);
-  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(false);
+  const [userInfoFetched, setUserInfoFetched] = useState(false);
   const [trialInfo, setTrialInfo] = useState<{
     brandName?: string;
     startDate?: string;
@@ -104,49 +104,69 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
 
   // 로그인한 사용자 정보 자동 입력
   useEffect(() => {
+    if (!user?.email) {
+      setUserInfoFetched(false);
+      return;
+    }
+
+    // 이메일은 즉시 설정 (API 호출 전에도 표시)
+    setFormData(prev => ({
+      ...prev,
+      email: user.email || '',
+    }));
     const fetchUserInfo = async () => {
-      if (user?.email) {
-        setIsLoadingUserInfo(true);
-        try {
-          // Firebase ID 토큰 가져오기
-          const idToken = await user.getIdToken();
-          const response = await fetch(`/api/users/${encodeURIComponent(user.email)}`, {
-            headers: {
-              'Authorization': `Bearer ${idToken}`,
-            },
-          });
-          if (response.ok) {
-            const userData = await response.json();
-            setFormData(prev => ({
-              ...prev,
-              name: userData.name || '',
-              phone: userData.phone || '',
-              email: userData.email || user.email || '',
-            }));
-            // 로그인한 사용자는 연락처 자동 인증 (이미 가입했으므로)
-            if (userData.phone) {
-              setIsPhoneVerified(true);
-            }
-            // 무료체험 신청한 경우 (우선 체크)
-            if (userData.trialApplied && userData.trialInfo) {
-              setAlreadyApplied(true);
-              setTrialInfo(userData.trialInfo);
-            }
-            // 무료체험 없이 유료 구독만 있는 경우
-            else if (userData.hasPaidSubscription) {
-              setHasPaidSubscription(true);
-              setAlreadyApplied(true);
-            }
-            // trialInfo 없이 trialApplied만 있는 경우
-            else if (userData.trialApplied) {
-              setAlreadyApplied(true);
-            }
+      try {
+        // Firebase ID 토큰 가져오기
+        const idToken = await user.getIdToken();
+        const response = await fetch(`/api/users/${encodeURIComponent(user.email!)}`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+          },
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            name: userData.name || user.displayName || '',
+            phone: userData.phone || '',
+            email: userData.email || user.email || '',
+          }));
+          // 로그인한 사용자는 연락처 자동 인증 (이미 가입했으므로)
+          if (userData.phone) {
+            setIsPhoneVerified(true);
           }
-        } catch (error) {
-          console.error('Failed to fetch user info:', error);
-        } finally {
-          setIsLoadingUserInfo(false);
+          // 무료체험 신청한 경우 (우선 체크)
+          if (userData.trialApplied && userData.trialInfo) {
+            setAlreadyApplied(true);
+            setTrialInfo(userData.trialInfo);
+          }
+          // 무료체험 없이 유료 구독만 있는 경우
+          else if (userData.hasPaidSubscription) {
+            setHasPaidSubscription(true);
+            setAlreadyApplied(true);
+          }
+          // trialInfo 없이 trialApplied만 있는 경우
+          else if (userData.trialApplied) {
+            setAlreadyApplied(true);
+          }
+        } else {
+          // API 실패 시 Firebase Auth 정보로 폴백
+          setFormData(prev => ({
+            ...prev,
+            name: user.displayName || '',
+            email: user.email || '',
+          }));
         }
+      } catch (error) {
+        console.error('Failed to fetch user info:', error);
+        // 네트워크 오류 시에도 Firebase Auth 정보로 폴백
+        setFormData(prev => ({
+          ...prev,
+          name: user.displayName || '',
+          email: user.email || '',
+        }));
+      } finally {
+        setUserInfoFetched(true);
       }
     };
 
@@ -333,7 +353,7 @@ export default function TrialForm({ cardStyle = true }: TrialFormProps) {
   };
 
   // 로그인 상태 로딩 중이거나 사용자 정보 로딩 중
-  if (authLoading || (user && isLoadingUserInfo)) {
+  if (authLoading || (user && !userInfoFetched)) {
     return (
       <div className={cardStyle ? "bg-white rounded-2xl p-5 sm:p-8 overflow-hidden" : ""}>
         <div className="flex flex-col items-center justify-center py-12">
