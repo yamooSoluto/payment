@@ -1,3 +1,7 @@
-# 모든 검색 엔진 크롤링 차단
+# 모든 검색 엔진 크롤링 허용
 User-agent: *
-Disallow: /
+Allow: /
+
+# 관리자 페이지는 크롤링 제외
+Disallow: /admin/
+Disallow: /account/

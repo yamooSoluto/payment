@@ -66,11 +66,11 @@ export async function generateMetadata(): Promise<Metadata> {
         images: data?.ogImageUrl ? [data.ogImageUrl] : [],
       },
       robots: {
-        index: false,
-        follow: false,
+        index: true,
+        follow: true,
         googleBot: {
-          index: false,
-          follow: false,
+          index: true,
+          follow: true,
         },
       },
     };
@@ -96,11 +96,11 @@ function getDefaultMetadata(): Metadata {
       title: 'YAMOO',
     },
     robots: {
-      index: false,
-      follow: false,
+      index: true,
+      follow: true,
       googleBot: {
-        index: false,
-        follow: false,
+        index: true,
+        follow: true,
       },
     },
   };
