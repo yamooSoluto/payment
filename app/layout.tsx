@@ -6,6 +6,9 @@ import LayoutWrapper from '@/components/LayoutWrapper'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin'
 
+// 메타데이터를 동적으로 생성 (캐싱 비활성화)
+export const dynamic = 'force-dynamic'
+
 const pretendard = localFont({
   src: '../public/fonts/PretendardVariable.woff2',
   display: 'swap',
