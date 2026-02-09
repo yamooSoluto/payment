@@ -137,13 +137,19 @@ details[open] > summary.faq-accordion-summary::before,
 }
 
 /* TipTap Table Styles */
+.prose .tableWrapper,
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
 .ProseMirror table,
 .prose table {
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
-  margin: 1rem 0;
-  overflow: hidden;
+  max-width: 100%;
+  margin: 0;
 }
 
 .ProseMirror td,
