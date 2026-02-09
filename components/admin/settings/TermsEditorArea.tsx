@@ -6,12 +6,25 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
 
 const editorExtensions = [
   StarterKit,
   Underline,
   Link.configure({ openOnClick: false }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
+  Table.configure({
+    resizable: true,
+    HTMLAttributes: {
+      class: 'tiptap-table',
+    },
+  }),
+  TableRow,
+  TableHeader,
+  TableCell,
 ];
 
 const editorProps = {
@@ -109,6 +122,80 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       >
         ◆
       </button>
+      <div className="w-px bg-gray-300 mx-1" />
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        className={`px-2 py-1 text-sm rounded ${editor.isActive('table') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}
+        title="표 삽입"
+      >
+        ▦ 표
+      </button>
+      {editor.isActive('table') && (
+        <>
+          <div className="w-px bg-gray-300 mx-1" />
+          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-gray-50 rounded">
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().addColumnBefore().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="왼쪽에 열 추가"
+            >
+              ←열
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().addColumnAfter().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="오른쪽에 열 추가"
+            >
+              열→
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().deleteColumn().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="열 삭제"
+            >
+              열✕
+            </button>
+            <div className="w-px h-4 bg-gray-200 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().addRowBefore().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="위에 행 추가"
+            >
+              ↑행
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().addRowAfter().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="아래에 행 추가"
+            >
+              행↓
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().deleteRow().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
+              title="행 삭제"
+            >
+              행✕
+            </button>
+            <div className="w-px h-4 bg-gray-200 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().deleteTable().run()}
+              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200 text-red-500 hover:text-red-600"
+              title="표 삭제"
+            >
+              표삭제
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
