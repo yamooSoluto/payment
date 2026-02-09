@@ -156,12 +156,13 @@ details[open] > summary.faq-accordion-summary::before,
 .ProseMirror th,
 .prose td,
 .prose th {
-  min-width: 1em;
+  min-width: 100px;
   border: 1px solid #d1d5db;
   padding: 0.5rem 0.75rem;
   vertical-align: top;
   box-sizing: border-box;
   position: relative;
+  word-break: keep-all;
 }
 
 .ProseMirror th,

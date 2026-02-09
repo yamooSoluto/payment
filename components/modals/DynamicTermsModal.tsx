@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Xmark, NavArrowLeft } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 
@@ -26,6 +26,7 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingHistory, setViewingHistory] = useState<HistoryItem | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const baseTitle = type === 'terms' ? 'YAMOO 서비스이용약관' : '개인정보처리방침';
 
@@ -74,6 +75,22 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
     return formatDate(item.publishedAt);
   };
 
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const timer = setTimeout(() => {
+      const tables = contentRef.current?.querySelectorAll('table');
+      tables?.forEach((table) => {
+        if (!table.parentElement?.classList.contains('tableWrapper')) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'tableWrapper';
+          table.parentNode?.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [displayContent]);
+
   const title = baseTitle;
 
   return (
@@ -111,6 +128,7 @@ export default function DynamicTermsModal({ type, onClose }: DynamicTermsModalPr
           ) : (
             <>
               <div
+                ref={contentRef}
                 className="prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: displayContent }}
               />

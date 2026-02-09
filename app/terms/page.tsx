@@ -42,6 +42,8 @@ export default function TermsPage() {
     fetchTerms();
   }, []);
 
+
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     if (typeof dateStr === 'string' && dateStr.includes('년')) return dateStr;
@@ -53,6 +55,24 @@ export default function TermsPage() {
   const displayContent = viewingHistory
     ? (viewingHistory.content || viewingHistory.termsOfService || '')
     : currentContent;
+
+  useEffect(() => {
+    // Wait for the DOM to update with the new content
+    const timer = setTimeout(() => {
+      const tables = document.querySelectorAll('.prose table');
+      tables.forEach((table) => {
+        if (!table.parentElement?.classList.contains('tableWrapper')) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'tableWrapper';
+          // Move the table into the wrapper
+          table.parentNode?.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [displayContent]);
 
   const getHistoryEffectiveDate = (item: HistoryItem) => {
     if (item.effectiveDate) {
