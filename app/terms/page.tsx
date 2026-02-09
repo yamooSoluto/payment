@@ -111,6 +111,17 @@ export default function TermsPage() {
                   dangerouslySetInnerHTML={{ __html: displayContent }}
                 />
 
+                {(() => {
+                  const effectiveDate = viewingHistory
+                    ? getHistoryEffectiveDate(viewingHistory)
+                    : currentEffectiveDate ? formatDate(currentEffectiveDate) : null;
+                  return effectiveDate && (
+                    <p className="mt-8 text-sm text-gray-500">
+                      본 약관은 {effectiveDate}부터 시행됩니다.
+                    </p>
+                  );
+                })()}
+
                 {!viewingHistory && history.length > 0 && (
                   <div className="mt-8 pt-6 border-t border-gray-200">
                     <h3 className="text-sm font-semibold text-gray-600 mb-3">과거 약관 보기</h3>
