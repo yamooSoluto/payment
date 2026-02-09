@@ -37,7 +37,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
   if (!editor) return null;
 
   return (
-    <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">
+    <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}

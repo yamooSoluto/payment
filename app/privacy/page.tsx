@@ -89,7 +89,7 @@ export default function PrivacyPage() {
                 개인정보처리방침
                 {viewingHistory && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    (v{viewingHistory.version})
+                    ({getHistoryEffectiveDate(viewingHistory)} 시행)
                   </span>
                 )}
               </h1>
@@ -121,7 +121,7 @@ export default function PrivacyPage() {
                             onClick={() => setViewingHistory(item)}
                             className="text-sm text-yamoo-dark hover:underline"
                           >
-                            v{item.version} - {getHistoryEffectiveDate(item)} 시행
+                            {getHistoryEffectiveDate(item)} 시행
                           </button>
                         </li>
                       ))}

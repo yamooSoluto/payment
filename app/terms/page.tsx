@@ -89,7 +89,7 @@ export default function TermsPage() {
                 YAMOO 서비스이용약관
                 {viewingHistory && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    (v{viewingHistory.version})
+                    ({getHistoryEffectiveDate(viewingHistory)} 시행)
                   </span>
                 )}
               </h1>
@@ -121,7 +121,7 @@ export default function TermsPage() {
                             onClick={() => setViewingHistory(item)}
                             className="text-sm text-yamoo-dark hover:underline"
                           >
-                            v{item.version} - {getHistoryEffectiveDate(item)} 시행
+                            {getHistoryEffectiveDate(item)} 시행
                           </button>
                         </li>
                       ))}
