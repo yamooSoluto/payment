@@ -1,4 +1,4 @@
-export type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription';
+export type TabType = 'basic' | 'ai' | 'integrations' | 'payments' | 'subscription' | 'faq';
 
 export interface Payment {
   id: string;

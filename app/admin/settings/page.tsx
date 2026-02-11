@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Page, Settings, InfoCircle } from 'iconoir-react';
+import { Page, Settings, InfoCircle, Database } from 'iconoir-react';
 
 const settingsMenus = [
   {
@@ -21,6 +21,12 @@ const settingsMenus = [
     description: '자주 묻는 질문을 관리합니다.',
     href: '/admin/settings/faq',
     icon: InfoCircle,
+  },
+  {
+    name: '벡터 템플릿',
+    description: '라이브러리 데이터의 예상 질문 및 keyData 매핑 템플릿을 관리합니다.',
+    href: '/admin/settings/vector-templates',
+    icon: Database,
   },
 ];
 

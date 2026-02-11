@@ -38,6 +38,9 @@ const prefetchMap: Record<string, string> = {
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('fetch failed');
   return res.json();
+}).catch(() => {
+  // prefetch 실패는 무시 (선택적 최적화)
+  return null;
 });
 
 interface SidebarProps {
