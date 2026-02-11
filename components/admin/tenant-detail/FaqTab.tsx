@@ -59,6 +59,8 @@ interface TenantFaq {
   handler?: 'bot' | 'op' | 'manager';
   rule?: string;
   tags?: string[];
+  topic?: string;
+  tag_actions?: string[];
   isActive: boolean;
   vectorStatus?: 'pending' | 'synced' | 'error';
   vectorUuid?: string;
@@ -78,7 +80,7 @@ const SCHEMA_API_URL = process.env.NEXT_PUBLIC_DATAPAGE_URL
 
 // ═══════════════════════════════════════════════════════════
 // 메인 컴포넌트
-// ═══════════════════════════════════════════════════════════
+// ═══════���══════════════════════════════════════���════════════
 
 export default function FaqTab({ tenantId }: FaqTabProps) {
   // 스키마 동적 로드
@@ -204,6 +206,8 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
             handler: editingFaq.handler,
             rule: editingFaq.rule,
             tags: editingFaq.tags,
+            topic: editingFaq.topic,
+            tag_actions: editingFaq.tags, // tag_actions는 tags와 동일하게 저장
           },
         }),
       });
@@ -394,17 +398,42 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                       <div className="mt-4 space-y-4">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-2">질문</label>
-                          <textarea
-                            value={editingFaq.questions.join('\n')}
-                            onChange={(e) =>
-                              setEditingFaq({
-                                ...editingFaq,
-                                questions: e.target.value.split('\n').filter(Boolean),
-                              })
-                            }
-                            rows={3}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          />
+                          <div className="space-y-2">
+                            {editingFaq.questions.map((q, idx) => (
+                              <div key={idx} className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={q}
+                                  onChange={(e) => {
+                                    const newQuestions = [...editingFaq.questions];
+                                    newQuestions[idx] = e.target.value;
+                                    setEditingFaq({ ...editingFaq, questions: newQuestions });
+                                  }}
+                                  placeholder="유사표현은 세미콜론(;)으로 구분"
+                                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newQuestions = editingFaq.questions.filter((_, i) => i !== idx);
+                                    setEditingFaq({ ...editingFaq, questions: newQuestions.length ? newQuestions : [''] });
+                                  }}
+                                  className="px-2 py-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                  title="삭제"
+                                >
+                                  <Trash className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setEditingFaq({ ...editingFaq, questions: [...editingFaq.questions, ''] })}
+                              className="w-full px-3 py-2 text-sm text-blue-600 border border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+                            >
+                              + 질문 추가
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">유사표현은 세미콜론(;)으로 구분</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-2">답변</label>
@@ -428,6 +457,107 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
+
+                        {/* 처리 방식 */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">처리</label>
+                          <div className="flex gap-1">
+                            {[
+                              { type: 'bot' as const, label: '챗봇' },
+                              { type: 'staff' as const, label: '담당자' },
+                              { type: 'conditional' as const, label: '조건부' },
+                            ].map(({ type, label }) => (
+                              <button
+                                key={type}
+                                type="button"
+                                onClick={() => setEditingFaq({
+                                  ...editingFaq,
+                                  handlerType: type,
+                                  handler: type === 'bot' ? 'bot' : type === 'staff' ? 'op' : editingFaq.handler
+                                })}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                  editingFaq.handlerType === type
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 담당자 선택 (staff일 때) */}
+                          {editingFaq.handlerType === 'staff' && (
+                            <div className="mt-3">
+                              <select
+                                value={editingFaq.handler || 'op'}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, handler: e.target.value as 'op' | 'manager' })}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="op">운영팀</option>
+                                <option value="manager">매니저</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* 조건 입력 (conditional일 때) */}
+                          {editingFaq.handlerType === 'conditional' && (
+                            <div className="mt-3">
+                              <label className="block text-xs font-medium text-gray-500 mb-1">전달 조건</label>
+                              <textarea
+                                value={editingFaq.rule || ''}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, rule: e.target.value })}
+                                rows={2}
+                                placeholder="예: 환불/취소를 원하면 담당자에게 전달"
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none"
+                              />
+                              <p className="text-xs text-gray-400 mt-1">
+                                조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 태그 (tag_actions) - 멀티셀렉 */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">태그 (tag_actions)</label>
+                          <div className="flex flex-wrap gap-2">
+                            {['문의', '칭찬', '건의', '불만', '요청', '긴급'].map(tag => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => {
+                                  const currentTags = editingFaq.tags || [];
+                                  const newTags = currentTags.includes(tag)
+                                    ? currentTags.filter(t => t !== tag)
+                                    : [...currentTags, tag];
+                                  setEditingFaq({ ...editingFaq, tags: newTags });
+                                }}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                  (editingFaq.tags || []).includes(tag)
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Topic */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-2">주제 (Topic)</label>
+                          <input
+                            type="text"
+                            value={editingFaq.topic || ''}
+                            onChange={(e) =>
+                              setEditingFaq({ ...editingFaq, topic: e.target.value })
+                            }
+                            placeholder="예: 운영정책, 시설, 결제"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => setEditingFaq(null)}
@@ -448,7 +578,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                       // 보기 모드
                       <>
                         <div className="mt-4">
-                          <div className="text-xs font-medium text-gray-500 mb-2">질문</div>
+                          <div className="text-xs font-medium text-gray-500 mb-2">질���</div>
                           <div className="space-y-1">
                             {faq.questions.map((q, idx) => (
                               <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-gray-200">

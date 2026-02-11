@@ -186,7 +186,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     // 허용된 필드만 업데이트
-    const allowedFields = ['questions', 'answer', 'guide', 'keyData', 'handlerType', 'handler', 'rule', 'tags', 'isActive'];
+    const allowedFields = ['questions', 'answer', 'guide', 'keyData', 'handlerType', 'handler', 'rule', 'tags', 'topic', 'tag_actions', 'isActive'];
     const filteredUpdates: Record<string, any> = {};
 
     for (const field of allowedFields) {
@@ -215,7 +215,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     console.error('Update tenant FAQ error:', error);
     return NextResponse.json(
-      { error: 'FAQ 수정 중 오류가 발생했습니다.' },
+      { error: 'FAQ 수정 �� 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
