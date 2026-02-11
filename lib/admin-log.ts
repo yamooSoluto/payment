@@ -14,6 +14,8 @@ export type AdminLogAction =
   | 'tenant_restore'
   | 'tenant_export'
   | 'tenant_faq_sync'
+  | 'tenant_faq_update'
+  | 'tenant_faq_delete'
   // 구독 관리
   | 'subscription_start'
   | 'subscription_update'
@@ -64,6 +66,8 @@ const ACTION_CATEGORY_MAP: Record<string, AdminLogCategory> = {
   tenant_restore: 'tenant',
   tenant_export: 'tenant',
   tenant_faq_sync: 'tenant',
+  tenant_faq_update: 'tenant',
+  tenant_faq_delete: 'tenant',
   subscription_start: 'subscription',
   subscription_update: 'subscription',
   subscription_change_plan: 'subscription',
@@ -101,6 +105,8 @@ export const ACTION_LABELS: Record<string, string> = {
   tenant_restore: '매장 복구',
   tenant_export: '매장 목록 다운로드',
   tenant_faq_sync: '매장 FAQ 동기화',
+  tenant_faq_update: '매장 FAQ 수정',
+  tenant_faq_delete: '매장 FAQ 삭제',
   // 구독 관리
   subscription_start: '구독 시작',
   subscription_update: '구독 정보 수정',
