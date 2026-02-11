@@ -116,19 +116,29 @@ export async function POST(request: NextRequest) {
     }
 
     // category 자동 생성 (없는 경우)
-    const finalCategory = category || (source === 'storeinfo'
-      ? `storeinfo_${sectionId}`
-      : `${topic}_${facet}`);
+    let finalCategory = category;
+    if (!finalCategory) {
+      if (source === 'storeinfo' && sectionId) {
+        finalCategory = `storeinfo_${sectionId}`;
+      } else if (topic && facet) {
+        finalCategory = `${topic}_${facet}`;
+      } else {
+        // 자동 생성 불가 시 타임스탬프 기반 ID
+        finalCategory = `template_${Date.now()}`;
+      }
+    }
     const finalCategoryName = categoryName || finalCategory;
 
-    // 중복 체크
-    const existingSnapshot = await db.collection('vector_templates')
-      .where('category', '==', category)
-      .limit(1)
-      .get();
+    // 중복 체크 (finalCategory 사용)
+    if (finalCategory) {
+      const existingSnapshot = await db.collection('vector_templates')
+        .where('category', '==', finalCategory)
+        .limit(1)
+        .get();
 
-    if (!existingSnapshot.empty) {
-      return NextResponse.json({ error: '이미 존재하는 카테고리입니다.' }, { status: 400 });
+      if (!existingSnapshot.empty) {
+        return NextResponse.json({ error: '이미 존재하는 카테고리입니다.' }, { status: 400 });
+      }
     }
 
     // 최대 order 값 조회
