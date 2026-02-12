@@ -197,8 +197,43 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     filteredUpdates.updatedAt = Date.now();
     filteredUpdates.updatedBy = admin.adminId;
+    filteredUpdates.vectorStatus = 'pending';  // 재동기화 필요 표시
 
     await faqRef.update(filteredUpdates);
+
+    // Weaviate 재동기화 트리거 (datapage API 호출)
+    const existingData = faqDoc.data();
+    if (existingData?.vectorUuid) {
+      try {
+        const datapageUrl = process.env.NEXT_PUBLIC_DATAPAGE_URL || 'http://localhost:3001';
+        const syncPayload = {
+          tenantId,
+          vectorUuid: existingData.vectorUuid,
+          questions: filteredUpdates.questions || existingData.questions,
+          answer: filteredUpdates.answer || existingData.answer,
+          guide: filteredUpdates.guide ?? existingData.guide ?? '',
+          keyData: existingData.keyData || '',
+          rule: filteredUpdates.rule ?? existingData.rule ?? '',
+          handlerType: filteredUpdates.handlerType || existingData.handlerType || 'bot',
+          tags: filteredUpdates.tags || existingData.tags || [],
+        };
+
+        const syncRes = await fetch(`${datapageUrl}/api/vector/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(syncPayload),
+        });
+
+        if (syncRes.ok) {
+          await faqRef.update({ vectorStatus: 'synced' });
+          console.log(`[admin/faqs] Weaviate sync success: ${faqId}`);
+        } else {
+          console.warn(`[admin/faqs] Weaviate sync failed for ${faqId}`);
+        }
+      } catch (syncErr) {
+        console.warn(`[admin/faqs] Weaviate sync error:`, syncErr);
+      }
+    }
 
     // 관리자 로그
     await addAdminLog(db, admin, {
@@ -254,12 +289,32 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'FAQ not found' }, { status: 404 });
     }
 
+    const existingData = faqDoc.data();
+
     // Soft delete
     await faqRef.update({
       isActive: false,
       deletedAt: Date.now(),
       deletedBy: admin.adminId,
     });
+
+    // Weaviate에서 벡터 삭제
+    if (existingData?.vectorUuid) {
+      try {
+        const datapageUrl = process.env.NEXT_PUBLIC_DATAPAGE_URL || 'http://localhost:3001';
+        await fetch(`${datapageUrl}/api/vector/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantId,
+            vectorUuid: existingData.vectorUuid,
+          }),
+        });
+        console.log(`[admin/faqs] Weaviate delete success: ${faqId}`);
+      } catch (deleteErr) {
+        console.warn(`[admin/faqs] Weaviate delete error:`, deleteErr);
+      }
+    }
 
     // 관리자 로그
     await addAdminLog(db, admin, {
