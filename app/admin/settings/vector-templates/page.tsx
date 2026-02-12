@@ -9,8 +9,6 @@ import {
   BinMinusIn,
   Check,
   Xmark,
-  NavArrowDown,
-  NavArrowRight,
   SendDiagonal,
 } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
@@ -52,6 +50,18 @@ type Handler = 'bot' | 'op' | 'manager';
 
 // 태그 프리셋 (스크린샷 기준)
 const TAG_PRESETS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
+
+// FAQ 분류 토픽 옵션
+const FAQ_TOPIC_OPTIONS = [
+  { value: '', label: '선택 안함' },
+  { value: '기본정보', label: '기본정보' },
+  { value: '이용방법', label: '이용방법' },
+  { value: '정책/규정', label: '정책/규정' },
+  { value: '결제/환불', label: '결제/환불' },
+  { value: '문제/해결', label: '문제/해결' },
+  { value: '혜택/이벤트', label: '혜택/이벤트' },
+  { value: '기타', label: '기타' },
+];
 
 interface QuestionTemplate {
   id: string;
@@ -96,7 +106,7 @@ export default function VectorTemplatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+
 
   const [editForm, setEditForm] = useState<Partial<QuestionTemplate>>({
     questions: [],
@@ -160,7 +170,6 @@ export default function VectorTemplatesPage() {
     setScopeFilter('');
     setMatchKeywords([]);
     setNewKeyword('');
-    setShowAdvanced(false);
     // FAQ 설정
     setAnswer('');
     setGuide('');
@@ -214,12 +223,6 @@ export default function VectorTemplatesPage() {
     setHandler(template.handler || 'op');
     setRule(template.rule || '');
 
-    // 고급 설정 펼침 여부
-    setShowAdvanced(
-      !!datasheetSource?.matchKeywords?.length ||
-      template.handlerType !== 'bot' ||
-      !!template.answer
-    );
   };
 
   const handleStartAdd = () => {
@@ -463,28 +466,26 @@ export default function VectorTemplatesPage() {
 
   return (
     <div className="flex h-[calc(100vh-120px)] gap-6">
-      {/* ���측: 템플릿 목록 */}
-      <aside className="w-72 flex-shrink-0 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-100">
-          <h1 className="text-lg font-bold text-gray-900 mb-3">질문 매핑</h1>
+      {/* 좌측: 템플릿 목록 */}
+      <aside className="w-64 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h1 className="text-[15px] font-semibold text-gray-900">질문 매핑</h1>
           <button
             onClick={handleStartAdd}
-            className="w-full px-3 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+            className="p-1 text-gray-400 hover:text-gray-900 rounded-md hover:bg-gray-100"
           >
             <Plus className="w-4 h-4" />
-            새 매핑 추가
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 overflow-y-auto p-1.5">
           {templates.length === 0 ? (
-            <div className="p-6 text-center text-gray-400 text-sm">
-              <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>등록된 매핑이 없습니다.</p>
-              <p className="text-xs mt-1">위 버튼을 눌러 추가하세요</p>
+            <div className="p-6 text-center text-gray-400">
+              <Database className="w-8 h-8 mx-auto mb-2 opacity-20" />
+              <p className="text-xs">매핑을 추가하세요</p>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {templates.map((template) => {
                 const isSelected = selectedId === template.id;
                 const firstQuestion = template.questions?.[0] || '(질문 없음)';
@@ -494,24 +495,21 @@ export default function VectorTemplatesPage() {
                   <button
                     key={template.id}
                     onClick={() => handleSelect(template)}
-                    className={`w-full text-left px-3 py-3 rounded-xl transition-all ${
+                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
                       isSelected
-                        ? 'bg-blue-50 ring-1 ring-blue-200'
+                        ? 'bg-gray-100'
                         : 'hover:bg-gray-50'
                     }`}
                   >
                     <div className="text-sm font-medium text-gray-800 truncate">
                       {firstQuestion}
                     </div>
-                    <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                      {sources.map((source, idx) => (
-                        <span key={idx} className={source.type === 'storeinfo' ? 'text-green-600' : 'text-blue-600'}>
-                          {source.type === 'storeinfo' ? '📍' : '📊'}
-                          {source.type === 'storeinfo'
-                            ? source.sectionIds?.map(s => STOREINFO_SECTIONS[s]?.label).join(', ')
-                            : TOPICS[source.topic || '']?.name}
-                        </span>
-                      ))}
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
+                      {sources.map((source) =>
+                        source.type === 'storeinfo'
+                          ? source.sectionIds?.map(s => STOREINFO_SECTIONS[s]?.label).join(', ')
+                          : TOPICS[source.topic || '']?.name
+                      ).join(' · ')}
                     </div>
                   </button>
                 );
@@ -522,47 +520,47 @@ export default function VectorTemplatesPage() {
       </aside>
 
       {/* 우측: 편집 영역 */}
-      <main className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+      <main className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
         {selectedTemplate || isAddingNew ? (
           <>
             {/* 헤더 */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {isAddingNew ? '새 질문 템플릿 추가' : '질문 템플릿 편집'}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-medium text-gray-900">
+                {isAddingNew ? '새 템플릿' : (editForm.questions?.[0] || '템플릿 편집')}
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {isEditMode ? (
                   <>
                     <button
                       onClick={handleCancel}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+                      className="px-3.5 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-full"
                     >
                       취소
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-1.5 bg-gray-900 text-white rounded-full text-sm font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      {saving ? <Spinner size="sm" /> : <Check className="w-4 h-4" />}
+                      {saving ? <Spinner size="sm" /> : <Check className="w-3.5 h-3.5" />}
                       저장
                     </button>
                   </>
                 ) : (
                   <>
-                    <button onClick={() => setIsEditing(true)} className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50">
-                      <Edit className="w-5 h-5" />
+                    <button onClick={() => setIsEditing(true)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">
+                      <Edit className="w-4 h-4" />
                     </button>
                     <button
                       onClick={handleBroadcast}
                       disabled={broadcasting}
-                      className="p-2 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50 disabled:opacity-50"
+                      className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 disabled:opacity-50"
                       title="전체 테넌트에 적용"
                     >
-                      {broadcasting ? <Spinner size="sm" /> : <SendDiagonal className="w-5 h-5" />}
+                      {broadcasting ? <Spinner size="sm" /> : <SendDiagonal className="w-4 h-4" />}
                     </button>
-                    <button onClick={handleDelete} className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50">
-                      <BinMinusIn className="w-5 h-5" />
+                    <button onClick={handleDelete} className="p-1.5 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100">
+                      <BinMinusIn className="w-4 h-4" />
                     </button>
                   </>
                 )}
@@ -571,41 +569,38 @@ export default function VectorTemplatesPage() {
 
             {/* 폼 영역 */}
             <div className="flex-1 overflow-y-auto">
-              <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+              <div className="max-w-2xl mx-auto px-6 py-6 space-y-0 divide-y divide-gray-100">
 
                 {/* STEP 1: 질문 입력 */}
-                <section>
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">1</span>
-                    <h3 className="text-base font-semibold text-gray-900">어떤 질문이 들어올까요?</h3>
-                  </div>
+                <section className="pb-6">
+                  <label className="block text-sm font-medium text-gray-900 mb-3">질문</label>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {(editForm.questions || []).map((q, idx) => (
                       <div key={idx} className="flex items-center gap-2 group">
-                        <div className="flex-1 px-4 py-2.5 bg-gray-50 rounded-lg text-sm text-gray-700 border border-gray-100">
+                        <div className="flex-1 px-3.5 py-2 bg-gray-50 rounded-lg text-sm text-gray-700">
                           {q}
                         </div>
                         {isEditMode && (
                           <button
                             onClick={() => handleRemoveQuestion(idx)}
-                            className="p-1.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <Xmark className="w-4 h-4" />
+                            <Xmark className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
                     ))}
 
                     {isEditMode && (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
                             value={questionInput}
                             onChange={(e) => setQuestionInput(e.target.value)}
                             placeholder="예: 에어컨 있나요? ; 냉방 되나요?"
-                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="flex-1 px-3.5 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
@@ -616,13 +611,13 @@ export default function VectorTemplatesPage() {
                           <button
                             onClick={handleAddQuestion}
                             disabled={!questionInput.trim()}
-                            className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-40"
+                            className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 disabled:opacity-30"
                           >
                             추가
                           </button>
                         </div>
-                        <p className="text-xs text-gray-400 pl-1">
-                          비슷한 질문은 세미콜론(;)으로 구분해서 함께 입력하면 검색 정확도가 올라가요
+                        <p className="text-xs text-gray-400">
+                          세미콜론(;)으로 구분하면 유사 질문으로 함께 등록됩니다
                         </p>
                       </div>
                     )}
@@ -630,49 +625,42 @@ export default function VectorTemplatesPage() {
                 </section>
 
                 {/* STEP 2: 데이터 소스 선택 */}
-                <section>
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">2</span>
-                    <h3 className="text-base font-semibold text-gray-900">어디서 답변을 찾을까요?</h3>
-                  </div>
+                <section className="py-6">
+                  <label className="block text-sm font-medium text-gray-900 mb-3">데이터 소스</label>
 
-                  {/* 소스 타입 선택 */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
+                  {/* 소스 타입 - 소프트 세그먼트 */}
+                  <div className="inline-flex bg-gray-100 rounded-full p-0.5 mb-5">
                     <button
                       type="button"
                       onClick={() => isEditMode && setSourceType('datasheet')}
                       disabled={!isEditMode}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                         sourceType === 'datasheet'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      } ${!isEditMode ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      } ${!isEditMode ? 'opacity-60' : ''}`}
                     >
-                      <div className="text-2xl mb-1">📊</div>
-                      <div className="font-medium text-gray-900">데이터시트</div>
-                      <div className="text-xs text-gray-500 mt-0.5">공간, 시설, 좌석, 상품 정보</div>
+                      데이터시트
                     </button>
                     <button
                       type="button"
                       onClick={() => isEditMode && setSourceType('storeinfo')}
                       disabled={!isEditMode}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                         sourceType === 'storeinfo'
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      } ${!isEditMode ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      } ${!isEditMode ? 'opacity-60' : ''}`}
                     >
-                      <div className="text-2xl mb-1">📍</div>
-                      <div className="font-medium text-gray-900">매장정보</div>
-                      <div className="text-xs text-gray-500 mt-0.5">영업시간, 주차, 출입방법</div>
+                      매장정보
                     </button>
                   </div>
 
-                  {/* 데이터시트 상세 선택 */}
+                  {/* 데이터시트 상세 */}
                   {sourceType === 'datasheet' && (
-                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-4">
+                    <div className="space-y-5">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-2">시트 선택</label>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-2">시트</label>
                         <div className="flex flex-wrap gap-2">
                           {Object.entries(TOPICS).map(([key, val]) => (
                             <button
@@ -687,10 +675,10 @@ export default function VectorTemplatesPage() {
                                 }
                               }}
                               disabled={!isEditMode}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                                 selectedTopic === key
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'
+                                  ? 'bg-gray-900 text-white'
+                                  : 'text-gray-500 bg-gray-50 hover:bg-gray-100'
                               } ${!isEditMode ? 'opacity-60' : ''}`}
                             >
                               {val.icon} {val.name}
@@ -700,9 +688,7 @@ export default function VectorTemplatesPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-2">
-                          사용할 컬럼 <span className="text-gray-400">(복수 선택)</span>
-                        </label>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-2">컬럼 (복수 선택)</label>
                         <div className="flex flex-wrap gap-2">
                           {Object.entries(availableFacets).map(([key, val]) => (
                             <button
@@ -717,10 +703,10 @@ export default function VectorTemplatesPage() {
                                 );
                               }}
                               disabled={!isEditMode}
-                              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                              className={`px-3 py-1.5 rounded-full text-xs transition-all ${
                                 selectedFacets.includes(key)
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'
+                                  ? 'bg-gray-900 text-white'
+                                  : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                               } ${!isEditMode ? 'opacity-60' : ''}`}
                             >
                               {val.label}
@@ -729,16 +715,15 @@ export default function VectorTemplatesPage() {
                         </div>
                       </div>
 
-                      {/* 범위 선택 */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-2">검색 범위</label>
-                        <div className="flex flex-wrap gap-2">
+                        <label className="block text-[13px] font-medium text-gray-400 mb-2">범위</label>
+                        <div className="inline-flex bg-gray-100 rounded-full p-0.5">
                           {[
                             { value: 'all', label: '전체' },
-                            { value: 'category', label: '카테고리별' },
-                            { value: 'item', label: '특정 항목' },
-                            { value: 'group', label: '폴더별' },
-                          ].map(opt => (
+                            { value: 'category', label: '카테고리' },
+                            { value: 'item', label: '항목' },
+                            { value: 'group', label: '폴더' },
+                          ].map((opt) => (
                             <button
                               key={opt.value}
                               type="button"
@@ -748,10 +733,10 @@ export default function VectorTemplatesPage() {
                                 if (opt.value === 'all') setScopeFilter('');
                               }}
                               disabled={!isEditMode}
-                              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                                 scope === opt.value
-                                  ? 'bg-indigo-600 text-white'
-                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-indigo-400'
+                                  ? 'bg-white text-gray-900 shadow-sm'
+                                  : 'text-gray-500 hover:text-gray-700'
                               } ${!isEditMode ? 'opacity-60' : ''}`}
                             >
                               {opt.label}
@@ -759,240 +744,37 @@ export default function VectorTemplatesPage() {
                           ))}
                         </div>
                         {scope !== 'all' && (
-                          <div className="mt-2">
-                            <input
-                              type="text"
-                              value={scopeFilter}
-                              onChange={(e) => setScopeFilter(e.target.value)}
-                              disabled={!isEditMode}
-                              placeholder={
-                                scope === 'category' ? '예: 음료, 디저트' :
-                                scope === 'item' ? '예: *에어컨*, 냉방*' :
-                                '예: 1층, VIP존'
-                              }
-                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60"
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            value={scopeFilter}
+                            onChange={(e) => setScopeFilter(e.target.value)}
+                            disabled={!isEditMode}
+                            placeholder={
+                              scope === 'category' ? '예: 음료, 디저트' :
+                              scope === 'item' ? '예: *에어컨*, 냉방*' :
+                              '예: 1층, VIP존'
+                            }
+                            className="mt-2 w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60"
+                          />
                         )}
                       </div>
-                    </div>
-                  )}
 
-                  {/* 매장정보 상세 선택 */}
-                  {sourceType === 'storeinfo' && (
-                    <div className="p-4 bg-green-50/50 rounded-xl border border-green-100">
-                      <label className="block text-xs font-medium text-gray-600 mb-2">
-                        섹션 선택 <span className="text-gray-400">(복수 선택)</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(STOREINFO_SECTIONS).map(([key, val]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => {
-                              if (!isEditMode) return;
-                              setSelectedSections(prev =>
-                                prev.includes(key)
-                                  ? prev.filter(s => s !== key)
-                                  : [...prev, key]
-                              );
-                            }}
-                            disabled={!isEditMode}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                              selectedSections.includes(key)
-                                ? 'bg-green-600 text-white'
-                                : 'bg-white text-gray-600 border border-gray-200 hover:border-green-400'
-                            } ${!isEditMode ? 'opacity-60' : ''}`}
-                          >
-                            {val.icon} {val.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* FAQ 응답 설정 */}
-                <section className="p-5 bg-purple-50/50 rounded-xl border border-purple-100">
-                  <h3 className="text-sm font-semibold text-purple-800 mb-4">FAQ 응답 설정</h3>
-
-                  <div className="space-y-4">
-                    {/* 기본 답변 템플릿 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-2">기본 답변 템플릿</label>
-                      <textarea
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        disabled={!isEditMode}
-                        placeholder={'{{keyData}}를 참고하여 답변을 작성합니다. 변수 사용 가능: {{storeName}}, {{keyData}}'}
-                        rows={2}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                      />
-                    </div>
-
-                    {/* 가이드 (주의사항) */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-2">가이드 (주의사항)</label>
-                      <textarea
-                        value={guide}
-                        onChange={(e) => setGuide(e.target.value)}
-                        disabled={!isEditMode}
-                        placeholder="답변 시 참고할 주의사항이나 가이드라인"
-                        rows={2}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                      />
-                    </div>
-
-                    {/* FAQ 분류 토픽 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-2">FAQ 분류 토픽</label>
-                      <input
-                        type="text"
-                        value={faqTopic}
-                        onChange={(e) => setFaqTopic(e.target.value)}
-                        disabled={!isEditMode}
-                        placeholder="예: 이용안내, 결제, 시설, 정책"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60"
-                      />
-                    </div>
-
-                    {/* 태그 (tag_actions) - 멀티셀렉 버튼 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-2">태그 (tag_actions)</label>
-                      <div className="flex flex-wrap gap-2">
-                        {TAG_PRESETS.map(tag => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => {
-                              if (!isEditMode) return;
-                              setSelectedTags(prev =>
-                                prev.includes(tag)
-                                  ? prev.filter(t => t !== tag)
-                                  : [...prev, tag]
-                              );
-                            }}
-                            disabled={!isEditMode}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                              selectedTags.includes(tag)
-                                ? 'bg-purple-600 text-white'
-                                : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-400'
-                            } ${!isEditMode ? 'opacity-60' : ''}`}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 처리 방식 - 3개 탭 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-2">처리 방식</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => isEditMode && setHandlerType('bot')}
-                          disabled={!isEditMode}
-                          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            handlerType === 'bot'
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-white text-gray-600 border border-gray-200'
-                          } ${!isEditMode ? 'opacity-60' : ''}`}
-                        >
-                          챗봇
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => isEditMode && setHandlerType('staff')}
-                          disabled={!isEditMode}
-                          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            handlerType === 'staff'
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-white text-gray-600 border border-gray-200'
-                          } ${!isEditMode ? 'opacity-60' : ''}`}
-                        >
-                          담당자
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => isEditMode && setHandlerType('conditional')}
-                          disabled={!isEditMode}
-                          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            handlerType === 'conditional'
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-white text-gray-600 border border-gray-200'
-                          } ${!isEditMode ? 'opacity-60' : ''}`}
-                        >
-                          조건부
-                        </button>
-                      </div>
-
-                      {/* 담당자 선택 (staff일 때) */}
-                      {handlerType === 'staff' && (
-                        <div className="mt-3">
-                          <select
-                            value={handler}
-                            onChange={(e) => setHandler(e.target.value as Handler)}
-                            disabled={!isEditMode}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-                          >
-                            <option value="op">운영팀</option>
-                            <option value="manager">매니저</option>
-                          </select>
-                        </div>
-                      )}
-
-                      {/* 조건 입력 (conditional일 때) - handler는 항상 bot, n8n에서 조건 평가 */}
-                      {handlerType === 'conditional' && (
-                        <div className="mt-3">
-                          <label className="block text-xs font-medium text-gray-500 mb-1">전달 조건</label>
-                          <textarea
-                            value={rule}
-                            onChange={(e) => setRule(e.target.value)}
-                            disabled={!isEditMode}
-                            placeholder="예: VIP 고객 / 결제 관련 / 불만 접수 시 전달"
-                            rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                          />
-                          <p className="text-xs text-gray-400 mt-1">
-                            조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                {/* 고급 설정 (접이식) - 키워드 필터만 */}
-                {sourceType === 'datasheet' && (
-                  <section>
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvanced(!showAdvanced)}
-                      className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
-                    >
-                      {showAdvanced ? <NavArrowDown className="w-4 h-4" /> : <NavArrowRight className="w-4 h-4" />}
-                      <span>고급 설정 (키워드 필터)</span>
-                    </button>
-
-                    {showAdvanced && (
-                      <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-                        <label className="block text-xs font-medium text-gray-600 mb-2">
-                          키워드 필터 <span className="text-gray-400">(선택)</span>
-                        </label>
+                      {/* 키워드 필터 */}
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">키워드 필터</label>
                         <p className="text-xs text-gray-400 mb-2">
-                          특정 항목만 답변에 사용하고 싶을 때 (예: &ldquo;에어컨&rdquo; 관련 항목만)
+                          특정 항목만 사용 (예: &ldquo;에어컨&rdquo; 관련만)
                         </p>
 
                         {matchKeywords.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-2">
+                          <div className="flex flex-wrap gap-1.5 mb-2">
                             {matchKeywords.map(kw => (
-                              <span key={kw} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-sm">
+                              <span key={kw} className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
                                 {kw}
                                 {isEditMode && (
                                   <button
                                     onClick={() => setMatchKeywords(prev => prev.filter(k => k !== kw))}
-                                    className="hover:bg-amber-200 rounded-full p-0.5"
+                                    className="hover:text-red-500 p-0.5"
                                   >
                                     <Xmark className="w-3 h-3" />
                                   </button>
@@ -1008,8 +790,8 @@ export default function VectorTemplatesPage() {
                               type="text"
                               value={newKeyword}
                               onChange={(e) => setNewKeyword(e.target.value)}
-                              placeholder="키워드 입력 후 추가"
-                              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                              placeholder="키워드 입력"
+                              className="flex-1 px-3.5 py-1.5 text-sm border border-gray-200 rounded-lg"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && newKeyword.trim()) {
                                   e.preventDefault();
@@ -1028,24 +810,184 @@ export default function VectorTemplatesPage() {
                                 setNewKeyword('');
                               }}
                               disabled={!newKeyword.trim()}
-                              className="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
+                              className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 disabled:opacity-30"
                             >
                               추가
                             </button>
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* 매장정보 상세 */}
+                  {sourceType === 'storeinfo' && (
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-2">섹션 (복수 선택)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(STOREINFO_SECTIONS).map(([key, val]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              if (!isEditMode) return;
+                              setSelectedSections(prev =>
+                                prev.includes(key)
+                                  ? prev.filter(s => s !== key)
+                                  : [...prev, key]
+                              );
+                            }}
+                            disabled={!isEditMode}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              selectedSections.includes(key)
+                                ? 'bg-gray-900 text-white'
+                                : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
+                            } ${!isEditMode ? 'opacity-60' : ''}`}
+                          >
+                            {val.icon} {val.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                {/* STEP 3: FAQ 응답 설정 */}
+                <section className="py-6">
+                  <label className="block text-sm font-medium text-gray-900 mb-3">FAQ 응답</label>
+
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">분류 토픽</label>
+                        <select
+                          value={faqTopic}
+                          onChange={(e) => setFaqTopic(e.target.value)}
+                          disabled={!isEditMode}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 bg-white"
+                        >
+                          {FAQ_TOPIC_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">처리 방식</label>
+                        <div className="inline-flex bg-gray-100 rounded-full p-0.5 w-full">
+                          {[
+                            { value: 'bot', label: '챗봇' },
+                            { value: 'staff', label: '담당자' },
+                            { value: 'conditional', label: '조건부' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => isEditMode && setHandlerType(opt.value as HandlerType)}
+                              disabled={!isEditMode}
+                              className={`flex-1 px-3 py-2 rounded-full text-xs font-medium transition-all ${
+                                handlerType === opt.value
+                                  ? 'bg-white text-gray-900 shadow-sm'
+                                  : 'text-gray-500 hover:text-gray-700'
+                              } ${!isEditMode ? 'opacity-60' : ''}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {handlerType === 'staff' && (
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
+                        <select
+                          value={handler}
+                          onChange={(e) => setHandler(e.target.value as Handler)}
+                          disabled={!isEditMode}
+                          className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
+                        >
+                          <option value="op">운영팀</option>
+                          <option value="manager">매니저</option>
+                        </select>
+                      </div>
                     )}
-                  </section>
-                )}
+
+                    {handlerType === 'conditional' && (
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
+                        <textarea
+                          value={rule}
+                          onChange={(e) => setRule(e.target.value)}
+                          disabled={!isEditMode}
+                          placeholder="예: VIP 고객 / 결제 관련 / 불만 접수 시 전달"
+                          rows={2}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">미충족 시 챗봇, 충족 시 담당자에게 전달</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">답변 템플릿</label>
+                      <textarea
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        disabled={!isEditMode}
+                        placeholder={'{{keyData}}를 참고하여 답변합니다. 변수: {{storeName}}, {{keyData}}'}
+                        rows={2}
+                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">가이드 (주의사항)</label>
+                      <textarea
+                        value={guide}
+                        onChange={(e) => setGuide(e.target.value)}
+                        disabled={!isEditMode}
+                        placeholder="답변 시 참고할 주의사항이나 가이드라인"
+                        rows={2}
+                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">태그</label>
+                      <div className="flex flex-wrap gap-2">
+                        {TAG_PRESETS.map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              if (!isEditMode) return;
+                              setSelectedTags(prev =>
+                                prev.includes(tag)
+                                  ? prev.filter(t => t !== tag)
+                                  : [...prev, tag]
+                              );
+                            }}
+                            disabled={!isEditMode}
+                            className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                              selectedTags.includes(tag)
+                                ? 'bg-gray-900 text-white'
+                                : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
+                            } ${!isEditMode ? 'opacity-60' : ''}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
                 {/* 미리보기 */}
                 {previewText && (
-                  <section className="p-4 bg-gray-900 rounded-xl">
-                    <div className="text-xs text-gray-400 mb-2">답변 데이터 미리보기</div>
-                    <div className="text-sm text-white">{previewText}</div>
-                    <div className="text-xs text-gray-500 mt-2">
-                      → 이 데이터를 기반으로 고객 질문에 답변합니다
+                  <section className="pt-6">
+                    <div className="px-4 py-3 bg-gray-50 rounded-lg">
+                      <div className="text-[13px] font-medium text-gray-400 mb-1">미리보기</div>
+                      <div className="text-sm text-gray-700">{previewText}</div>
                     </div>
                   </section>
                 )}
@@ -1057,9 +999,8 @@ export default function VectorTemplatesPage() {
           /* 선택 안됨 상태 */
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-gray-400">
-              <Database className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium">질문 매핑을 선택하세요</p>
-              <p className="text-sm mt-1">왼쪽에서 항목을 선택하거나 새로 추가하세요</p>
+              <Database className="w-10 h-10 mx-auto mb-3 opacity-15" />
+              <p className="text-sm font-medium text-gray-500">항목을 선택하세요</p>
             </div>
           </div>
         )}

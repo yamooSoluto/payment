@@ -129,7 +129,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         tenantId,
         details: {
           syncType: action,
-          templateId,
+          ...(templateId ? { templateId } : {}),
           result: syncResult,
         },
       });

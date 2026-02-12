@@ -104,12 +104,10 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
   const [editingFaq, setEditingFaq] = useState<TenantFaq | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 데이터 로드
+  // 데이터 로드 (스키마와 무관하게 즉시 실행)
   useEffect(() => {
-    if (!schemaLoading && schema) {
-      fetchData();
-    }
-  }, [tenantId, schemaLoading, schema]);
+    fetchData();
+  }, [tenantId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -257,20 +255,10 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
   };
 
   // 로딩 상태
-  if (loading || schemaLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-10">
         <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  if (!schema) {
-    return (
-      <div className="text-center py-10">
-        <Database className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-        <p className="text-gray-500 mb-2">스키마를 불러오지 못했습니다.</p>
-        <p className="text-sm text-gray-400">datapage 서버 연결을 확인해주세요.</p>
       </div>
     );
   }
@@ -410,7 +398,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                                     setEditingFaq({ ...editingFaq, questions: newQuestions });
                                   }}
                                   placeholder="유사표현은 세미콜론(;)으로 구분"
-                                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
                                 />
                                 <button
                                   type="button"
@@ -428,7 +416,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                             <button
                               type="button"
                               onClick={() => setEditingFaq({ ...editingFaq, questions: [...editingFaq.questions, ''] })}
-                              className="w-full px-3 py-2 text-sm text-blue-600 border border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+                              className="w-full px-3 py-2 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors"
                             >
                               + 질문 추가
                             </button>
@@ -443,7 +431,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                               setEditingFaq({ ...editingFaq, answer: e.target.value })
                             }
                             rows={4}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
                           />
                         </div>
                         <div>
@@ -454,14 +442,14 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                               setEditingFaq({ ...editingFaq, guide: e.target.value })
                             }
                             rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
                           />
                         </div>
 
                         {/* 처리 방식 */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">처리</label>
-                          <div className="flex gap-1">
+                          <label className="block text-[13px] font-medium text-gray-400 mb-2">처리</label>
+                          <div className="inline-flex bg-gray-100 rounded-full p-0.5">
                             {[
                               { type: 'bot' as const, label: '챗봇' },
                               { type: 'staff' as const, label: '담당자' },
@@ -475,52 +463,53 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                                   handlerType: type,
                                   handler: type === 'bot' ? 'bot' : type === 'staff' ? 'op' : editingFaq.handler
                                 })}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
                                   editingFaq.handlerType === type
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    ? 'bg-white text-gray-900 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                                 }`}
                               >
                                 {label}
                               </button>
                             ))}
                           </div>
-
-                          {/* 담당자 선택 (staff일 때) */}
-                          {editingFaq.handlerType === 'staff' && (
-                            <div className="mt-3">
-                              <select
-                                value={editingFaq.handler || 'op'}
-                                onChange={(e) => setEditingFaq({ ...editingFaq, handler: e.target.value as 'op' | 'manager' })}
-                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                              >
-                                <option value="op">운영팀</option>
-                                <option value="manager">매니저</option>
-                              </select>
-                            </div>
-                          )}
-
-                          {/* 조건 입력 (conditional일 때) */}
-                          {editingFaq.handlerType === 'conditional' && (
-                            <div className="mt-3">
-                              <label className="block text-xs font-medium text-gray-500 mb-1">전달 조건</label>
-                              <textarea
-                                value={editingFaq.rule || ''}
-                                onChange={(e) => setEditingFaq({ ...editingFaq, rule: e.target.value })}
-                                rows={2}
-                                placeholder="예: 환불/취소를 원하면 담당자에게 전달"
-                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none"
-                              />
-                              <p className="text-xs text-gray-400 mt-1">
-                                조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다
-                              </p>
-                            </div>
-                          )}
                         </div>
+
+                        {/* 담당자 선택 (staff일 때) */}
+                        {editingFaq.handlerType === 'staff' && (
+                          <div>
+                            <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
+                            <select
+                              value={editingFaq.handler || 'op'}
+                              onChange={(e) => setEditingFaq({ ...editingFaq, handler: e.target.value as 'op' | 'manager' })}
+                              className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
+                            >
+                              <option value="op">운영팀</option>
+                              <option value="manager">매니저</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {/* 조건 입력 (conditional일 때) */}
+                        {editingFaq.handlerType === 'conditional' && (
+                          <div>
+                            <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
+                            <textarea
+                              value={editingFaq.rule || ''}
+                              onChange={(e) => setEditingFaq({ ...editingFaq, rule: e.target.value })}
+                              rows={2}
+                              placeholder="예: 환불/취소를 원하면 담당자에게 전달"
+                              className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">
+                              조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다
+                            </p>
+                          </div>
+                        )}
 
                         {/* 태그 (tag_actions) - 멀티셀렉 */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">태그 (tag_actions)</label>
+                          <label className="block text-[13px] font-medium text-gray-400 mb-2">태그</label>
                           <div className="flex flex-wrap gap-2">
                             {['문의', '칭찬', '건의', '불만', '요청', '긴급'].map(tag => (
                               <button
@@ -533,10 +522,10 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                                     : [...currentTags, tag];
                                   setEditingFaq({ ...editingFaq, tags: newTags });
                                 }}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
                                   (editingFaq.tags || []).includes(tag)
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    ? 'bg-gray-900 text-white'
+                                    : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                                 }`}
                               >
                                 {tag}
@@ -547,28 +536,35 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
 
                         {/* Topic */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">주제 (Topic)</label>
-                          <input
-                            type="text"
+                          <label className="block text-[13px] font-medium text-gray-400 mb-1.5">주제</label>
+                          <select
                             value={editingFaq.topic || ''}
                             onChange={(e) =>
                               setEditingFaq({ ...editingFaq, topic: e.target.value })
                             }
-                            placeholder="예: 운영정책, 시설, 결제"
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          />
+                            className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
+                          >
+                            <option value="">선택 안함</option>
+                            <option value="기본정보">기본정보</option>
+                            <option value="이용방법">이용방법</option>
+                            <option value="정책/규정">정책/규정</option>
+                            <option value="결제/환불">결제/환불</option>
+                            <option value="문제/해결">문제/해결</option>
+                            <option value="혜택/이벤트">혜택/이벤트</option>
+                            <option value="기타">기타</option>
+                          </select>
                         </div>
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 pt-2">
                           <button
                             onClick={() => setEditingFaq(null)}
-                            className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100"
+                            className="px-4 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-full"
                           >
                             취소
                           </button>
                           <button
                             onClick={handleSaveFaq}
                             disabled={saving}
-                            className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            className="px-4 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-full hover:bg-gray-800 disabled:opacity-50"
                           >
                             {saving ? '저장 중...' : '저장'}
                           </button>
@@ -623,7 +619,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                           </div>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setEditingFaq(faq)}
+                              onClick={() => setEditingFaq({ ...faq, tags: faq.tag_actions || faq.tags || [] })}
                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="수정"
                             >
