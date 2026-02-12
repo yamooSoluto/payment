@@ -574,7 +574,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                       // 보기 모드
                       <>
                         <div className="mt-4">
-                          <div className="text-xs font-medium text-gray-500 mb-2">질���</div>
+                          <div className="text-xs font-medium text-gray-500 mb-2">질문</div>
                           <div className="space-y-1">
                             {faq.questions.map((q, idx) => (
                               <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-gray-200">
