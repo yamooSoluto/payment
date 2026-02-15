@@ -29,19 +29,12 @@ const SCHEMA_API_URL = process.env.NEXT_PUBLIC_DATAPAGE_URL
   ? `${process.env.NEXT_PUBLIC_DATAPAGE_URL}/api/schema/data-types`
   : 'http://localhost:3001/api/schema/data-types';
 
-type DataScope = 'all' | 'category' | 'item' | 'group';
-
 interface KeyDataSource {
   type: 'datasheet' | 'storeinfo';
   topic?: string;
   facets?: string[];
   sectionIds?: string[];
   matchKeywords?: string[];
-  includeCategory?: boolean;
-  scope?: DataScope;
-  categoryFilter?: string;
-  itemPattern?: string;
-  groupFilter?: string;
 }
 
 // 핸들러 타입: 3개 (스크��샷 기준)
@@ -58,7 +51,7 @@ const FAQ_TOPIC_OPTIONS = [
   { value: '이용방법', label: '이용방법' },
   { value: '정책/규정', label: '정책/규정' },
   { value: '결제/환불', label: '결제/환불' },
-  { value: '문제/해결', label: '문제/해결' },
+  { value: '문제/해결', label: '��제/해결' },
   { value: '혜택/이벤트', label: '혜택/이벤트' },
   { value: '기타', label: '기타' },
 ];
@@ -123,11 +116,7 @@ export default function VectorTemplatesPage() {
   const [selectedFacets, setSelectedFacets] = useState<string[]>([]);
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
 
-  // 범위 설정
-  const [scope, setScope] = useState<DataScope>('all');
-  const [scopeFilter, setScopeFilter] = useState('');
-
-  // 고급 옵션 (키워드 필터)
+  // 키워드 필터
   const [matchKeywords, setMatchKeywords] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
 
@@ -168,8 +157,6 @@ export default function VectorTemplatesPage() {
     setSelectedTopic('space');
     setSelectedFacets([]);
     setSelectedSections([]);
-    setScope('all');
-    setScopeFilter('');
     setMatchKeywords([]);
     setNewKeyword('');
     // FAQ 설정
@@ -200,13 +187,6 @@ export default function VectorTemplatesPage() {
       setSelectedTopic(datasheetSource.topic || 'space');
       setSelectedFacets(datasheetSource.facets || []);
       setMatchKeywords(datasheetSource.matchKeywords || []);
-      setScope(datasheetSource.scope || 'all');
-      setScopeFilter(
-        datasheetSource.categoryFilter ||
-        datasheetSource.itemPattern ||
-        datasheetSource.groupFilter ||
-        ''
-      );
     } else if (storeinfoSource) {
       setSourceType('storeinfo');
       setSelectedSections(storeinfoSource.sectionIds || []);
@@ -286,7 +266,7 @@ export default function VectorTemplatesPage() {
       return;
     }
     if (sourceType === 'datasheet' && selectedFacets.length === 0) {
-      alert('데이터시트에서 사용할 컬럼을 선택해주세요.');
+      alert('데이터시트에서 사용할 컬럼을 선택해주세��.');
       return;
     }
     if (sourceType === 'storeinfo' && selectedSections.length === 0) {
@@ -303,17 +283,9 @@ export default function VectorTemplatesPage() {
           type: 'datasheet',
           topic: selectedTopic,
           facets: selectedFacets,
-          scope,
         };
         if (matchKeywords.length > 0) {
           source.matchKeywords = matchKeywords;
-        }
-        if (scope === 'category' && scopeFilter) {
-          source.categoryFilter = scopeFilter;
-        } else if (scope === 'item' && scopeFilter) {
-          source.itemPattern = scopeFilter;
-        } else if (scope === 'group' && scopeFilter) {
-          source.groupFilter = scopeFilter;
         }
         keyDataSources.push(source);
       } else if (sourceType === 'storeinfo') {
@@ -441,20 +413,12 @@ export default function VectorTemplatesPage() {
       const facetLabels = selectedFacets.map(f => FACETS[f]?.label || f);
       if (facetLabels.length === 0) return null;
 
-      let scopeNote = '';
-      if (scope === 'category' && scopeFilter) {
-        scopeNote = ` [${scopeFilter} 카테고리]`;
-      } else if (scope === 'item' && scopeFilter) {
-        scopeNote = ` [${scopeFilter} 항목]`;
-      } else if (scope === 'group' && scopeFilter) {
-        scopeNote = ` [${scopeFilter} 폴더]`;
-      }
 
       const keywordNote = matchKeywords.length > 0
         ? ` (키워드: ${matchKeywords.join(', ')})`
         : '';
 
-      return `📊 ${topicName} 시트${scopeNote}의 [${facetLabels.join(', ')}] 데이터${keywordNote}`;
+      return `📊 ${topicName} 시트의 [${facetLabels.join(', ')}] 데이터${keywordNote}`;
     }
 
     if (sourceType === 'storeinfo') {
@@ -464,7 +428,7 @@ export default function VectorTemplatesPage() {
     }
 
     return null;
-  }, [sourceType, selectedTopic, selectedFacets, selectedSections, scope, scopeFilter, matchKeywords, TOPICS, FACETS, STOREINFO_SECTIONS]);
+  }, [sourceType, selectedTopic, selectedFacets, selectedSections, matchKeywords, TOPICS, FACETS, STOREINFO_SECTIONS]);
 
   // ═══════════════════════════════════════════════════════════
   // 로딩/에러 상태
@@ -893,51 +857,6 @@ export default function VectorTemplatesPage() {
                           ))}
                         </div>
                       </div>
-
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-2">범위</label>
-                        <div className="inline-flex bg-gray-100 rounded-full p-0.5">
-                          {[
-                            { value: 'all', label: '전체' },
-                            { value: 'category', label: '카테고리' },
-                            { value: 'item', label: '항목' },
-                            { value: 'group', label: '폴더' },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                if (!isEditMode) return;
-                                setScope(opt.value as DataScope);
-                                if (opt.value === 'all') setScopeFilter('');
-                              }}
-                              disabled={!isEditMode}
-                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                scope === opt.value
-                                  ? 'bg-white text-gray-900 shadow-sm'
-                                  : 'text-gray-500 hover:text-gray-700'
-                              } ${!isEditMode ? 'opacity-60' : ''}`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                        {scope !== 'all' && (
-                          <input
-                            type="text"
-                            value={scopeFilter}
-                            onChange={(e) => setScopeFilter(e.target.value)}
-                            disabled={!isEditMode}
-                            placeholder={
-                              scope === 'category' ? '예: 음료, 디저트' :
-                              scope === 'item' ? '예: *에어컨*, 냉방*' :
-                              '예: 1층, VIP존'
-                            }
-                            className="mt-2 w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60"
-                          />
-                        )}
-                      </div>
-
                       {/* 키워드 필터 */}
                       <div>
                         <label className="block text-[13px] font-medium text-gray-400 mb-1.5">키워드 필터</label>
