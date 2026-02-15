@@ -15,7 +15,7 @@ import Spinner from '@/components/admin/Spinner';
 
 // ═══════════════════════════════════════════════════════════
 // 스키마 타입 정의
-// ���══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 interface SchemaData {
   topics: Record<string, { id: string; name: string; icon: string }>;
@@ -37,7 +37,7 @@ interface KeyDataSource {
   matchKeywords?: string[];
 }
 
-// 핸들러 타입: 3개 (스크��샷 기준)
+// 핸들러 타입: 3개 (스크린샷 기준)
 type HandlerType = 'bot' | 'staff' | 'conditional';
 type Handler = 'bot' | 'op' | 'manager';
 
@@ -51,7 +51,7 @@ const FAQ_TOPIC_OPTIONS = [
   { value: '이용방법', label: '이용방법' },
   { value: '정책/규정', label: '정책/규정' },
   { value: '결제/환불', label: '결제/환불' },
-  { value: '문제/해결', label: '��제/해결' },
+  { value: '문제/해결', label: '문제/해결' },
   { value: '혜택/이벤트', label: '혜택/이벤트' },
   { value: '기타', label: '기타' },
 ];
@@ -266,7 +266,7 @@ export default function VectorTemplatesPage() {
       return;
     }
     if (sourceType === 'datasheet' && selectedFacets.length === 0) {
-      alert('데이터시트에서 사용할 컬럼을 선택해주세��.');
+      alert('데이터시트에서 사용할 컬럼을 선택해주세요.');
       return;
     }
     if (sourceType === 'storeinfo' && selectedSections.length === 0) {

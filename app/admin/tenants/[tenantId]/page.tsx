@@ -554,8 +554,8 @@ export default function TenantDetailPage() {
                       onChange={async (e) => {
                         const newValue = e.target.checked;
                         const msg = newValue
-                          ? 'AI 프로세스가 중지됩니다. 정지하시겠���니까?'
-                          : 'AI 정지를 해제하시겠습니���?';
+                          ? 'AI 프로세스가 중지됩니다. 정지하시겠습니까?'
+                          : 'AI 정지를 해제하시겠습니까?';
                         if (!confirm(msg)) {
                           e.preventDefault();
                           return;

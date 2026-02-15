@@ -3,10 +3,10 @@ import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { addAdminLog } from '@/lib/admin-log';
 
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 // Vector Template API
 // 라이브러리 카테고리별 예상 질문 및 keyData 매핑 템플릿 관리
-// ══════════════════════════════════��════════════════════════
+// ══════════════════════════════════════════════════════════════════════
 
 interface VectorTemplate {
   id: string;
@@ -230,7 +230,7 @@ export async function PUT(request: NextRequest) {
     const { orders } = body;
 
     if (!orders || !Array.isArray(orders)) {
-      return NextResponse.json({ error: '순서 정보가 ���요합니다.' }, { status: 400 });
+      return NextResponse.json({ error: '순서 정보가 필요합니다.' }, { status: 400 });
     }
 
     const batch = db.batch();

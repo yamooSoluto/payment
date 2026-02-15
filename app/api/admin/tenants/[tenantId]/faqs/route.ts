@@ -250,7 +250,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     console.error('Update tenant FAQ error:', error);
     return NextResponse.json(
-      { error: 'FAQ 수정 �� 오류가 발생했습니다.' },
+      { error: 'FAQ 수정 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
