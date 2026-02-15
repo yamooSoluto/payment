@@ -114,6 +114,8 @@ export default function VectorTemplatesPage() {
     isActive: true,
   });
   const [questionInput, setQuestionInput] = useState('');
+  const [editingQuestionIdx, setEditingQuestionIdx] = useState<number | null>(null);
+  const [editingQuestionValue, setEditingQuestionValue] = useState('');
 
   // 데이터 소스 타입
   const [sourceType, setSourceType] = useState<'datasheet' | 'storeinfo' | null>(null);
@@ -247,6 +249,31 @@ export default function VectorTemplatesPage() {
       ...prev,
       questions: (prev.questions || []).filter((_, i) => i !== idx),
     }));
+  };
+
+  const handleEditQuestion = (idx: number, value: string) => {
+    setEditingQuestionIdx(idx);
+    setEditingQuestionValue(value);
+  };
+
+  const handleSaveEditQuestion = () => {
+    if (editingQuestionIdx === null) return;
+    const trimmed = editingQuestionValue.trim();
+    if (trimmed) {
+      setEditForm(prev => ({
+        ...prev,
+        questions: (prev.questions || []).map((q, i) =>
+          i === editingQuestionIdx ? trimmed : q
+        ),
+      }));
+    }
+    setEditingQuestionIdx(null);
+    setEditingQuestionValue('');
+  };
+
+  const handleCancelEditQuestion = () => {
+    setEditingQuestionIdx(null);
+    setEditingQuestionValue('');
   };
 
   const handleSave = async () => {
@@ -578,10 +605,32 @@ export default function VectorTemplatesPage() {
                   <div className="space-y-2">
                     {(editForm.questions || []).map((q, idx) => (
                       <div key={idx} className="flex items-center gap-2 group">
-                        <div className="flex-1 px-3.5 py-2 bg-gray-50 rounded-lg text-sm text-gray-700">
-                          {q}
-                        </div>
-                        {isEditMode && (
+                        {isEditMode && editingQuestionIdx === idx ? (
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingQuestionValue}
+                            onChange={(e) => setEditingQuestionValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveEditQuestion();
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditQuestion();
+                              }
+                            }}
+                            onBlur={handleSaveEditQuestion}
+                            className="flex-1 px-3.5 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
+                          />
+                        ) : (
+                          <div
+                            className={`flex-1 px-3.5 py-2 bg-gray-50 rounded-lg text-sm text-gray-700 ${isEditMode ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+                            onClick={() => isEditMode && handleEditQuestion(idx, q)}
+                          >
+                            {q}
+                          </div>
+                        )}
+                        {isEditMode && editingQuestionIdx !== idx && (
                           <button
                             onClick={() => handleRemoveQuestion(idx)}
                             className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -624,7 +673,137 @@ export default function VectorTemplatesPage() {
                   </div>
                 </section>
 
-                {/* STEP 2: 데이터 소스 선택 */}
+                {/* STEP 2: FAQ 응답 설정 */}
+                <section className="py-6">
+                  <label className="block text-sm font-medium text-gray-900 mb-3">FAQ 응답</label>
+
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">분류 토픽</label>
+                        <select
+                          value={faqTopic}
+                          onChange={(e) => setFaqTopic(e.target.value)}
+                          disabled={!isEditMode}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 bg-white"
+                        >
+                          {FAQ_TOPIC_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">처리 방식</label>
+                        <div className="inline-flex bg-gray-100 rounded-full p-0.5 w-full">
+                          {[
+                            { value: 'bot', label: '챗봇' },
+                            { value: 'staff', label: '담당자' },
+                            { value: 'conditional', label: '조건부' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => isEditMode && setHandlerType(opt.value as HandlerType)}
+                              disabled={!isEditMode}
+                              className={`flex-1 px-3 py-2 rounded-full text-xs font-medium transition-all ${
+                                handlerType === opt.value
+                                  ? 'bg-white text-gray-900 shadow-sm'
+                                  : 'text-gray-500 hover:text-gray-700'
+                              } ${!isEditMode ? 'opacity-60' : ''}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {handlerType === 'staff' && (
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
+                        <select
+                          value={handler}
+                          onChange={(e) => setHandler(e.target.value as Handler)}
+                          disabled={!isEditMode}
+                          className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
+                        >
+                          <option value="op">운영팀</option>
+                          <option value="manager">매니저</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {handlerType === 'conditional' && (
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
+                        <textarea
+                          value={rule}
+                          onChange={(e) => setRule(e.target.value)}
+                          disabled={!isEditMode}
+                          placeholder="예: VIP 고객 / 결제 관련 / 불만 접수 시 전달"
+                          rows={2}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">미충족 시 챗봇, 충족 시 담당자에게 전달</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">답변 템플릿</label>
+                      <textarea
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        disabled={!isEditMode}
+                        placeholder={'{{keyData}}를 참고하여 답변합니다. 변수: {{storeName}}, {{keyData}}'}
+                        rows={2}
+                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">가이드 (주의사항)</label>
+                      <textarea
+                        value={guide}
+                        onChange={(e) => setGuide(e.target.value)}
+                        disabled={!isEditMode}
+                        placeholder="답변 시 참고할 주의사항이나 가이드라인"
+                        rows={2}
+                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">태그</label>
+                      <div className="flex flex-wrap gap-2">
+                        {TAG_PRESETS.map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              if (!isEditMode) return;
+                              setSelectedTags(prev =>
+                                prev.includes(tag)
+                                  ? prev.filter(t => t !== tag)
+                                  : [...prev, tag]
+                              );
+                            }}
+                            disabled={!isEditMode}
+                            className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                              selectedTags.includes(tag)
+                                ? 'bg-gray-900 text-white'
+                                : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
+                            } ${!isEditMode ? 'opacity-60' : ''}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* STEP 3: 데이터 소스 선택 */}
                 <section className="py-6">
                   <label className="block text-sm font-medium text-gray-900 mb-3">데이터 소스</label>
 
@@ -852,135 +1031,6 @@ export default function VectorTemplatesPage() {
                   )}
                 </section>
 
-                {/* STEP 3: FAQ 응답 설정 */}
-                <section className="py-6">
-                  <label className="block text-sm font-medium text-gray-900 mb-3">FAQ 응답</label>
-
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">분류 토픽</label>
-                        <select
-                          value={faqTopic}
-                          onChange={(e) => setFaqTopic(e.target.value)}
-                          disabled={!isEditMode}
-                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 bg-white"
-                        >
-                          {FAQ_TOPIC_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">처리 방식</label>
-                        <div className="inline-flex bg-gray-100 rounded-full p-0.5 w-full">
-                          {[
-                            { value: 'bot', label: '챗봇' },
-                            { value: 'staff', label: '담당자' },
-                            { value: 'conditional', label: '조건부' },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => isEditMode && setHandlerType(opt.value as HandlerType)}
-                              disabled={!isEditMode}
-                              className={`flex-1 px-3 py-2 rounded-full text-xs font-medium transition-all ${
-                                handlerType === opt.value
-                                  ? 'bg-white text-gray-900 shadow-sm'
-                                  : 'text-gray-500 hover:text-gray-700'
-                              } ${!isEditMode ? 'opacity-60' : ''}`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {handlerType === 'staff' && (
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
-                        <select
-                          value={handler}
-                          onChange={(e) => setHandler(e.target.value as Handler)}
-                          disabled={!isEditMode}
-                          className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
-                        >
-                          <option value="op">운영팀</option>
-                          <option value="manager">매니저</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {handlerType === 'conditional' && (
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
-                        <textarea
-                          value={rule}
-                          onChange={(e) => setRule(e.target.value)}
-                          disabled={!isEditMode}
-                          placeholder="예: VIP 고객 / 결제 관련 / 불만 접수 시 전달"
-                          rows={2}
-                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">미충족 시 챗봇, 충족 시 담당자에게 전달</p>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">답변 템플릿</label>
-                      <textarea
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        disabled={!isEditMode}
-                        placeholder={'{{keyData}}를 참고하여 답변합니다. 변수: {{storeName}}, {{keyData}}'}
-                        rows={2}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">가이드 (주의사항)</label>
-                      <textarea
-                        value={guide}
-                        onChange={(e) => setGuide(e.target.value)}
-                        disabled={!isEditMode}
-                        placeholder="답변 시 참고할 주의사항이나 가이드라인"
-                        rows={2}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[13px] font-medium text-gray-400 mb-1.5">태그</label>
-                      <div className="flex flex-wrap gap-2">
-                        {TAG_PRESETS.map(tag => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => {
-                              if (!isEditMode) return;
-                              setSelectedTags(prev =>
-                                prev.includes(tag)
-                                  ? prev.filter(t => t !== tag)
-                                  : [...prev, tag]
-                              );
-                            }}
-                            disabled={!isEditMode}
-                            className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                              selectedTags.includes(tag)
-                                ? 'bg-gray-900 text-white'
-                                : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
-                            } ${!isEditMode ? 'opacity-60' : ''}`}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </section>
 
                 {/* 미리보기 */}
                 {previewText && (
