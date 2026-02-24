@@ -11,6 +11,7 @@ import SubscriptionTab from '@/components/admin/tenant-detail/SubscriptionTab';
 import DeleteTenantModal from '@/components/admin/tenant-detail/DeleteTenantModal';
 import FaqTab from '@/components/admin/tenant-detail/FaqTab';
 import TenantManagersTab from '@/components/admin/tenant-detail/ManagersTab';
+import TransferOwnershipModal from '@/components/admin/tenant-detail/TransferOwnershipModal';
 import type { TabType, CustomFieldSchema, CustomFieldTab } from '@/components/admin/tenant-detail/types';
 
 // 삭제 관련 필드 (삭제된 매장에서만 표시)
@@ -78,6 +79,9 @@ export default function TenantDetailPage() {
 
   // 삭제 모달
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // 소유자 이전 모달
+  const [showTransferModal, setShowTransferModal] = useState(false);
 
   // 커스텀 필드 스키마
   const [customFieldSchema, setCustomFieldSchema] = useState<CustomFieldSchema[]>([]);
@@ -479,12 +483,22 @@ export default function TenantDetailPage() {
                       }
                     }
                     return Object.keys(memberFieldsData).length > 0 ? (
-                      <DynamicFieldGroup
-                        title="회원 정보 (회원 상세 페이지에서 수정)"
-                        fields={memberFieldsData}
-                        onChange={() => { }}
-                        disabled={true}
-                      />
+                      <div>
+                        <DynamicFieldGroup
+                          title="회원 정보 (회원 상세 페이지에서 수정)"
+                          fields={memberFieldsData}
+                          onChange={() => { }}
+                          disabled={true}
+                        />
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="text-xs text-amber-600 hover:text-amber-800 border border-amber-300 hover:border-amber-400 rounded-lg px-3 py-1.5 transition-colors"
+                          >
+                            소유자 이전
+                          </button>
+                        </div>
+                      </div>
                     ) : null;
                   })()}
                   {/* 매장 정보 섹션 */}
@@ -680,6 +694,21 @@ export default function TenantDetailPage() {
           brandName={String(tenant.brandName || '')}
           onClose={() => setShowDeleteModal(false)}
           onSuccess={() => router.push('/admin/tenants')}
+        />
+      )}
+
+      {/* 소유자 이전 모달 */}
+      {showTransferModal && (
+        <TransferOwnershipModal
+          tenantId={tenantId}
+          brandName={String(tenant.brandName || '')}
+          currentEmail={String(tenant.email || '')}
+          onClose={() => setShowTransferModal(false)}
+          onSuccess={(newEmail) => {
+            setShowTransferModal(false);
+            setTenant(prev => ({ ...prev, email: newEmail }));
+            fetchTenantDetail();
+          }}
         />
       )}
     </div>
