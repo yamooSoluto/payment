@@ -134,6 +134,14 @@ export async function PUT(
 
     await db.collection('admins').doc(id).update(updateData);
 
+    // 비밀번호 변경 시 연결된 포탈 계정도 동기화
+    if (password && targetAdmin?.portalAccountId) {
+      db.collection('users_managers').doc(targetAdmin.portalAccountId).update({
+        passwordHash: updateData.passwordHash,
+        updatedAt: new Date(),
+      }).catch(err => console.error('Portal account password sync error:', err));
+    }
+
     // 관리자 로그 기록
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     if (username !== undefined && username !== currentUsername) {
