@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Sofa, CheckCircle, WarningCircle, Clock, Plus, NavArrowRight, NavArrowDown, NavArrowUp, Xmark, Box3dCenter, Shop, CoffeeCup, Gym, Scissor, Book, Key, Cart, Home, SleeperChair } from 'iconoir-react';
@@ -194,7 +195,7 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
   if (tenants.length === 0) {
     return (
       <>
-        <div className="bg-white rounded-xl shadow-lg p-8 text-center border border-gray-100">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 text-center border border-white/60">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Sofa width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
           </div>
@@ -232,122 +233,104 @@ export default function TenantList({ authParam, email, initialTenants, hasTrialH
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-white/60">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
+        className="w-full px-6 py-5 flex items-center justify-between hover:bg-white/40 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold text-white">내 매장</h2>
+          <h2 className="text-lg font-semibold text-gray-900">내 매장</h2>
           <span className="text-sm text-gray-400">총 {tenants.length}개</span>
         </div>
         {isExpanded ? (
-          <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+          <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
         ) : (
-          <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+          <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
         )}
       </button>
 
       {isExpanded && (
         <>
-          <div className="divide-y divide-gray-100 border-t border-gray-100">
-        {tenants.map((tenant) => {
-          // plan이 없거나 빈 값이면 미구독으로 처리
-          const plan = tenant.subscription?.plan;
-          const hasValidSubscription = tenant.subscription && plan;
+          <div className="p-3 pt-2 space-y-1.5 border-t border-gray-100/70">
+            {tenants.map((tenant) => {
+              const plan = tenant.subscription?.plan;
+              let status = tenant.subscription?.status || 'none';
+              if (plan === 'trial' && status !== 'expired') status = 'trial';
+              if (status === 'canceled') status = 'expired';
+              const statusConfig = STATUS_CONFIG[status];
+              const IndustryIcon = (tenant.industry && INDUSTRY_ICON_COMPONENTS[tenant.industry]) || Sofa;
+              const hasSubscription = plan && status !== 'expired' && statusConfig;
 
-          let status = tenant.subscription?.status || 'none';
-          // plan이 'trial'이면 status도 'trial'로 처리 (데이터 불일치 대응)
-          if (plan === 'trial' && status !== 'expired') {
-            status = 'trial';
-          }
-          // canceled (즉시 해지)는 expired(미구독)로 처리
-          // pending_cancel (해지 예정)은 그대로 유지
-          if (status === 'canceled') {
-            status = 'expired';
-          }
-          const statusConfig = STATUS_CONFIG[status];
-          const StatusIcon = statusConfig?.icon || Sofa;
+              const statusDotColor: Record<string, string> = {
+                active: 'bg-green-400',
+                pending_cancel: 'bg-orange-400',
+                trial: 'bg-blue-400',
+                past_due: 'bg-red-400',
+                suspended: 'bg-red-400',
+              };
 
-          // 업종에 따른 아이콘 선택
-          const IndustryIcon = (tenant.industry && INDUSTRY_ICON_COMPONENTS[tenant.industry]) || Sofa;
-
-          return (
-            <Link
-              key={tenant.tenantId}
-              href={`/account/${tenant.tenantId}${authParam ? `?${authParam}` : ''}`}
-              className="block p-6 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center flex-shrink-0">
-                    <IndustryIcon width={24} height={24} strokeWidth={1.5} className="text-white" />
+              return (
+                <Link
+                  key={tenant.tenantId}
+                  href={`/account/${tenant.tenantId}${authParam ? `?${authParam}` : ''}`}
+                  className="flex items-center gap-3.5 px-4 py-3.5 bg-white/50 rounded-xl hover:bg-white/90 hover:shadow-sm transition-all border border-gray-100/50 hover:border-gray-200/70 group"
+                >
+                  <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <IndustryIcon width={18} height={18} strokeWidth={1.5} className="text-gray-500" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      {tenant.brandName}
-                      {tenant.isPending && (
-                        <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-gray-900 text-sm truncate">{tenant.brandName}</span>
+                      {tenant.isPending && <Loader2 className="w-3 h-3 animate-spin text-gray-400 flex-shrink-0" />}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {hasSubscription ? (
+                        <>
+                          <span className="text-xs text-gray-400">{PLAN_CONFIG[plan]?.label || plan}</span>
+                          <span className="text-gray-200 text-xs leading-none">·</span>
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDotColor[status] || 'bg-gray-300'}`} />
+                          <span className="text-xs text-gray-500">{statusConfig.label}</span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">미구독</span>
                       )}
-                    </h3>
-                    {hasValidSubscription ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        {status === 'expired' || !statusConfig ? (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium text-gray-600 bg-gray-100">
-                            미구독
-                          </span>
-                        ) : (
-                          <>
-                            <span className="text-xs font-medium text-gray-900">
-                              {PLAN_CONFIG[plan]?.label || plan}
-                            </span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusConfig.color}`}>
-                              <StatusIcon width={12} height={12} strokeWidth={2} />
-                              {statusConfig.label}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-xs font-medium text-gray-600 bg-gray-100 mt-1">
-                        미구독
-                      </span>
-                    )}
+                    </div>
                   </div>
-                </div>
-                <NavArrowRight width={20} height={20} strokeWidth={2} className="text-gray-400" />
-              </div>
-
-            </Link>
-          );
-        })}
+                  <NavArrowRight width={15} height={15} strokeWidth={2} className="text-gray-300 group-hover:text-gray-500 transition-colors flex-shrink-0" />
+                </Link>
+              );
+            })}
           </div>
 
           {/* 새 매장 추가 버튼 */}
-          <div className="p-4 bg-gray-50 border-t border-gray-100">
+          <div className="px-3 pb-3">
             <button
               onClick={handleAddTenantClick}
-              className="flex items-center justify-center gap-2 w-full py-3 text-sm text-gray-600 hover:text-yamoo-primary transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors"
             >
-              <Plus width={16} height={16} strokeWidth={2} />
-              새 매장 추가하기
+              <Plus width={15} height={15} strokeWidth={2} />
+              새 매장 추가
             </button>
           </div>
         </>
       )}
 
-      {showAddModal && (
+      {showAddModal && typeof document !== 'undefined' && createPortal(
         <AddTenantModal
           onClose={() => setShowAddModal(false)}
           onSuccess={handleAddSuccess}
           authParam={authParam}
-        />
+        />,
+        document.body
       )}
 
-      <PricingGuidanceModal
-        isOpen={showPricingGuidance}
-        onClose={() => setShowPricingGuidance(false)}
-      />
+      {typeof document !== 'undefined' && createPortal(
+        <PricingGuidanceModal
+          isOpen={showPricingGuidance}
+          onClose={() => setShowPricingGuidance(false)}
+        />,
+        document.body
+      )}
     </div>
   );
 }

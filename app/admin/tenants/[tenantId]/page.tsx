@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Timer, Database } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Timer, Database, User } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
@@ -10,6 +10,7 @@ import PaymentsTab from '@/components/admin/tenant-detail/PaymentsTab';
 import SubscriptionTab from '@/components/admin/tenant-detail/SubscriptionTab';
 import DeleteTenantModal from '@/components/admin/tenant-detail/DeleteTenantModal';
 import FaqTab from '@/components/admin/tenant-detail/FaqTab';
+import TenantManagersTab from '@/components/admin/tenant-detail/ManagersTab';
 import type { TabType, CustomFieldSchema, CustomFieldTab } from '@/components/admin/tenant-detail/types';
 
 // 삭제 관련 필드 (삭제된 매장에서만 표시)
@@ -49,7 +50,7 @@ export default function TenantDetailPage() {
 
   // URL에서 탭 상태 읽기
   const tabFromUrl = searchParams.get('tab') as TabType | null;
-  const validTabs: TabType[] = ['basic', 'ai', 'integrations', 'payments', 'subscription', 'faq'];
+  const validTabs: TabType[] = ['basic', 'ai', 'integrations', 'payments', 'subscription', 'faq', 'managers'];
   const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'basic';
 
   const [loading, setLoading] = useState(true);
@@ -445,6 +446,7 @@ export default function TenantDetailPage() {
             { id: 'payments' as TabType, label: '결제', icon: <CreditCards className="w-4 h-4" /> },
             { id: 'subscription' as TabType, label: '구독', icon: <Timer className="w-4 h-4" /> },
             { id: 'faq' as TabType, label: 'FAQ', icon: <Database className="w-4 h-4" /> },
+            { id: 'managers' as TabType, label: '매니저', icon: <User className="w-4 h-4" /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -662,6 +664,11 @@ export default function TenantDetailPage() {
           {/* FAQ 탭 */}
           {activeTab === 'faq' && (
             <FaqTab tenantId={tenantId} />
+          )}
+
+          {/* 매니저 탭 */}
+          {activeTab === 'managers' && (
+            <TenantManagersTab tenantId={tenantId} />
           )}
         </div>
       </div>

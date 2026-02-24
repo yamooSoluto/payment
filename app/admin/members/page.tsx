@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { Search, NavArrowLeft, NavArrowRight, NavArrowUp, NavArrowDown, Group, RefreshDouble, Plus, Xmark, MoreHoriz, Trash, MessageText, Download, Filter, Eye, EyeClosed } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import { MEMBER_GROUPS, MEMBER_GROUP_OPTIONS } from '@/lib/constants';
+import AdminManagersList from '@/components/admin/AdminManagersList';
 
 
 interface TenantInfo {
@@ -86,6 +87,9 @@ export default function MembersPage() {
   const [filterGroup, setFilterGroup] = useState<string[]>([]);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // 페이지 뷰 (마스터 / 매니저)
+  const [pageView, setPageView] = useState<'masters' | 'managers'>('masters');
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'active' | 'deleted'>('active');
@@ -459,7 +463,7 @@ export default function MembersPage() {
         <div className="flex items-center gap-3">
           <Group className="w-8 h-8 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">회원</h1>
-          <span className="text-sm text-gray-500">총 {pagination.total}명</span>
+          {pageView === 'masters' && <span className="text-sm text-gray-500">총 {pagination.total}명</span>}
         </div>
         <div className="flex items-center gap-2">
           {/* 필터 버튼 */}
@@ -519,7 +523,7 @@ export default function MembersPage() {
               </div>
             )}
           </div>
-          {activeTab === 'active' && (
+          {pageView === 'masters' && activeTab === 'active' && (
             <button
               onClick={handleOpenModal}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -531,7 +535,33 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* 탭 */}
+      {/* 마스터 / 매니저 전환 탭 */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setPageView('masters')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${pageView === 'masters'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+            }`}
+        >
+          마스터
+        </button>
+        <button
+          onClick={() => setPageView('managers')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${pageView === 'managers'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+            }`}
+        >
+          매니저
+        </button>
+      </div>
+
+      {/* 매니저 뷰 */}
+      {pageView === 'managers' && <AdminManagersList />}
+
+      {/* 마스터 뷰 — 활성/삭제 탭 */}
+      {pageView === 'masters' && (
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
         <button
           onClick={() => handleTabChange('active')}
@@ -552,9 +582,10 @@ export default function MembersPage() {
           삭제
         </button>
       </div>
+      )}
 
-      {/* 검색 및 필터 */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      {/* 검색 및 필터 (마스터 뷰만) */}
+      {pageView === 'masters' && <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -573,11 +604,10 @@ export default function MembersPage() {
             검색
           </button>
         </form>
-      </div>
+      </div>}
 
       {/* 일괄 작업 버튼 */}
-      {/* 일괄 작업 버튼 */}
-      {selectedMembers.size > 0 && activeTab === 'active' && (
+      {pageView === 'masters' && selectedMembers.size > 0 && activeTab === 'active' && (
         <div className="fixed bottom-6 left-4 right-4 z-50 md:static md:z-auto bg-white md:bg-blue-50 rounded-xl p-4 border border-blue-200 shadow-lg md:shadow-none flex flex-col md:flex-row md:items-center gap-4 animate-in slide-in-from-bottom-4 duration-200">
           <div className="flex items-center justify-between md:justify-start">
             <span className="text-sm font-medium text-blue-700">
@@ -623,8 +653,8 @@ export default function MembersPage() {
         </div>
       )}
 
-      {/* 회원 목록 테이블 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* 회원 목록 테이블 (마스터 뷰만) */}
+      {pageView === 'masters' && <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Spinner size="md" />
@@ -838,7 +868,7 @@ export default function MembersPage() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* 회원 추가 모달 */}
       {showModal && (

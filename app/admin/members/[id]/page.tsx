@@ -12,6 +12,7 @@ import SubscriptionHistorySection from '@/components/admin/member-detail/Subscri
 import PasswordChangeModal from '@/components/admin/member-detail/PasswordChangeModal';
 import AddTenantModal from '@/components/admin/member-detail/AddTenantModal';
 import TenantDetailModal from '@/components/admin/member-detail/TenantDetailModal';
+import ManagerListSection from '@/components/admin/member-detail/ManagerListSection';
 
 export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -244,6 +245,9 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
       {/* 구독 내역 */}
       <SubscriptionHistorySection key={`subs-${refreshKey}`} memberId={id} member={member} tenants={tenants} />
+
+      {/* 매니저 계정 */}
+      <ManagerListSection memberId={id} />
 
       {/* 비밀번호 변경 모달 */}
       {passwordModal && (

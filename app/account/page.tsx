@@ -1,11 +1,14 @@
 import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/auth';
 import { getAuthSessionIdFromCookie, getAuthSession } from '@/lib/auth-session';
+import { getManagerFromCookie } from '@/lib/manager-auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import TenantList from '@/components/account/TenantList';
 import UserProfile from '@/components/account/UserProfile';
 import AccountDeletion from '@/components/account/AccountDeletion';
 import UrlCleaner from '@/components/account/UrlCleaner';
+import ManagerSection from '@/components/account/ManagerSection';
+import AccountPageTabs from '@/components/account/AccountPageTabs';
 
 // Force dynamic rendering - this page requires searchParams
 export const dynamic = 'force-dynamic';
@@ -34,10 +37,16 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
   const { token } = params;
 
+  // 매니저 세션 확인 (홈페이지 SSO 경유 시)
+  const managerSession = await getManagerFromCookie();
+  if (managerSession) {
+    return <ManagerAccountPage managerSession={managerSession} />;
+  }
+
   let email: string | null = null;
   let sessionToken: string | undefined = undefined;
 
-  // 1. 세션 쿠키 확인 (우선)
+  // 1. 마스터 세션 쿠키 확인 (우선)
   const sessionId = await getAuthSessionIdFromCookie();
   if (sessionId) {
     const session = await getAuthSession(sessionId);
@@ -235,34 +244,141 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     <>
       {/* URL에서 토큰/이메일 파라미터 제거 (보안) */}
       <UrlCleaner />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">마이페이지</h1>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-gray-100">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">마이페이지</h1>
+          </div>
 
-        {/* Content */}
-        <div className="space-y-6">
-          {/* 기본 정보 */}
-          <UserProfile
-            email={email}
-            name={userInfo.name}
-            phone={userInfo.phone}
-          />
-          {/* 내 매장 */}
-          <TenantList
-            authParam={authParam}
-            email={email}
-            initialTenants={tenants}
-            hasTrialHistory={hasTrialHistory}
-          />
-          {/* 회원 탈퇴 */}
-          <AccountDeletion
-            authParam={authParam}
-            hasActiveSubscriptions={hasActiveSubscriptions}
+          {/* Tabbed Content */}
+          <AccountPageTabs
+            accountContent={
+              <div className="space-y-4">
+                <UserProfile
+                  email={email}
+                  name={userInfo.name}
+                  phone={userInfo.phone}
+                />
+                <AccountDeletion
+                  authParam={authParam}
+                  hasActiveSubscriptions={hasActiveSubscriptions}
+                />
+              </div>
+            }
+            storesContent={
+              <TenantList
+                authParam={authParam}
+                email={email}
+                initialTenants={tenants}
+                hasTrialHistory={hasTrialHistory}
+              />
+            }
+            managersContent={
+              <ManagerSection
+                masterEmail={email!}
+                tenants={tenants.map(t => ({ tenantId: t.tenantId, brandName: t.brandName }))}
+              />
+            }
           />
         </div>
       </div>
     </>
+  );
+}
+
+// 매니저 세션으로 접근 시 제한된 뷰 (TenantList만 표시)
+async function ManagerAccountPage({ managerSession }: {
+  managerSession: Awaited<ReturnType<typeof getManagerFromCookie>>;
+}) {
+  if (!managerSession) return null;
+
+  const db = adminDb || initializeFirebaseAdmin();
+  const tenantIds = managerSession.tenants.map(t => t.tenantId);
+
+  let tenants: Array<{
+    id: string;
+    tenantId: string;
+    brandName: string;
+    email: string;
+    industry: string | null;
+    createdAt: string | null;
+    subscription: {
+      plan: string;
+      status: string;
+      amount: number;
+      baseAmount?: number;
+      nextBillingDate: string | null;
+      currentPeriodEnd: string | null;
+      canceledAt: string | null;
+      cancelMode?: 'scheduled' | 'immediate';
+    } | null;
+  }> = [];
+
+  if (db && tenantIds.length > 0) {
+    try {
+      const tenantRefs = tenantIds.map(id => db.collection('tenants').where('tenantId', '==', id).limit(1).get());
+      const subscriptionRefs = tenantIds.map(id => db.collection('subscriptions').doc(id));
+
+      const [tenantResults, subscriptionDocs] = await Promise.all([
+        Promise.all(tenantRefs),
+        db.getAll(...subscriptionRefs),
+      ]);
+
+      const subscriptionMap = new Map<string, {
+        plan: string; status: string; amount: number; baseAmount?: number;
+        nextBillingDate: string | null; currentPeriodEnd: string | null;
+        canceledAt: string | null; cancelMode?: 'scheduled' | 'immediate';
+      }>();
+
+      subscriptionDocs.forEach(doc => {
+        if (doc.exists) {
+          const data = doc.data()!;
+          subscriptionMap.set(doc.id, {
+            plan: data.plan, status: data.status, amount: data.amount,
+            baseAmount: data.baseAmount,
+            nextBillingDate: serializeTimestamp(data.nextBillingDate),
+            currentPeriodEnd: serializeTimestamp(data.currentPeriodEnd),
+            canceledAt: serializeTimestamp(data.canceledAt),
+            cancelMode: data.cancelMode,
+          });
+        }
+      });
+
+      tenants = tenantResults.flatMap((snapshot, i) => {
+        if (snapshot.empty) return [];
+        const doc = snapshot.docs[0];
+        const data = doc.data();
+        const tenantId = tenantIds[i];
+        return [{
+          id: doc.id,
+          tenantId,
+          brandName: data.brandName || '이름 없음',
+          email: data.email,
+          industry: data.industry || null,
+          createdAt: serializeTimestamp(data.createdAt),
+          subscription: subscriptionMap.get(tenantId) || null,
+        }];
+      });
+    } catch (error) {
+      console.error('Failed to fetch manager tenants:', error);
+    }
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">마이페이지</h1>
+        <p className="mt-1 text-sm text-gray-500">{managerSession.loginId} 님으로 접속 중</p>
+      </div>
+      <div className="space-y-6">
+        <TenantList
+          authParam=""
+          email={managerSession.masterEmail}
+          initialTenants={tenants}
+          hasTrialHistory={false}
+        />
+      </div>
+    </div>
   );
 }

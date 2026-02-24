@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { NavArrowDown, NavArrowUp, Edit, Phone, CheckCircle, WarningCircle, Refresh, Eye, EyeClosed, Lock, Xmark } from 'iconoir-react';
 import { auth } from '@/lib/firebase';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
@@ -414,18 +415,20 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+    <>
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/60 overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
+        className="w-full px-6 py-5 flex items-center justify-between hover:bg-white/40 transition-colors"
       >
-        <h2 className="text-lg font-bold text-white">기본 정보</h2>
+        <h2 className="text-lg font-semibold text-gray-900">기본 정보</h2>
         {isExpanded ? (
-          <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+          <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
         ) : (
-          <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+          <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
         )}
       </button>
+      {isExpanded && <div className="border-t border-gray-100/70" />}
 
       {isExpanded && (
         <div className="px-6 pb-6 space-y-4">
@@ -657,128 +660,130 @@ export default function UserProfile({ email, name, phone, onPhoneChange }: UserP
         </div>
       )}
 
-      {/* 비밀번호 변경 모달 */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+    </div>
+    {/* 비밀번호 변경 모달 - backdrop-blur stacking context 우회를 위해 portal 사용 */}
+    {showPasswordModal && typeof document !== 'undefined' && createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={handleClosePasswordModal}
+        />
+        <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          {/* Close button */}
+          <button
             onClick={handleClosePasswordModal}
-          />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Close button */}
-            <button
-              onClick={handleClosePasswordModal}
-              className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
-            </button>
+            className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <Xmark width={20} height={20} strokeWidth={1.5} className="text-gray-500" />
+          </button>
 
-            {/* Header */}
-            <div className="pt-8 pb-4 px-6">
-              <div className="w-12 h-12 bg-yamoo-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock width={24} height={24} strokeWidth={1.5} className="text-yamoo-primary" />
+          {/* Header */}
+          <div className="pt-8 pb-4 px-6">
+            <div className="w-12 h-12 bg-yamoo-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock width={24} height={24} strokeWidth={1.5} className="text-yamoo-primary" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 text-center">비밀번호 변경</h3>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 pb-6 space-y-4">
+            {passwordError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <WarningCircle className="w-4 h-4 flex-shrink-0" />
+                {passwordError}
               </div>
-              <h3 className="text-xl font-bold text-gray-900 text-center">비밀번호 변경</h3>
+            )}
+            {passwordSuccess && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 text-sm">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                {passwordSuccess}
+              </div>
+            )}
+
+            {/* 현재 비밀번호 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">현재 비밀번호</label>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
+                  placeholder="현재 비밀번호 입력"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                >
+                  {showCurrentPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
 
-            {/* Content */}
-            <div className="px-6 pb-6 space-y-4">
-              {passwordError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
-                  <WarningCircle className="w-4 h-4 flex-shrink-0" />
-                  {passwordError}
-                </div>
-              )}
-              {passwordSuccess && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 text-sm">
-                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                  {passwordSuccess}
-                </div>
-              )}
-
-              {/* 현재 비밀번호 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">현재 비밀번호</label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPassword ? 'text' : 'password'}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
-                    placeholder="현재 비밀번호 입력"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                  >
-                    {showCurrentPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* 새 비밀번호 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
-                    placeholder="새 비밀번호 입력 (6자 이상)"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                  >
-                    {showNewPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* 비밀번호 확인 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
-                    placeholder="새 비밀번호 다시 입력"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                  >
-                    {showConfirmPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
+            {/* 새 비밀번호 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
+                  placeholder="새 비밀번호 입력 (6자 이상)"
+                />
                 <button
-                  onClick={handleClosePasswordModal}
-                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                 >
-                  취소
-                </button>
-                <button
-                  onClick={handleChangePassword}
-                  disabled={passwordLoading}
-                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-yamoo-primary hover:bg-yamoo-dark transition-colors disabled:opacity-50"
-                >
-                  {passwordLoading ? '변경 중...' : '변경하기'}
+                  {showNewPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            {/* 비밀번호 확인 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yamoo-primary focus:border-transparent"
+                  placeholder="새 비밀번호 다시 입력"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                >
+                  {showConfirmPassword ? <EyeClosed className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleClosePasswordModal}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleChangePassword}
+                disabled={passwordLoading}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-yamoo-primary hover:bg-yamoo-dark transition-colors disabled:opacity-50"
+              >
+                {passwordLoading ? '변경 중...' : '변경하기'}
+              </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

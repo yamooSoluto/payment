@@ -76,36 +76,43 @@ export default function AccountDeletion({ authParam, hasActiveSubscriptions }: A
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/60 overflow-hidden">
         {/* Header - 클릭하면 펼침/접힘 */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full p-6 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
+          className="w-full px-6 py-5 flex items-center justify-between hover:bg-white/40 transition-colors"
         >
-          <h2 className="text-lg font-bold text-white">회원 탈퇴</h2>
+          <h2 className="text-lg font-semibold text-gray-900">회원 탈퇴</h2>
           {isExpanded ? (
-            <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+            <NavArrowUp width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
           ) : (
-            <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-300" />
+            <NavArrowDown width={20} height={20} strokeWidth={1.5} className="text-gray-400" />
           )}
         </button>
 
         {/* Content - 펼쳐졌을 때만 표시 */}
         {isExpanded && (
-          <div className="px-6 pt-6 pb-6">
-            <div className="border border-red-200 rounded-lg p-4 bg-red-50/50">
-              <p className="text-sm text-gray-600 mb-3">
-                {hasActiveSubscriptions
-                  ? '구독 중, 체험 중, 또는 해지 예정인 매장이 있어 탈퇴할 수 없습니다. 모든 구독/체험이 종료된 후 탈퇴가 가능합니다.'
-                  : '탈퇴 시 서비스 이용이 중단되며, 일부 정보는 관련 법령에 따라 일정 기간 보관 후 파기됩니다.'}
-              </p>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                disabled={hasActiveSubscriptions}
-                className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                회원 탈퇴
-              </button>
+          <div className="px-6 pt-5 pb-6 border-t border-gray-100/70">
+            <div className="flex items-start gap-4">
+              <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <WarningTriangle width={18} height={18} strokeWidth={1.5} className="text-red-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-500 leading-relaxed mb-4">
+                  {hasActiveSubscriptions
+                    ? '구독 중, 체험 중, 또는 해지 예정인 매장이 있어 탈퇴할 수 없습니다. 모든 구독/체험이 종료된 후 탈퇴가 가능합니다.'
+                    : '탈퇴 시 서비스 이용이 중단되며, 일부 정보는 관련 법령에 따라 일정 기간 보관 후 파기됩니다.'}
+                </p>
+                {!hasActiveSubscriptions && (
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="text-sm font-medium text-red-400 hover:text-red-600 transition-colors flex items-center gap-1"
+                  >
+                    탈퇴 신청
+                    <span className="text-xs opacity-70">→</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
