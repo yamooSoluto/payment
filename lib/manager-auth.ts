@@ -227,17 +227,17 @@ export async function loginManager(
   };
 }
 
-// 세션 유효성 확인
+// 세션 유효성 확인 (항상 최신 매니저 데이터를 반환)
 export async function verifyManagerSession(sessionId: string): Promise<ManagerSession | null> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) return null;
 
   try {
-    const doc = await db.collection('manager_sessions').doc(sessionId).get();
-    if (!doc.exists) return null;
+    const sessionDoc = await db.collection('manager_sessions').doc(sessionId).get();
+    if (!sessionDoc.exists) return null;
 
-    const data = doc.data()!;
-    const expiresAt = data.expiresAt?.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
+    const session = sessionDoc.data()!;
+    const expiresAt = session.expiresAt?.toDate ? session.expiresAt.toDate() : new Date(session.expiresAt);
 
     if (expiresAt < new Date()) {
       db.collection('manager_sessions').doc(sessionId).delete()
@@ -245,13 +245,28 @@ export async function verifyManagerSession(sessionId: string): Promise<ManagerSe
       return null;
     }
 
+    // 매니저 원본 데이터에서 최신 정보 조회 (권한 변경 즉시 반영)
+    const managerDoc = await db.collection('users_managers').doc(session.managerId).get();
+    if (!managerDoc.exists) {
+      db.collection('manager_sessions').doc(sessionId).delete().catch(() => {});
+      return null;
+    }
+
+    const manager = managerDoc.data()!;
+
+    // 비활성화된 매니저 → 세션 무효
+    if (!manager.active) {
+      db.collection('manager_sessions').doc(sessionId).delete().catch(() => {});
+      return null;
+    }
+
     return {
       sessionId,
-      managerId: data.managerId,
-      loginId: data.loginId,
-      masterEmail: data.masterEmail,
-      tenants: data.tenants || [],
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+      managerId: manager.managerId,
+      loginId: manager.loginId,
+      masterEmail: manager.masterEmail,
+      tenants: manager.tenants || [],
+      createdAt: session.createdAt?.toDate ? session.createdAt.toDate() : new Date(session.createdAt),
       expiresAt,
     };
   } catch (error) {
