@@ -6,6 +6,14 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { UserCrown, Plus, EditPencil, Trash, RefreshDouble, Xmark, Settings, Group, Search, NavArrowLeft, NavArrowRight, InfoCircle, Clock, Journal } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 
+interface PortalAccount {
+  managerId: string;
+  loginId: string;
+  name: string;
+  active: boolean;
+  tenantCount: number;
+}
+
 interface Admin {
   id: string;
   username: string;
@@ -13,6 +21,8 @@ interface Admin {
   role: string;
   createdAt: string;
   lastLoginAt: string | null;
+  portalAccountId: string | null;
+  portalAccount: PortalAccount | null;
 }
 
 interface LogData {
@@ -355,6 +365,134 @@ export default function AdminsPage() {
     setEditingAdmin(null);
   };
 
+  // 포탈 계정 모달 상태
+  const [showPortalModal, setShowPortalModal] = useState(false);
+  const [portalTargetAdmin, setPortalTargetAdmin] = useState<Admin | null>(null);
+  const [portalName, setPortalName] = useState('');
+  const [portalActive, setPortalActive] = useState(true);
+  const [portalTenants, setPortalTenants] = useState<Array<{ tenantId: string; brandName: string; permissions: Record<string, string> }>>([]);
+  const [portalSaving, setPortalSaving] = useState(false);
+
+  // 매장 선택 모달 상태
+  const [showTenantSelectModal, setShowTenantSelectModal] = useState(false);
+  const [allTenants, setAllTenants] = useState<Array<{ tenantId: string; brandName: string }>>([]);
+  const [tenantSelectLoading, setTenantSelectLoading] = useState(false);
+  const [tenantSelectSearch, setTenantSelectSearch] = useState('');
+  const [checkedTenantIds, setCheckedTenantIds] = useState<Set<string>>(new Set());
+
+  const defaultPermissions = { conversations: 'write', data: 'write', statistics: 'write', tasks: 'write', mypage: 'hidden', accounts: 'write' };
+
+  const handleOpenPortalModal = (admin: Admin) => {
+    setPortalTargetAdmin(admin);
+    setPortalName(admin.portalAccount ? admin.portalAccount.name : admin.name);
+    setPortalActive(admin.portalAccount ? admin.portalAccount.active : true);
+    setPortalTenants([]);
+    if (admin.portalAccount && admin.portalAccountId) {
+      fetch(`/api/admin/portal-accounts?managerId=${admin.portalAccountId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.portalAccount?.tenants) {
+            setPortalTenants(data.portalAccount.tenants.map((t: { tenantId: string; brandName?: string; permissions: Record<string, string> }) => ({
+              tenantId: t.tenantId, brandName: t.brandName || t.tenantId, permissions: t.permissions || defaultPermissions,
+            })));
+          }
+        });
+    }
+    setShowPortalModal(true);
+  };
+
+  const handleClosePortalModal = () => {
+    setShowPortalModal(false);
+    setPortalTargetAdmin(null);
+  };
+
+  const handleRemovePortalTenant = (tenantId: string) => {
+    setPortalTenants(prev => prev.filter(t => t.tenantId !== tenantId));
+  };
+
+  // 매장 선택 모달 열기
+  const handleOpenTenantSelect = async () => {
+    setTenantSelectSearch('');
+    setCheckedTenantIds(new Set(portalTenants.map(t => t.tenantId)));
+    setShowTenantSelectModal(true);
+    setTenantSelectLoading(true);
+    try {
+      const res = await fetch('/api/admin/tenants?limit=200');
+      const data = await res.json();
+      setAllTenants((data.tenants || []).map((t: { tenantId: string; brandName: string }) => ({ tenantId: t.tenantId, brandName: t.brandName })));
+    } catch { /* ignore */ }
+    finally { setTenantSelectLoading(false); }
+  };
+
+  const handleTenantSelectConfirm = () => {
+    const selectedList = allTenants.filter(t => checkedTenantIds.has(t.tenantId));
+    setPortalTenants(selectedList.map(t => {
+      const existing = portalTenants.find(p => p.tenantId === t.tenantId);
+      return existing || { tenantId: t.tenantId, brandName: t.brandName, permissions: defaultPermissions };
+    }));
+    setShowTenantSelectModal(false);
+  };
+
+  const filteredTenants = allTenants.filter(t =>
+    t.brandName.toLowerCase().includes(tenantSelectSearch.toLowerCase()) ||
+    t.tenantId.toLowerCase().includes(tenantSelectSearch.toLowerCase())
+  );
+
+  const allFilteredChecked = filteredTenants.length > 0 && filteredTenants.every(t => checkedTenantIds.has(t.tenantId));
+
+  const handleToggleAllFiltered = () => {
+    setCheckedTenantIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredChecked) {
+        filteredTenants.forEach(t => next.delete(t.tenantId));
+      } else {
+        filteredTenants.forEach(t => next.add(t.tenantId));
+      }
+      return next;
+    });
+  };
+
+  const handleSavePortalAccount = async () => {
+    if (!portalTargetAdmin) return;
+    if (!portalName.trim()) { alert('이름을 입력해주세요.'); return; }
+    setPortalSaving(true);
+    try {
+      if (portalTargetAdmin.portalAccount) {
+        // 수정
+        const res = await fetch(`/api/admin/portal-accounts/${portalTargetAdmin.portalAccountId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: portalName, active: portalActive, tenants: portalTenants }),
+        });
+        if (!res.ok) { const d = await res.json(); alert(d.error || '저장 실패'); return; }
+      } else {
+        // 생성
+        const res = await fetch('/api/admin/portal-accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetAdminId: portalTargetAdmin.id, name: portalName, tenants: portalTenants }),
+        });
+        if (!res.ok) { const d = await res.json(); alert(d.error || '생성 실패'); return; }
+      }
+      handleClosePortalModal();
+      mutateAdmins();
+    } catch {
+      alert('오류가 발생했습니다.');
+    } finally {
+      setPortalSaving(false);
+    }
+  };
+
+  const handleDeletePortalAccount = async (admin: Admin) => {
+    if (!admin.portalAccountId) return;
+    if (!confirm(`"${admin.portalAccount?.loginId}" 포탈 계정을 삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch(`/api/admin/portal-accounts/${admin.portalAccountId}`, { method: 'DELETE' });
+      if (res.ok) { mutateAdmins(); }
+      else { const d = await res.json(); alert(d.error || '삭제 실패'); }
+    } catch { alert('오류가 발생했습니다.'); }
+  };
+
   const handleSave = async () => {
     if (!formData.username || !formData.name || !formData.role) {
       alert('필수 항목을 모두 입력해주세요.');
@@ -526,16 +664,21 @@ export default function AdminsPage() {
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  <th className="text-center px-4 py-4 text-sm font-medium text-gray-500 w-12">No.</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">이름</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">아이디</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">권한</th>
+                  <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">포탈 계정</th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">마지막 로그인</th>
                   <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {admins.map((admin) => (
+                {admins.map((admin, index) => (
                   <tr key={admin.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-4 text-sm text-center text-gray-400 font-mono">
+                      {index + 1}
+                    </td>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {admin.name || '-'}
                     </td>
@@ -544,6 +687,43 @@ export default function AdminsPage() {
                     </td>
                     <td className="px-6 py-4">
                       {getRoleBadge(admin.role)}
+                    </td>
+                    <td className="px-6 py-4">
+                      {admin.portalAccount ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono text-gray-700">{admin.portalAccount.loginId}</span>
+                          <span className={`px-1.5 py-0.5 text-xs rounded-full ${admin.portalAccount.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {admin.portalAccount.active ? '활성' : '비활성'}
+                          </span>
+                          {admin.portalAccount.tenantCount > 0 && (
+                            <span className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded-full">
+                              {admin.portalAccount.tenantCount}개 매장
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleOpenPortalModal(admin)}
+                            className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            title="포탈 계정 수정"
+                          >
+                            <EditPencil className="w-3.5 h-3.5 text-gray-400" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePortalAccount(admin)}
+                            className="p-1 hover:bg-red-50 rounded transition-colors"
+                            title="포탈 계정 삭제"
+                          >
+                            <Trash className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenPortalModal(admin)}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          포탈 계정 생성
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {admin.lastLoginAt
@@ -1041,6 +1221,212 @@ export default function AdminsPage() {
               >
                 {saving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 포탈 계정 모달 */}
+      {showPortalModal && portalTargetAdmin && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-bold">
+                  {portalTargetAdmin.portalAccount ? '포탈 계정 수정' : '포탈 계정 생성'}
+                </h2>
+                <p className="text-sm text-gray-500 mt-0.5">{portalTargetAdmin.name}</p>
+              </div>
+              <button onClick={handleClosePortalModal} className="p-2 hover:bg-gray-100 rounded-lg">
+                <Xmark className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 아이디/비밀번호 안내 */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700 space-y-0.5">
+                <p><span className="font-medium">아이디:</span> <span className="font-mono">{portalTargetAdmin.portalAccount ? portalTargetAdmin.portalAccount.loginId : portalTargetAdmin.username}</span></p>
+                <p><span className="font-medium">비밀번호:</span> 관리자 계정과 동일 (비밀번호 변경 시 자동 동기화)</p>
+              </div>
+
+              {/* 이름 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">이름</label>
+                <input
+                  type="text"
+                  value={portalName}
+                  onChange={e => setPortalName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="이름 입력"
+                />
+              </div>
+
+              {/* 활성 상태 (수정 시에만) */}
+              {portalTargetAdmin.portalAccount && (
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">활성 상태</label>
+                  <button
+                    type="button"
+                    onClick={() => setPortalActive(v => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${portalActive ? 'bg-blue-600' : 'bg-gray-300'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${portalActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-gray-500">{portalActive ? '활성' : '비활성'}</span>
+                </div>
+              )}
+
+              {/* 매장 배정 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">매장 배정</label>
+                  <button
+                    type="button"
+                    onClick={handleOpenTenantSelect}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    매장 선택
+                  </button>
+                </div>
+                {portalTenants.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2 bg-gray-50 rounded-lg text-center">배정된 매장이 없습니다.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {portalTenants.map(t => (
+                      <div key={t.tenantId} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm text-gray-800">{t.brandName}</p>
+                          <p className="text-xs text-gray-400 font-mono">{t.tenantId}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">마이페이지 제외 전체</span>
+                          <button onClick={() => handleRemovePortalTenant(t.tenantId)} className="p-0.5 hover:bg-red-100 rounded">
+                            <Xmark className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleClosePortalModal}
+                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSavePortalAccount}
+                disabled={portalSaving}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {portalSaving ? <RefreshDouble className="w-5 h-5 animate-spin mx-auto" /> : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 매장 선택 모달 */}
+      {showTenantSelectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">매장 선택</h3>
+              <button onClick={() => setShowTenantSelectModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <Xmark className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 검색 */}
+            <div className="relative mb-3">
+              <input
+                type="text"
+                value={tenantSelectSearch}
+                onChange={e => setTenantSelectSearch(e.target.value)}
+                placeholder="매장명 검색..."
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            </div>
+
+            {/* 전체선택 */}
+            {!tenantSelectLoading && filteredTenants.length > 0 && (
+              <div className="flex items-center gap-2 px-2 pb-2 border-b border-gray-100 mb-2">
+                <input
+                  type="checkbox"
+                  id="tenant-select-all"
+                  checked={allFilteredChecked}
+                  onChange={handleToggleAllFiltered}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="tenant-select-all" className="text-sm text-gray-600 cursor-pointer select-none">
+                  전체 선택 ({filteredTenants.length}개)
+                </label>
+              </div>
+            )}
+
+            {/* 목록 */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {tenantSelectLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Spinner size="sm" />
+                </div>
+              ) : filteredTenants.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-8">
+                  {tenantSelectSearch ? '검색 결과가 없습니다.' : '매장이 없습니다.'}
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {filteredTenants.map(t => (
+                    <label
+                      key={t.tenantId}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checkedTenantIds.has(t.tenantId)}
+                        onChange={() => {
+                          setCheckedTenantIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(t.tenantId)) next.delete(t.tenantId);
+                            else next.add(t.tenantId);
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800 truncate">{t.brandName}</p>
+                        <p className="text-xs text-gray-400 font-mono truncate">{t.tenantId}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 선택 카운트 + 버튼 */}
+            <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
+              <span className="text-sm text-gray-500">{checkedTenantIds.size}개 선택됨</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTenantSelectModal(false)}
+                  className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleTenantSelectConfirm}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                >
+                  확인
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -56,6 +56,15 @@ function generateSessionId(): string {
   return result;
 }
 
+function generateAdminPortalAccountId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = 'ad_';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // 매니저 생성
 export async function createManager(
   masterEmail: string,
@@ -393,6 +402,161 @@ export async function getManagerById(managerId: string, masterEmail: string): Pr
 }
 
 export const MANAGER_SESSION_MAX_AGE = SESSION_EXPIRY_HOURS * 60 * 60;
+
+// ───────────────────────────────────────────────
+// 어드민 포탈 계정 (초 마스터 계정, ad_ prefix)
+// ───────────────────────────────────────────────
+
+export interface AdminPortalAccount {
+  managerId: string;       // ad_xxxxxxxx
+  loginId: string;
+  name: string;
+  active: boolean;
+  adminId: string;         // 연결된 admins 문서 ID
+  tenants: ManagerTenantAccess[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 어드민 포탈 계정 생성 (passwordHash는 어드민 계정에서 복사)
+export async function createAdminPortalAccount(
+  adminId: string,
+  adminDocRef: FirebaseFirestore.DocumentReference,
+  data: {
+    loginId: string;
+    passwordHash: string;  // 어드민 문서에서 복사한 해시값
+    name: string;
+    tenants?: ManagerTenantAccess[];
+  }
+): Promise<AdminPortalAccount> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  if (data.loginId.includes('@')) {
+    throw new Error('loginId cannot contain @');
+  }
+
+  const existing = await db.collection('users_managers')
+    .where('loginId', '==', data.loginId)
+    .limit(1)
+    .get();
+  if (!existing.empty) {
+    throw new Error('loginId already exists');
+  }
+
+  const managerId = generateAdminPortalAccountId();
+  const now = new Date();
+
+  const batch = db.batch();
+
+  batch.set(db.collection('users_managers').doc(managerId), {
+    managerId,
+    loginId: data.loginId,
+    passwordHash: data.passwordHash,
+    name: data.name,
+    masterEmail: null,
+    active: true,
+    createdByAdmin: true,
+    adminId,
+    tenants: data.tenants || [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  batch.update(adminDocRef, { portalAccountId: managerId });
+
+  await batch.commit();
+
+  return {
+    managerId,
+    loginId: data.loginId,
+    name: data.name,
+    active: true,
+    adminId,
+    tenants: data.tenants || [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+// 어드민 포탈 계정 수정
+export async function updateAdminPortalAccount(
+  managerId: string,
+  updates: {
+    name?: string;
+    password?: string;
+    active?: boolean;
+    tenants?: ManagerTenantAccess[];
+  }
+): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const doc = await db.collection('users_managers').doc(managerId).get();
+  if (!doc.exists) throw new Error('Portal account not found');
+  if (!doc.data()!.createdByAdmin) throw new Error('Not an admin portal account');
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.active !== undefined) updateData.active = updates.active;
+  if (updates.tenants !== undefined) updateData.tenants = updates.tenants;
+  if (updates.password) {
+    updateData.passwordHash = bcrypt.hashSync(updates.password, SALT_ROUNDS);
+  }
+
+  await db.collection('users_managers').doc(managerId).update(updateData);
+}
+
+// 어드민 포탈 계정 삭제 (admins 문서의 portalAccountId도 제거)
+export async function deleteAdminPortalAccount(
+  managerId: string,
+  adminDocRef: FirebaseFirestore.DocumentReference
+): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const doc = await db.collection('users_managers').doc(managerId).get();
+  if (!doc.exists) throw new Error('Portal account not found');
+  if (!doc.data()!.createdByAdmin) throw new Error('Not an admin portal account');
+
+  // 세션도 삭제
+  const sessions = await db.collection('manager_sessions')
+    .where('managerId', '==', managerId)
+    .get();
+
+  const batch = db.batch();
+  sessions.docs.forEach(s => batch.delete(s.ref));
+  batch.delete(db.collection('users_managers').doc(managerId));
+  batch.update(adminDocRef, { portalAccountId: null });
+  await batch.commit();
+}
+
+// 어드민 포탈 계정 조회
+export async function getAdminPortalAccount(managerId: string): Promise<AdminPortalAccount | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return null;
+
+  try {
+    const doc = await db.collection('users_managers').doc(managerId).get();
+    if (!doc.exists) return null;
+    const data = doc.data()!;
+    if (!data.createdByAdmin) return null;
+
+    return {
+      managerId: data.managerId,
+      loginId: data.loginId,
+      name: data.name,
+      active: data.active,
+      adminId: data.adminId,
+      tenants: data.tenants || [],
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    };
+  } catch (error) {
+    console.error('Get admin portal account error:', error);
+    return null;
+  }
+}
 
 // 쿠키 헬퍼
 export async function getManagerSessionIdFromCookie(): Promise<string | null> {

@@ -21,20 +21,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
-    const snapshot = await db.collection('admins').orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection('admins').orderBy('createdAt', 'asc').get();
 
-    const admins = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        username: data.username || data.loginId || '',
-        name: data.name || '',
-        email: data.email || '',
-        role: data.role || 'admin',
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        lastLoginAt: data.lastLoginAt?.toDate?.()?.toISOString() || null,
-      };
-    });
+    // 포탈 계정 정보를 병렬로 조회
+    const admins = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        const portalAccountId: string | null = data.portalAccountId || null;
+        let portalAccount = null;
+
+        if (portalAccountId) {
+          const paDoc = await db.collection('users_managers').doc(portalAccountId).get();
+          if (paDoc.exists) {
+            const pa = paDoc.data()!;
+            portalAccount = {
+              managerId: pa.managerId,
+              loginId: pa.loginId,
+              name: pa.name,
+              active: pa.active,
+              tenantCount: (pa.tenants || []).length,
+            };
+          }
+        }
+
+        return {
+          id: doc.id,
+          username: data.username || data.loginId || '',
+          name: data.name || '',
+          email: data.email || '',
+          role: data.role || 'admin',
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+          lastLoginAt: data.lastLoginAt?.toDate?.()?.toISOString() || null,
+          portalAccountId,
+          portalAccount,
+        };
+      })
+    );
 
     return NextResponse.json({ admins });
   } catch (error) {
