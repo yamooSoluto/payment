@@ -105,6 +105,7 @@ export async function createManager(
     masterEmail: masterEmail.toLowerCase(),
     active: true,
     tenants: data.tenants || [],
+    tenantIds: (data.tenants || []).map(t => t.tenantId),
     createdAt: now,
     updatedAt: now,
   };
@@ -152,7 +153,10 @@ export async function updateManager(
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.phone !== undefined) updateData.phone = updates.phone;
   if (updates.active !== undefined) updateData.active = updates.active;
-  if (updates.tenants !== undefined) updateData.tenants = updates.tenants;
+  if (updates.tenants !== undefined) {
+    updateData.tenants = updates.tenants;
+    updateData.tenantIds = updates.tenants.map(t => t.tenantId);
+  }
   if (updates.password) {
     updateData.passwordHash = bcrypt.hashSync(updates.password, SALT_ROUNDS);
   }

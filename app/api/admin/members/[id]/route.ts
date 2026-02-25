@@ -421,6 +421,22 @@ export async function PUT(
 
       });
 
+      // 6. users_managers의 masterEmail 업데이트 (배치)
+      const managersSnapshot = await db.collection('users_managers')
+        .where('masterEmail', '==', oldEmail)
+        .get();
+
+      if (!managersSnapshot.empty) {
+        const managerBatch = db.batch();
+        managersSnapshot.docs.forEach(doc => {
+          managerBatch.update(doc.ref, {
+            masterEmail: normalizedNewEmail,
+            updatedAt: now,
+          });
+        });
+        await managerBatch.commit();
+      }
+
       // 관리자 로그 기록 (이메일 변경)
       await addAdminLog(db, admin, {
         action: 'member_update',
