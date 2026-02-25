@@ -66,8 +66,8 @@ export default function TenantHeader({
           {(() => {
             const IndustryIcon = (industry && INDUSTRY_ICON_COMPONENTS[industry]) || Sofa;
             return (
-              <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center flex-shrink-0">
-                <IndustryIcon width={20} height={20} strokeWidth={1.5} className="text-white" />
+              <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <IndustryIcon width={20} height={20} strokeWidth={1.5} className="text-gray-600" />
               </div>
             );
           })()}
@@ -76,7 +76,7 @@ export default function TenantHeader({
           {/* 수정 버튼 */}
           <button
             onClick={() => setShowEditModal(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+            className="p-2 hover:bg-white/60 rounded-lg transition-colors flex-shrink-0"
             title="매장 정보 수정"
           >
             <EditPencil width={18} height={18} strokeWidth={1.5} className="text-gray-500" />
@@ -85,7 +85,7 @@ export default function TenantHeader({
           {/* 삭제 버튼 */}
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+            className="p-2 hover:bg-white/60 rounded-lg transition-colors flex-shrink-0"
             title="매장 삭제"
           >
             <Trash width={18} height={18} strokeWidth={1.5} className="text-gray-500" />

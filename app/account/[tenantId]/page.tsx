@@ -249,6 +249,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   }
 
   return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-gray-100">
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Back Button */}
       <Link
@@ -316,6 +317,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
           />
         )}
       </div>
+    </div>
     </div>
   );
 }

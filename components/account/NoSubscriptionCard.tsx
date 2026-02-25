@@ -243,7 +243,7 @@ export default function NoSubscriptionCard({
   // 무료체험 신청 성공 화면
   if (trialSuccess) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-white/60 text-center">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Check width={32} height={32} strokeWidth={2} className="text-green-600" />
         </div>
@@ -262,7 +262,7 @@ export default function NoSubscriptionCard({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-white/60 text-center">
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CreditCard width={32} height={32} strokeWidth={1.5} className="text-gray-400" />
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { CreditCard, Check, Trash, Plus, WarningCircle, EditPencil, Xmark } from 'iconoir-react';
 import { Loader2 } from 'lucide-react';
 import { useTossSDK, getTossPayment } from '@/hooks/useTossSDK';
@@ -291,7 +292,7 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">결제 수단</h2>
         <div className="flex items-center justify-center py-6">
           <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
@@ -301,7 +302,8 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+    <>
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">결제 수단</h2>
         {cards.length > 0 && (
@@ -488,56 +490,59 @@ export default function CardList({ tenantId, email, authParam, onCardChange }: C
         </div>
       </div>
 
-      {/* 카드 삭제 확인 모달 */}
-      {deleteConfirm.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={closeDeleteConfirm}
-          />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Icon */}
-            <div className="pt-8 pb-4 flex justify-center">
-              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash width={28} height={28} strokeWidth={1.5} className="text-red-600" />
-              </div>
+    </div>
+
+    {/* 카드 삭제 확인 모달 - createPortal */}
+    {deleteConfirm.isOpen && typeof document !== 'undefined' && createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={closeDeleteConfirm}
+        />
+        <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          {/* Icon */}
+          <div className="pt-8 pb-4 flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
+              <Trash width={28} height={28} strokeWidth={1.5} className="text-red-600" />
             </div>
+          </div>
 
-            {/* Content */}
-            <div className="px-6 pb-6 text-center">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
-                카드를 삭제하시겠습니까?
-              </h3>
-              <p className="text-gray-500 text-sm mb-6">
-                <span className="font-medium text-gray-700">{deleteConfirm.cardNumber}</span>
-                <br />
-                이 카드를 삭제하면 복구할 수 없습니다.
-              </p>
+          {/* Content */}
+          <div className="px-6 pb-6 text-center">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              카드를 삭제하시겠습니까?
+            </h3>
+            <p className="text-gray-500 text-sm mb-6">
+              <span className="font-medium text-gray-700">{deleteConfirm.cardNumber}</span>
+              <br />
+              이 카드를 삭제하면 복구할 수 없습니다.
+            </p>
 
-              {/* Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={closeDeleteConfirm}
-                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleDeleteCard}
-                  disabled={isDeleting}
-                  className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isDeleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    '삭제'
-                  )}
-                </button>
-              </div>
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={closeDeleteConfirm}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteCard}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  '삭제'
+                )}
+              </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

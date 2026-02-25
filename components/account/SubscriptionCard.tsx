@@ -684,16 +684,23 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
         <div className="flex items-start justify-between mb-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-xl font-bold text-gray-900">
                 {(isTrial || subscription.plan === 'trial') ? '무료체험' : subscription.plan ? `${getPlanName(subscription.plan)} 플랜` : '구독 없음'}
               </h2>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                isCanceled ? 'text-gray-600 bg-gray-100' : getStatusColor(subscription.status)
-              }`}>
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className={`w-2 h-2 rounded-full ${
+                  isCanceled ? 'bg-gray-400'
+                    : subscription.status === 'active' ? 'bg-green-400'
+                    : subscription.status === 'trial' ? 'bg-blue-400'
+                    : subscription.status === 'pending_cancel' ? 'bg-orange-400'
+                    : subscription.status === 'past_due' || subscription.status === 'suspended' ? 'bg-red-400'
+                    : subscription.status === 'expired' ? 'bg-orange-400'
+                    : 'bg-gray-400'
+                }`} />
                 {isCanceled ? '해지됨' : getStatusText(subscription.status)}
               </span>
             </div>
@@ -918,13 +925,13 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
             <>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
-                className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+                className="px-5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-800 hover:text-white transition-all duration-200"
               >
                 플랜 예약
               </button>
               <button
                 onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'immediate' })}
-                className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+                className="px-5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-800 hover:text-white transition-all duration-200"
               >
                 즉시 전환
               </button>
@@ -934,7 +941,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
           {isActive && subscription.plan !== 'enterprise' && ((activePlans?.length || DEFAULT_PLANS.length) > 2 || !subscription.pendingPlan) && (
             <button
               onClick={() => setShowPlanSelectModal({ isOpen: true, mode: 'schedule' })}
-              className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+              className="px-5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-800 hover:text-white transition-all duration-200"
             >
               플랜 변경
             </button>
@@ -948,7 +955,7 @@ export default function SubscriptionCard({ subscription, authParam, tenantId, ac
                 }
                 setShowCancelModal(true);
               }}
-              className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-yamoo-primary hover:text-gray-900 transition-all duration-200"
+              className="px-5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-800 hover:text-white transition-all duration-200"
             >
               구독 해지
             </button>

@@ -204,26 +204,10 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
   };
 
   const getStatusIcon = (payment: MergedPayment) => {
-    if (payment.hasRefund) {
-      if (payment.totalRefundedAmount >= payment.amount) {
-        // 전액 환불
-        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
-      } else {
-        // 부분 환불
-        return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-orange-500" />;
-      }
+    if (payment.hasRefund || payment.status === 'canceled' || payment.status === 'failed') {
+      return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-gray-900" />;
     }
-    switch (payment.status) {
-      case 'done':
-      case 'completed':
-        return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-green-500" />;
-      case 'canceled':
-        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-gray-400" />;
-      case 'failed':
-        return <XmarkCircle width={16} height={16} strokeWidth={1.5} className="text-red-500" />;
-      default:
-        return null;
-    }
+    return <CheckCircle width={16} height={16} strokeWidth={1.5} className="text-gray-900" />;
   };
 
   const getStatusText = (payment: MergedPayment) => {
@@ -268,7 +252,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
 
   if (payments.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
         <h2 className="text-xl font-bold text-gray-900 mb-4">결제 내역</h2>
         <div className="text-center py-8 text-gray-500">
           <Journal width={48} height={48} strokeWidth={1.5} className="mx-auto mb-3 text-gray-300" />
@@ -279,7 +263,7 @@ export default function PaymentHistory({ payments, tenantName }: PaymentHistoryP
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900">결제 내역</h2>
         <div className="flex items-center gap-2">

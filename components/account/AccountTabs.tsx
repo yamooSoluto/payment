@@ -68,18 +68,18 @@ export default function AccountTabs({
   return (
     <div>
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6">
+      <div className="flex gap-1 bg-gray-100/90 backdrop-blur-md border border-gray-200/60 shadow-sm p-1.5 rounded-2xl mb-6">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
               activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-gray-900 shadow-md'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-white/60'
             }`}
           >
-            <span className={activeTab === tab.id ? 'text-yamoo-primary' : 'text-gray-400'}>
+            <span className={activeTab === tab.id ? 'text-gray-800' : 'text-gray-400'}>
               {tab.icon}
             </span>
             <span className="hidden sm:inline">{tab.label}</span>

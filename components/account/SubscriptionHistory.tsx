@@ -218,7 +218,7 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
 
   if (!subscription && (!historyData || historyData.length === 0)) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
         <h2 className="text-xl font-bold text-gray-900 mb-4">구독 내역</h2>
         <div className="text-center py-8 text-gray-500">
           <Calendar width={48} height={48} strokeWidth={1.5} className="mx-auto mb-3 text-gray-300" />
@@ -229,7 +229,7 @@ export default function SubscriptionHistory({ subscription, payments = [], histo
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
       <h2 className="text-xl font-bold text-gray-900 mb-6">구독 내역</h2>
 
       {subscriptionPeriods.length > 0 ? (
