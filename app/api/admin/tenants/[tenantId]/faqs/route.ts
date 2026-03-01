@@ -186,7 +186,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     // 허용된 필드만 업데이트
-    const allowedFields = ['questions', 'answer', 'guide', 'keyData', 'handlerType', 'handler', 'rule', 'tags', 'topic', 'tag_actions', 'isActive'];
+    const allowedFields = ['questions', 'answer', 'guide', 'keyData', 'handlerType', 'handler', 'rule', 'tags', 'topic', 'tag_actions', 'action_product', 'action', 'isActive'];
     const filteredUpdates: Record<string, any> = {};
 
     for (const field of allowedFields) {
@@ -213,9 +213,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           answer: filteredUpdates.answer || existingData.answer,
           guide: filteredUpdates.guide ?? existingData.guide ?? '',
           keyData: existingData.keyData || '',
+          topic: filteredUpdates.topic ?? existingData.topic ?? '',
           rule: filteredUpdates.rule ?? existingData.rule ?? '',
           handlerType: filteredUpdates.handlerType || existingData.handlerType || 'bot',
+          handler: filteredUpdates.handler || existingData.handler || 'bot',
           tags: filteredUpdates.tags || existingData.tags || [],
+          action_product: filteredUpdates.action_product ?? existingData.action_product ?? null,
+          action: filteredUpdates.action ?? existingData.action ?? null,
+          imageUrls: existingData.imageUrls || [],
         };
 
         const syncRes = await fetch(`${datapageUrl}/api/vector/upsert`, {

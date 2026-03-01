@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import useSWR from 'swr';
 import {
   Database,
   NavArrowRight,
   RefreshDouble,
   Check,
-  Edit,
-  Trash,
 } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
+import FaqTable from './FaqTable';
 
 // ═══════════════════════════════════════════════════════════
 // 타입 정의
@@ -53,6 +52,8 @@ interface TenantFaq {
   templateId?: string;
   questions: string[];
   answer: string;
+  answerRaw?: string;
+  questionsRaw?: string[];
   guide?: string;
   keyData?: string;
   handlerType?: 'bot' | 'staff' | 'conditional';
@@ -61,6 +62,8 @@ interface TenantFaq {
   tags?: string[];
   topic?: string;
   tag_actions?: string[];
+  action_product?: string | null;  // ticket|room|locker|seat|shop|reservation|null
+  action?: string | null;          // change|cancel|refund|extend|transfer|check|issue|null
   isActive: boolean;
   vectorStatus?: 'pending' | 'synced' | 'error';
   vectorUuid?: string;
@@ -80,11 +83,11 @@ const SCHEMA_API_URL = process.env.NEXT_PUBLIC_DATAPAGE_URL
 
 // ═══════════════════════════════════════════════════════════
 // 메인 컴포넌트
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 export default function FaqTab({ tenantId }: FaqTabProps) {
   // 스키마 동적 로드
-  const { data: schema, isLoading: schemaLoading } = useSWR<SchemaData>(
+  const { data: schema } = useSWR<SchemaData>(
     SCHEMA_API_URL,
     { revalidateOnFocus: false }
   );
@@ -97,14 +100,15 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
   const [activeTab, setActiveTab] = useState<'faqs' | 'templates'>('faqs');
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<VectorTemplate[]>([]);
-  const [faqs, setFaqs] = useState<TenantFaq[]>([]);
+  const [localFaqs, setLocalFaqs] = useState<TenantFaq[]>([]);
+  const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [syncingDirty, setSyncingDirty] = useState(false);
   const [syncingTemplateId, setSyncingTemplateId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editingFaq, setEditingFaq] = useState<TenantFaq | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // 데이터 로드 (스키마와 무관하게 즉시 실행)
+  // 데이터 로드
   useEffect(() => {
     fetchData();
   }, [tenantId]);
@@ -112,18 +116,22 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 템플릿 조회
       const templatesRes = await fetch('/api/admin/vector-templates');
       if (templatesRes.ok) {
         const data = await templatesRes.json();
         setTemplates(data.templates || []);
       }
 
-      // 테넌트 FAQ 조회
       const faqsRes = await fetch(`/api/admin/tenants/${tenantId}/faqs`);
       if (faqsRes.ok) {
         const data = await faqsRes.json();
-        setFaqs(data.faqs || []);
+        // tags가 비어있으면 tag_actions(AI 확장 결과)를 fallback으로 사용
+        const normalized = (data.faqs || []).map((f: TenantFaq) => ({
+          ...f,
+          tags: (f.tags && f.tags.length > 0) ? f.tags : (f.tag_actions || []),
+        }));
+        setLocalFaqs(normalized);
+        setDirtyIds(new Set());
       }
     } catch (error) {
       console.error('Failed to fetch FAQ data:', error);
@@ -132,8 +140,61 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
     }
   };
 
+  // ── 인라인 셀 수정 ──
+  const handleCellEdit = useCallback((faqId: string, updates: Partial<TenantFaq>) => {
+    setLocalFaqs(prev => prev.map(faq =>
+      faq.id === faqId ? { ...faq, ...updates } : faq
+    ));
+    setDirtyIds(prev => new Set(prev).add(faqId));
+  }, []);
 
-  // 전체 동기화
+  // ── 변경된 행 일괄 동기화 ──
+  const handleSyncDirty = async () => {
+    if (dirtyIds.size === 0) return;
+    setSyncingDirty(true);
+    try {
+      const dirtyFaqs = localFaqs.filter(f => dirtyIds.has(f.id));
+      const results = await Promise.all(
+        dirtyFaqs.map(faq =>
+          fetch(`/api/admin/tenants/${tenantId}/faqs`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              faqId: faq.id,
+              updates: {
+                questions: faq.questions,
+                answer: faq.answer,
+                guide: faq.guide,
+                handlerType: faq.handlerType,
+                handler: faq.handler,
+                rule: faq.rule,
+                tags: faq.tags,
+                topic: faq.topic,
+                tag_actions: faq.tags,
+                action_product: faq.action_product,
+                action: faq.action,
+              },
+            }),
+          })
+        )
+      );
+
+      const failed = results.filter(r => !r.ok);
+      if (failed.length > 0) {
+        alert(`${dirtyFaqs.length}건 중 ${failed.length}건 저장 실패`);
+      }
+
+      setDirtyIds(new Set());
+      fetchData();
+    } catch (error) {
+      console.error('Sync dirty failed:', error);
+      alert('동기화 중 오류가 발생했습니다.');
+    } finally {
+      setSyncingDirty(false);
+    }
+  };
+
+  // ── 전체 동기화 (템플릿 기반) ──
   const handleSyncAll = async () => {
     setSyncing(true);
     try {
@@ -159,7 +220,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
     }
   };
 
-  // 단일 템플릿 동기화
+  // ── 단일 템플릿 동기화 ──
   const handleSyncTemplate = async (templateId: string) => {
     setSyncingTemplateId(templateId);
     try {
@@ -185,47 +246,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
     }
   };
 
-  // FAQ 수정 저장
-  const handleSaveFaq = async () => {
-    if (!editingFaq) return;
-
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/tenants/${tenantId}/faqs`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          faqId: editingFaq.id,
-          updates: {
-            questions: editingFaq.questions,
-            answer: editingFaq.answer,
-            guide: editingFaq.guide,
-            handlerType: editingFaq.handlerType,
-            handler: editingFaq.handler,
-            rule: editingFaq.rule,
-            tags: editingFaq.tags,
-            topic: editingFaq.topic,
-            tag_actions: editingFaq.tags, // tag_actions는 tags와 동일하게 저장
-          },
-        }),
-      });
-
-      if (res.ok) {
-        setEditingFaq(null);
-        fetchData();
-      } else {
-        const data = await res.json();
-        alert(`저장 실패: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Save FAQ failed:', error);
-      alert('저장 중 오류가 발생했습니다.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // FAQ 삭제
+  // ── FAQ 삭제 ──
   const handleDeleteFaq = async (faqId: string) => {
     if (!confirm('이 FAQ를 삭제하시겠습니까?')) return;
 
@@ -235,7 +256,12 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
       });
 
       if (res.ok) {
-        fetchData();
+        setLocalFaqs(prev => prev.filter(f => f.id !== faqId));
+        setDirtyIds(prev => {
+          const next = new Set(prev);
+          next.delete(faqId);
+          return next;
+        });
       } else {
         const data = await res.json();
         alert(`삭제 실패: ${data.error}`);
@@ -244,14 +270,6 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
       console.error('Delete FAQ failed:', error);
       alert('삭제 중 오류가 발생했습니다.');
     }
-  };
-
-  // 핸들러 타입 라벨
-  const getHandlerLabel = (faq: TenantFaq) => {
-    if (faq.handlerType === 'bot') return '챗봇';
-    if (faq.handlerType === 'staff') return faq.handler === 'manager' ? '매니저' : '운영팀';
-    if (faq.handlerType === 'conditional') return '조건부';
-    return '챗봇';
   };
 
   // 로딩 상태
@@ -263,8 +281,8 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
     );
   }
 
-  // 활성 FAQ만 필터링
-  const activeFaqs = faqs.filter(f => f.isActive !== false);
+  // 활성 FAQ만
+  const activeFaqs = localFaqs.filter(f => f.isActive !== false);
 
   return (
     <div className="space-y-4">
@@ -296,352 +314,40 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
           </div>
         </div>
 
-        <button
-          onClick={handleSyncAll}
-          disabled={syncing}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
-        >
-          <RefreshDouble className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-          전체 동기화
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 변경사항 동기화 버튼 */}
+          {dirtyIds.size > 0 && (
+            <button
+              onClick={handleSyncDirty}
+              disabled={syncingDirty}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshDouble className={`w-4 h-4 ${syncingDirty ? 'animate-spin' : ''}`} />
+              {syncingDirty ? '저장 중...' : `${dirtyIds.size}건 변경됨 — 동기화`}
+            </button>
+          )}
+
+          <button
+            onClick={handleSyncAll}
+            disabled={syncing}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshDouble className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            전체 동기화
+          </button>
+        </div>
       </div>
 
       {/* FAQ 목록 탭 */}
       {activeTab === 'faqs' && (
-        <div className="space-y-3">
-          {activeFaqs.length === 0 ? (
-            <div className="text-center py-10">
-              <Database className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500 mb-2">등록된 FAQ가 없습니다.</p>
-              <p className="text-sm text-gray-400">
-                &apos;전체 동기화&apos; 버튼을 클릭하여 템플릿 기반 FAQ를 생성하세요.
-              </p>
-            </div>
-          ) : (
-            activeFaqs.map((faq) => (
-              <div
-                key={faq.id}
-                className="border border-gray-200 rounded-xl overflow-hidden"
-              >
-                {/* FAQ 헤더 */}
-                <button
-                  onClick={() => setExpandedId(expandedId === faq.id ? null : faq.id)}
-                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    {/* 벡터 상태 표시 */}
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        faq.vectorStatus === 'synced'
-                          ? 'bg-green-500'
-                          : faq.vectorStatus === 'error'
-                          ? 'bg-red-500'
-                          : 'bg-yellow-500'
-                      }`}
-                      title={
-                        faq.vectorStatus === 'synced'
-                          ? '벡터화 완료'
-                          : faq.vectorStatus === 'error'
-                          ? '벡터화 오류'
-                          : '벡터화 대기'
-                      }
-                    />
-                    <div className="text-left">
-                      <div className="text-sm font-medium text-gray-700">
-                        {faq.questions[0] || '(질문 없음)'}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${
-                          faq.handlerType === 'bot'
-                            ? 'bg-blue-50 text-blue-600'
-                            : faq.handlerType === 'staff'
-                            ? 'bg-purple-50 text-purple-600'
-                            : 'bg-amber-50 text-amber-600'
-                        }`}>
-                          {getHandlerLabel(faq)}
-                        </span>
-                        {faq.source === 'template' && (
-                          <span className="text-gray-400">템플릿 생성</span>
-                        )}
-                        {faq.tags && faq.tags.length > 0 && (
-                          <span className="text-gray-400">
-                            #{faq.tags.join(' #')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <NavArrowRight
-                    className={`w-5 h-5 text-gray-400 transition-transform ${
-                      expandedId === faq.id ? 'rotate-90' : ''
-                    }`}
-                  />
-                </button>
-
-                {/* FAQ 상세 */}
-                {expandedId === faq.id && (
-                  <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50/50">
-                    {editingFaq?.id === faq.id ? (
-                      // 편집 모드
-                      <div className="mt-4 space-y-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">질문</label>
-                          <div className="space-y-2">
-                            {editingFaq.questions.map((q, idx) => (
-                              <div key={idx} className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={q}
-                                  onChange={(e) => {
-                                    const newQuestions = [...editingFaq.questions];
-                                    newQuestions[idx] = e.target.value;
-                                    setEditingFaq({ ...editingFaq, questions: newQuestions });
-                                  }}
-                                  placeholder="유사표현은 세미콜론(;)으로 구분"
-                                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newQuestions = editingFaq.questions.filter((_, i) => i !== idx);
-                                    setEditingFaq({ ...editingFaq, questions: newQuestions.length ? newQuestions : [''] });
-                                  }}
-                                  className="px-2 py-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                  title="삭제"
-                                >
-                                  <Trash className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => setEditingFaq({ ...editingFaq, questions: [...editingFaq.questions, ''] })}
-                              className="w-full px-3 py-2 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors"
-                            >
-                              + 질문 추가
-                            </button>
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1">유사표현은 세미콜론(;)으로 구분</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">답변</label>
-                          <textarea
-                            value={editingFaq.answer}
-                            onChange={(e) =>
-                              setEditingFaq({ ...editingFaq, answer: e.target.value })
-                            }
-                            rows={4}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-2">가이드</label>
-                          <textarea
-                            value={editingFaq.guide || ''}
-                            onChange={(e) =>
-                              setEditingFaq({ ...editingFaq, guide: e.target.value })
-                            }
-                            rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                          />
-                        </div>
-
-                        {/* 처리 방식 */}
-                        <div>
-                          <label className="block text-[13px] font-medium text-gray-400 mb-2">처리</label>
-                          <div className="inline-flex bg-gray-100 rounded-full p-0.5">
-                            {[
-                              { type: 'bot' as const, label: '챗봇' },
-                              { type: 'staff' as const, label: '담당자' },
-                              { type: 'conditional' as const, label: '조건부' },
-                            ].map(({ type, label }) => (
-                              <button
-                                key={type}
-                                type="button"
-                                onClick={() => setEditingFaq({
-                                  ...editingFaq,
-                                  handlerType: type,
-                                  handler: type === 'bot' ? 'bot' : type === 'staff' ? 'op' : editingFaq.handler
-                                })}
-                                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                  editingFaq.handlerType === type
-                                    ? 'bg-white text-gray-900 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* 담당자 선택 (staff일 때) */}
-                        {editingFaq.handlerType === 'staff' && (
-                          <div>
-                            <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
-                            <select
-                              value={editingFaq.handler || 'op'}
-                              onChange={(e) => setEditingFaq({ ...editingFaq, handler: e.target.value as 'op' | 'manager' })}
-                              className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                            >
-                              <option value="op">운영팀</option>
-                              <option value="manager">매니저</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {/* 조건 입력 (conditional일 때) */}
-                        {editingFaq.handlerType === 'conditional' && (
-                          <div>
-                            <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
-                            <textarea
-                              value={editingFaq.rule || ''}
-                              onChange={(e) => setEditingFaq({ ...editingFaq, rule: e.target.value })}
-                              rows={2}
-                              placeholder="예: 환불/취소를 원하면 담당자에게 전달"
-                              className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                            />
-                            <p className="text-xs text-gray-400 mt-1">
-                              조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다
-                            </p>
-                          </div>
-                        )}
-
-                        {/* 태그 (tag_actions) - 멀티셀렉 */}
-                        <div>
-                          <label className="block text-[13px] font-medium text-gray-400 mb-2">태그</label>
-                          <div className="flex flex-wrap gap-2">
-                            {['문의', '칭찬', '건의', '불만', '요청', '긴급'].map(tag => (
-                              <button
-                                key={tag}
-                                type="button"
-                                onClick={() => {
-                                  const currentTags = editingFaq.tags || [];
-                                  const newTags = currentTags.includes(tag)
-                                    ? currentTags.filter(t => t !== tag)
-                                    : [...currentTags, tag];
-                                  setEditingFaq({ ...editingFaq, tags: newTags });
-                                }}
-                                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                                  (editingFaq.tags || []).includes(tag)
-                                    ? 'bg-gray-900 text-white'
-                                    : 'text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
-                                }`}
-                              >
-                                {tag}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Topic */}
-                        <div>
-                          <label className="block text-[13px] font-medium text-gray-400 mb-1.5">주제</label>
-                          <select
-                            value={editingFaq.topic || ''}
-                            onChange={(e) =>
-                              setEditingFaq({ ...editingFaq, topic: e.target.value })
-                            }
-                            className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                          >
-                            <option value="">선택 안함</option>
-                            <option value="기본정보">기본정보</option>
-                            <option value="이용방법">이용방법</option>
-                            <option value="정책/규정">정책/규정</option>
-                            <option value="결제/환불">결제/환불</option>
-                            <option value="문제/해결">문제/해결</option>
-                            <option value="혜택/이벤트">혜택/이벤트</option>
-                            <option value="기타">기타</option>
-                          </select>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-2">
-                          <button
-                            onClick={() => setEditingFaq(null)}
-                            className="px-4 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-full"
-                          >
-                            취소
-                          </button>
-                          <button
-                            onClick={handleSaveFaq}
-                            disabled={saving}
-                            className="px-4 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-full hover:bg-gray-800 disabled:opacity-50"
-                          >
-                            {saving ? '저장 중...' : '저장'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      // 보기 모드
-                      <>
-                        <div className="mt-4">
-                          <div className="text-xs font-medium text-gray-500 mb-2">질문</div>
-                          <div className="space-y-1">
-                            {faq.questions.map((q, idx) => (
-                              <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-gray-200">
-                                {q}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {faq.answer && (
-                          <div className="mt-4">
-                            <div className="text-xs font-medium text-gray-500 mb-2">답변</div>
-                            <div className="text-sm text-gray-600 p-3 bg-white rounded-lg border border-gray-200">
-                              {faq.answer}
-                            </div>
-                          </div>
-                        )}
-
-                        {faq.keyData && (
-                          <div className="mt-4">
-                            <div className="text-xs font-medium text-gray-500 mb-2">Key Data</div>
-                            <div className="text-sm text-gray-600 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                              {faq.keyData}
-                            </div>
-                          </div>
-                        )}
-
-                        {faq.guide && (
-                          <div className="mt-4">
-                            <div className="text-xs font-medium text-gray-500 mb-2">가이드</div>
-                            <div className="text-sm text-gray-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                              {faq.guide}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="mt-4 flex items-center justify-between pt-3 border-t border-gray-200">
-                          <div className="text-xs text-gray-400">
-                            {faq.vectorUuid && (
-                              <span className="font-mono">{faq.vectorUuid}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setEditingFaq({ ...faq, tags: faq.tag_actions || faq.tags || [] })}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="수정"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFaq(faq.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="삭제"
-                            >
-                              <Trash className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <FaqTable
+          faqs={activeFaqs}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onCellEdit={handleCellEdit}
+          onDelete={handleDeleteFaq}
+          dirtyIds={dirtyIds}
+        />
       )}
 
       {/* 템플릿 목록 탭 */}
@@ -723,7 +429,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                               {source.type === 'storeinfo' ? (
                                 <>📍 매장정보: {source.sectionIds?.map(s => STOREINFO_SECTIONS[s]?.label || s).join(', ')}</>
                               ) : (
-                                <>📊 {TOPICS[source.topic || '']?.name || source.topic}: {source.facets?.map(f => FACETS[f]?.label || f).join(', ')}</>
+                                <>���� {TOPICS[source.topic || '']?.name || source.topic}: {source.facets?.map(f => FACETS[f]?.label || f).join(', ')}</>
                               )}
                             </div>
                           ))}

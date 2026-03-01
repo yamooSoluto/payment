@@ -11,6 +11,7 @@ import {
   UserCrown,
   Package,
   HomeSimpleDoor,
+  DatabaseScript,
   CreditCards,
   Timer,
   StatsUpSquare,
@@ -29,6 +30,7 @@ const prefetchMap: Record<string, string> = {
   '/admin/admins': '/api/admin/admins',
   '/admin/plans': '/api/admin/plans',
   '/admin/tenants': '/api/admin/tenants',
+  '/admin/cs-data/faqs': '/api/admin/cs-data/faqs',
   '/admin/orders': '/api/admin/orders',
   '/admin/subscriptions': '/api/admin/subscriptions/list',
   '/admin/stats': '/api/admin/stats',
@@ -80,6 +82,12 @@ const menuItems = [
     name: '매장',
     href: '/admin/tenants',
     icon: HomeSimpleDoor,
+    permission: 'tenants:read',
+  },
+  {
+    name: 'CS 데이터',
+    href: '/admin/cs-data/faqs',
+    icon: DatabaseScript,
     permission: 'tenants:read',
   },
   {
