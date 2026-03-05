@@ -10,7 +10,6 @@ interface ManagerRow {
   loginId: string;
   name: string;
   phone: string | null;
-  masterEmail: string;
   active: boolean;
   tenants: ManagerTenantAccess[];
   tenantCount: number;
@@ -76,7 +75,7 @@ export default function AdminManagersList() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="이름, 아이디, 마스터 이메일 검색"
+                placeholder="이름, 아이디 검색"
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -108,7 +107,6 @@ export default function AdminManagersList() {
                   <tr>
                     <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">이름</th>
                     <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">아이디</th>
-                    <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">소속 마스터</th>
                     <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">연락처</th>
                     <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">매장</th>
                     <th className="text-center px-5 py-4 text-xs font-medium text-gray-500 uppercase tracking-wide">상태</th>
@@ -124,7 +122,6 @@ export default function AdminManagersList() {
                     >
                       <td className="px-5 py-4 text-sm font-medium text-gray-900 text-center">{m.name}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 text-center font-mono">@{m.loginId}</td>
-                      <td className="px-5 py-4 text-sm text-gray-500 text-center">{m.masterEmail}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 text-center">{m.phone || '-'}</td>
                       <td className="px-5 py-4 text-sm text-gray-600 text-center">{m.tenantCount}개</td>
                       <td className="px-5 py-4 text-center">

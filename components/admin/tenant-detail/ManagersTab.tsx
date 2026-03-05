@@ -9,7 +9,6 @@ interface TenantManagerEntry {
   loginId: string;
   name: string;
   phone?: string;
-  masterEmail: string;
   active: boolean;
   tenantAccess: {
     tenantId: string;
@@ -80,7 +79,6 @@ export default function ManagersTab({ tenantId }: { tenantId: string }) {
                       <span className="ml-2 px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-xs">비활성</span>
                     )}
                   </p>
-                  <p className="text-xs text-gray-400">{m.masterEmail}</p>
                 </div>
               </div>
               <svg

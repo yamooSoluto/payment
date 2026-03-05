@@ -37,12 +37,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
   const { token } = params;
 
-  // 매니저 세션 확인 (홈페이지 SSO 경유 시)
-  const managerSession = await getManagerFromCookie();
-  if (managerSession) {
-    return <ManagerAccountPage managerSession={managerSession} />;
-  }
-
   let email: string | null = null;
   let sessionToken: string | undefined = undefined;
 
@@ -65,7 +59,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     }
   }
 
+  // 3. 마스터 세션이 없으면 매니저 세션 확인 (홈페이지 SSO 경유 시)
   if (!email) {
+    const managerSession = await getManagerFromCookie();
+    if (managerSession) {
+      return <ManagerAccountPage managerSession={managerSession} />;
+    }
     redirect('/login');
   }
 
@@ -275,8 +274,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               />
             }
             managersContent={
-              <ManagerSection
-                masterEmail={email!}
+              <ManagerSection
                 tenants={tenants.map(t => ({ tenantId: t.tenantId, brandName: t.brandName }))}
               />
             }
@@ -374,7 +372,7 @@ async function ManagerAccountPage({ managerSession }: {
       <div className="space-y-6">
         <TenantList
           authParam=""
-          email={managerSession.masterEmail}
+          email={tenants[0]?.email || ''}
           initialTenants={tenants}
           hasTrialHistory={false}
         />

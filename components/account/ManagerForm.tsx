@@ -11,17 +11,7 @@ interface TenantInfo {
   brandName: string;
 }
 
-interface ManagerData {
-  managerId: string;
-  loginId: string;
-  name: string;
-  phone?: string;
-  active: boolean;
-  tenants: ManagerTenantAccess[];
-}
-
 interface ManagerFormProps {
-  manager: ManagerData | null;
   tenants: TenantInfo[];
   onSuccess: () => void;
   onClose: () => void;
@@ -33,28 +23,12 @@ const LEVEL_LABELS: Record<PermissionLevel, string> = {
   write: '편집',
 };
 
-export default function ManagerForm({ manager, tenants, onSuccess, onClose }: ManagerFormProps) {
-  const isEdit = !!manager;
-
-  const [loginId, setLoginId] = useState(manager?.loginId ?? '');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState(manager?.name ?? '');
-  const [phone, setPhone] = useState(manager?.phone ?? '');
-  const [active, setActive] = useState(manager?.active ?? true);
-
-  // 매장별 접근 여부 + 권한
-  const [tenantAccess, setTenantAccess] = useState<Record<string, boolean>>(() => {
-    if (!manager) return {};
-    const map: Record<string, boolean> = {};
-    manager.tenants.forEach(t => { map[t.tenantId] = true; });
-    return map;
-  });
-
+export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerFormProps) {
+  const [tenantAccess, setTenantAccess] = useState<Record<string, boolean>>({});
   const [tenantPerms, setTenantPerms] = useState<Record<string, ManagerPermissions>>(() => {
     const map: Record<string, ManagerPermissions> = {};
     tenants.forEach(t => {
-      const existing = manager?.tenants.find(mt => mt.tenantId === t.tenantId);
-      map[t.tenantId] = existing ? { ...existing.permissions } : { ...DEFAULT_PERMISSIONS };
+      map[t.tenantId] = { ...DEFAULT_PERMISSIONS };
     });
     return map;
   });
@@ -62,7 +36,6 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 바깥 클릭/ESC로 닫기
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -86,15 +59,6 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
     e.preventDefault();
     setError('');
 
-    if (!loginId.trim()) { setError('아이디를 입력해주세요.'); return; }
-    if (loginId.includes('@')) { setError('아이디에 @를 포함할 수 없습니다.'); return; }
-    if (!isEdit && !password) { setError('비밀번호를 입력해주세요.'); return; }
-    if (password && (password.length < 6 || !/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\\/~`';]/.test(password))) {
-      setError('비밀번호는 6자 이상, 특수기호를 포함해야 합니다.');
-      return;
-    }
-    if (!name.trim()) { setError('이름을 입력해주세요.'); return; }
-
     const selectedTenants: ManagerTenantAccess[] = tenants
       .filter(t => tenantAccess[t.tenantId])
       .map(t => ({
@@ -102,46 +66,35 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
         permissions: tenantPerms[t.tenantId] ?? { ...DEFAULT_PERMISSIONS },
       }));
 
+    if (selectedTenants.length === 0) {
+      setError('최소 1개 매장을 선택해주세요.');
+      return;
+    }
+
     setLoading(true);
     try {
-      let res: Response;
-
-      if (isEdit) {
-        const body: Record<string, unknown> = {
-          name: name.trim(),
-          phone: phone.trim() || undefined,
-          active,
-          tenants: selectedTenants,
-        };
-        if (password) body.password = password;
-
-        res = await fetch(`/api/managers/${manager.managerId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-      } else {
-        res = await fetch('/api/managers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            loginId: loginId.trim(),
-            password,
-            name: name.trim(),
-            phone: phone.trim() || undefined,
-            tenants: selectedTenants,
-          }),
-        });
-      }
+      const res = await fetch('/api/managers/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenants: selectedTenants }),
+      });
 
       if (res.ok) {
+        const { inviteToken } = await res.json();
+        const inviteUrl = 'https://app.yamoo.ai.kr/invite?token=' + inviteToken;
+        try {
+          await navigator.clipboard.writeText(inviteUrl);
+          alert('초대 링크가 클립보드에 복사되었습니다. 매니저에게 전달해주세요.\n\n' + inviteUrl);
+        } catch {
+          prompt('아래 초대 링크를 매니저에게 전달해주세요:', inviteUrl);
+        }
         onSuccess();
       } else {
         const data = await res.json();
-        setError(data.error || '저장에 실패했습니다.');
+        setError(data.error || '초대에 실패했습니다.');
       }
     } catch {
-      setError('저장에 실패했습니다.');
+      setError('초대에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -154,11 +107,8 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {isEdit ? '매니저 수정' : '매니저 추가'}
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900">매니저 초대</h2>
           <button
             onClick={onClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -167,101 +117,18 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
           </button>
         </div>
 
-        {/* 폼 */}
         <form id="manager-form" onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
           {error && (
             <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>
           )}
 
-          {/* 기본 정보 */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                아이디 <span className="text-red-400">*</span>
-                <span className="ml-1 text-xs font-normal text-gray-400">@ 포함 불가</span>
-              </label>
-              <input
-                type="text"
-                value={loginId}
-                onChange={e => setLoginId(e.target.value)}
-                disabled={isEdit}
-                placeholder="cafe_staff01"
-                autoComplete="off"
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yamoo-primary/30 focus:border-yamoo-primary disabled:bg-gray-50 disabled:text-gray-400"
-              />
-            </div>
+          <p className="text-sm text-gray-500">
+            매장과 권한을 선택한 후 초대 링크를 생성하세요. 링크를 매니저에게 전달하면 매니저가 수락하여 매장에 연결됩니다.
+          </p>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                비밀번호
-                {!isEdit && <span className="text-red-400"> *</span>}
-                {isEdit && <span className="ml-1 text-xs font-normal text-gray-400">입력 시 변경</span>}
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={isEdit ? '변경 시에만 입력' : '비밀번호'}
-                autoComplete="new-password"
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yamoo-primary/30 focus:border-yamoo-primary"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  이름 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="홍길동"
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yamoo-primary/30 focus:border-yamoo-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  연락처 <span className="text-xs font-normal text-gray-400">선택</span>
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="010-0000-0000"
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yamoo-primary/30 focus:border-yamoo-primary"
-                />
-              </div>
-            </div>
-
-            {isEdit && (
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={active}
-                  onClick={() => setActive(v => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    active ? 'bg-yamoo-primary' : 'bg-gray-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      active ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                <span className="text-sm text-gray-700">
-                  {active ? '활성' : '비활성 (로그인 차단)'}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* 매장 접근 권한 */}
           {tenants.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">매장 접근 권한</p>
+              <p className="text-sm font-medium text-gray-700 mb-3">초대할 매장 선택</p>
               <div className="space-y-3">
                 {tenants.map(tenant => {
                   const enabled = !!tenantAccess[tenant.tenantId];
@@ -272,7 +139,6 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
                         enabled ? 'border-yamoo-primary/30' : 'border-gray-100'
                       }`}
                     >
-                      {/* 매장 토글 */}
                       <button
                         type="button"
                         onClick={() => toggleTenant(tenant.tenantId)}
@@ -296,7 +162,6 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
                         </span>
                       </button>
 
-                      {/* 권한 설정 (체크된 경우만) */}
                       {enabled && (
                         <div className="px-4 pb-3 pt-2 space-y-2.5">
                           {PERMISSION_SECTIONS.map(section => {
@@ -339,7 +204,6 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
           )}
         </form>
 
-        {/* 푸터 */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
           <button
             type="button"
@@ -354,7 +218,7 @@ export default function ManagerForm({ manager, tenants, onSuccess, onClose }: Ma
             disabled={loading}
             className="px-5 py-2.5 text-sm font-medium bg-yamoo-primary text-white rounded-xl hover:bg-yamoo-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? '저장 중...' : isEdit ? '수정' : '추가'}
+            {loading ? '생성 중...' : '초대 링크 생성'}
           </button>
         </div>
       </div>

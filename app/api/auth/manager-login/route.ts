@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loginManager } from '@/lib/manager-auth';
 
 // POST: 매니저 ID/PW 로그인 (포탈 서버 호출용)
-// 쿠키 없음 — 포탈이 sessionId를 자체 세션에 저장
 export async function POST(request: NextRequest) {
   try {
     const { loginId, password } = await request.json();
@@ -16,7 +15,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       managerId: result.managerId,
       loginId: result.loginId,
-      masterEmail: result.masterEmail,
       tenants: result.tenants,
       sessionId: result.sessionId,
     });

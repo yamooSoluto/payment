@@ -25,9 +25,7 @@ export async function GET(
       .where('tenants', 'array-contains', { tenantId } as never)
       .get();
 
-    // array-contains는 객체 equality 비교가 완벽하지 않으므로 수동 필터링도 병행
-    // Firestore의 array-contains는 객체의 경우 정확히 일치해야 해서 tenantId만으로 필터링
-    // 대신 masterEmail 기준 전체 조회 후 tenantId로 필터링
+    // array-contains는 객체의 정확한 equality 비교가 필요하므로 전체 조회 후 수동 필터링
     const allSnapshot = await db.collection('users_managers').get();
 
     const managers = allSnapshot.docs
@@ -38,7 +36,6 @@ export async function GET(
           loginId: data.loginId,
           name: data.name,
           phone: data.phone,
-          masterEmail: data.masterEmail,
           active: data.active,
           tenantAccess: (data.tenants || []).find(
             (t: { tenantId: string }) => t.tenantId === tenantId

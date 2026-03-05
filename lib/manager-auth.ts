@@ -21,7 +21,7 @@ export interface Manager {
   name: string;
   phone?: string;
   slackUserId?: string;
-  masterEmail: string;
+  linkedUserId?: string;
   active: boolean;
   tenants: ManagerTenantAccess[];
   createdAt: Date;
@@ -32,10 +32,19 @@ export interface ManagerSession {
   sessionId: string;
   managerId: string;
   loginId: string;
-  masterEmail: string;
   tenants: ManagerTenantAccess[];
   createdAt: Date;
   expiresAt: Date;
+}
+
+export interface ManagerInvitation {
+  inviteToken: string;
+  invitedBy: string;
+  tenants: ManagerTenantAccess[];
+  expiresAt: Date;
+  acceptedBy?: string;
+  acceptedAt?: Date;
+  status: 'pending' | 'accepted' | 'expired';
 }
 
 function generateManagerId(): string {
@@ -65,17 +74,39 @@ function generateAdminPortalAccountId(): string {
   return result;
 }
 
-// 매니저 생성
-export async function createManager(
-  masterEmail: string,
-  data: {
-    loginId: string;
-    password: string;
-    name: string;
-    phone?: string;
-    tenants?: ManagerTenantAccess[];
+function generateInviteToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = 'inv_';
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-): Promise<Manager> {
+  return result;
+}
+
+function docToManager(data: FirebaseFirestore.DocumentData): Manager {
+  return {
+    managerId: data.managerId,
+    loginId: data.loginId,
+    name: data.name,
+    phone: data.phone,
+    slackUserId: data.slackUserId,
+    linkedUserId: data.linkedUserId,
+    active: data.active,
+    tenants: data.tenants || [],
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+  };
+}
+
+// -----------------------------------------------
+// 매니저 자체 회원가입
+// -----------------------------------------------
+export async function registerManager(data: {
+  loginId: string;
+  password: string;
+  name: string;
+  phone?: string;
+}): Promise<Manager> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
 
@@ -83,7 +114,6 @@ export async function createManager(
     throw new Error('loginId cannot contain @');
   }
 
-  // 전체 loginId 중복 확인
   const existing = await db.collection('users_managers')
     .where('loginId', '==', data.loginId)
     .limit(1)
@@ -102,10 +132,9 @@ export async function createManager(
     loginId: data.loginId,
     passwordHash,
     name: data.name,
-    masterEmail: masterEmail.toLowerCase(),
     active: true,
-    tenants: data.tenants || [],
-    tenantIds: (data.tenants || []).map(t => t.tenantId),
+    tenants: [],
+    tenantIds: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -118,25 +147,224 @@ export async function createManager(
     loginId: data.loginId,
     name: data.name,
     phone: data.phone,
-    masterEmail: masterEmail.toLowerCase(),
     active: true,
-    tenants: data.tenants || [],
+    tenants: [],
     createdAt: now,
     updatedAt: now,
   };
 }
 
-// 매니저 수정
-export async function updateManager(
+// -----------------------------------------------
+// 매니저 프로필 수정 (본인만)
+// -----------------------------------------------
+export async function updateManagerProfile(
   managerId: string,
-  masterEmail: string,
-  updates: {
-    name?: string;
-    phone?: string;
-    password?: string;
-    active?: boolean;
-    tenants?: ManagerTenantAccess[];
+  updates: { name?: string; phone?: string; password?: string }
+): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const doc = await db.collection('users_managers').doc(managerId).get();
+  if (!doc.exists) throw new Error('Manager not found');
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.phone !== undefined) updateData.phone = updates.phone;
+  if (updates.password) {
+    updateData.passwordHash = bcrypt.hashSync(updates.password, SALT_ROUNDS);
   }
+
+  await db.collection('users_managers').doc(managerId).update(updateData);
+}
+
+// -----------------------------------------------
+// 매니저 계정 삭제 (본인/어드민)
+// -----------------------------------------------
+export async function deleteManagerAccount(managerId: string): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const doc = await db.collection('users_managers').doc(managerId).get();
+  if (!doc.exists) throw new Error('Manager not found');
+
+  const sessions = await db.collection('manager_sessions')
+    .where('managerId', '==', managerId)
+    .get();
+
+  const links = await db.collection('dashboard_manager_links')
+    .where('managerId', '==', managerId)
+    .get();
+
+  const batch = db.batch();
+  sessions.docs.forEach(s => batch.delete(s.ref));
+  links.docs.forEach(l => batch.delete(l.ref));
+  batch.delete(db.collection('users_managers').doc(managerId));
+
+  const managerData = doc.data()!;
+  if (managerData.linkedUserId) {
+    const { FieldValue } = await import('firebase-admin/firestore');
+    const usersSnapshot = await db.collection('users')
+      .where('userId', '==', managerData.linkedUserId)
+      .limit(1)
+      .get();
+    if (!usersSnapshot.empty) {
+      batch.update(usersSnapshot.docs[0].ref, { linkedManagerId: FieldValue.delete() });
+    }
+  }
+
+  await batch.commit();
+}
+
+// -----------------------------------------------
+// tenantId 기반 매니저 조회
+// -----------------------------------------------
+export async function getMasterTenantIds(email: string): Promise<string[]> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return [];
+
+  const snapshot = await db.collection('tenants')
+    .where('email', '==', email.toLowerCase())
+    .get();
+
+  return snapshot.docs.map(doc => doc.id);
+}
+
+export async function getManagersByTenantIds(tenantIds: string[]): Promise<Manager[]> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return [];
+
+  if (tenantIds.length === 0) return [];
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < tenantIds.length; i += 30) {
+    chunks.push(tenantIds.slice(i, i + 30));
+  }
+
+  const allManagers: Manager[] = [];
+  const seenIds = new Set<string>();
+
+  for (const chunk of chunks) {
+    const snapshot = await db.collection('users_managers')
+      .where('tenantIds', 'array-contains-any', chunk)
+      .get();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      if (!seenIds.has(data.managerId)) {
+        seenIds.add(data.managerId);
+        allManagers.push(docToManager(data));
+      }
+    }
+  }
+
+  return allManagers;
+}
+
+// 매니저 상세 조회 (tenantIds 겹침 체크)
+export async function getManagerById(managerId: string, tenantIds: string[]): Promise<Manager | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return null;
+
+  try {
+    const doc = await db.collection('users_managers').doc(managerId).get();
+    if (!doc.exists) return null;
+
+    const data = doc.data()!;
+    const managerTenantIds = (data.tenantIds || []) as string[];
+    const hasOverlap = managerTenantIds.some(tid => tenantIds.includes(tid));
+    if (!hasOverlap && tenantIds.length > 0) return null;
+
+    return docToManager(data);
+  } catch (error) {
+    console.error('Get manager by ID error:', error);
+    return null;
+  }
+}
+
+// -----------------------------------------------
+// 초대 시스템
+// -----------------------------------------------
+export async function createInvitation(
+  masterEmail: string,
+  tenants: ManagerTenantAccess[]
+): Promise<string> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const inviteToken = generateInviteToken();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  await db.collection('manager_invitations').doc(inviteToken).set({
+    inviteToken,
+    invitedBy: masterEmail.toLowerCase(),
+    tenants,
+    expiresAt,
+    status: 'pending',
+    createdAt: now,
+  });
+
+  return inviteToken;
+}
+
+export async function acceptInvitation(
+  inviteToken: string,
+  managerId: string
+): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const inviteDoc = await db.collection('manager_invitations').doc(inviteToken).get();
+  if (!inviteDoc.exists) throw new Error('Invitation not found');
+
+  const invite = inviteDoc.data()!;
+
+  if (invite.status !== 'pending') throw new Error('Invitation already used');
+
+  const expiresAt = invite.expiresAt?.toDate ? invite.expiresAt.toDate() : new Date(invite.expiresAt);
+  if (expiresAt < new Date()) throw new Error('Invitation expired');
+
+  const managerDoc = await db.collection('users_managers').doc(managerId).get();
+  if (!managerDoc.exists) throw new Error('Manager not found');
+
+  const managerData = managerDoc.data()!;
+  const existingTenants: ManagerTenantAccess[] = managerData.tenants || [];
+  const existingTenantIds = new Set(existingTenants.map(t => t.tenantId));
+
+  const newTenants = [...existingTenants];
+  for (const t of invite.tenants) {
+    if (!existingTenantIds.has(t.tenantId)) {
+      newTenants.push(t);
+    }
+  }
+  const newTenantIds = newTenants.map(t => t.tenantId);
+
+  const batch = db.batch();
+
+  batch.update(db.collection('users_managers').doc(managerId), {
+    tenants: newTenants,
+    tenantIds: newTenantIds,
+    updatedAt: new Date(),
+  });
+
+  batch.update(db.collection('manager_invitations').doc(inviteToken), {
+    acceptedBy: managerId,
+    acceptedAt: new Date(),
+    status: 'accepted',
+  });
+
+  await batch.commit();
+
+  for (const t of invite.tenants) {
+    if (!existingTenantIds.has(t.tenantId)) {
+      await createDashboardLinkIfStoreExists(db, managerId, t.tenantId);
+    }
+  }
+}
+
+export async function removeManagerFromTenant(
+  managerId: string,
+  tenantId: string
 ): Promise<void> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
@@ -145,27 +373,41 @@ export async function updateManager(
   if (!doc.exists) throw new Error('Manager not found');
 
   const data = doc.data()!;
-  if (data.masterEmail !== masterEmail.toLowerCase()) {
-    throw new Error('Unauthorized');
+  const tenants: ManagerTenantAccess[] = (data.tenants || []).filter(
+    (t: ManagerTenantAccess) => t.tenantId !== tenantId
+  );
+  const tenantIds = tenants.map(t => t.tenantId);
+
+  const batch = db.batch();
+  batch.update(db.collection('users_managers').doc(managerId), {
+    tenants,
+    tenantIds,
+    updatedAt: new Date(),
+  });
+
+  const storeSnapshot = await db.collection('dashboard_stores')
+    .where('tenantId', '==', tenantId)
+    .limit(1)
+    .get();
+
+  if (!storeSnapshot.empty) {
+    const storeId = storeSnapshot.docs[0].id;
+    const linkId = managerId + '_' + storeId;
+    const linkRef = db.collection('dashboard_manager_links').doc(linkId);
+    const linkDoc = await linkRef.get();
+    if (linkDoc.exists) {
+      batch.delete(linkRef);
+    }
   }
 
-  const updateData: Record<string, unknown> = { updatedAt: new Date() };
-  if (updates.name !== undefined) updateData.name = updates.name;
-  if (updates.phone !== undefined) updateData.phone = updates.phone;
-  if (updates.active !== undefined) updateData.active = updates.active;
-  if (updates.tenants !== undefined) {
-    updateData.tenants = updates.tenants;
-    updateData.tenantIds = updates.tenants.map(t => t.tenantId);
-  }
-  if (updates.password) {
-    updateData.passwordHash = bcrypt.hashSync(updates.password, SALT_ROUNDS);
-  }
-
-  await db.collection('users_managers').doc(managerId).update(updateData);
+  await batch.commit();
 }
 
-// 매니저 삭제
-export async function deleteManager(managerId: string, masterEmail: string): Promise<void> {
+export async function updateManagerTenantPermissions(
+  managerId: string,
+  tenantId: string,
+  permissions: ManagerPermissions
+): Promise<void> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
 
@@ -173,26 +415,122 @@ export async function deleteManager(managerId: string, masterEmail: string): Pro
   if (!doc.exists) throw new Error('Manager not found');
 
   const data = doc.data()!;
-  if (data.masterEmail !== masterEmail.toLowerCase()) {
-    throw new Error('Unauthorized');
-  }
+  const tenants: ManagerTenantAccess[] = data.tenants || [];
+  const idx = tenants.findIndex(t => t.tenantId === tenantId);
+  if (idx === -1) throw new Error('Manager not linked to this tenant');
 
-  // 해당 매니저의 모든 세션 삭제
-  const sessions = await db.collection('manager_sessions')
-    .where('managerId', '==', managerId)
-    .get();
+  tenants[idx] = { tenantId, permissions };
+
+  await db.collection('users_managers').doc(managerId).update({
+    tenants,
+    updatedAt: new Date(),
+  });
+}
+
+// -----------------------------------------------
+// 계정 연동 (매니저 <-> 마스터)
+// -----------------------------------------------
+export async function linkManagerToUser(managerId: string, userId: string): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
 
   const batch = db.batch();
-  sessions.docs.forEach(sessionDoc => batch.delete(sessionDoc.ref));
-  batch.delete(db.collection('users_managers').doc(managerId));
+
+  batch.update(db.collection('users_managers').doc(managerId), {
+    linkedUserId: userId,
+    updatedAt: new Date(),
+  });
+
+  const usersSnapshot = await db.collection('users')
+    .where('userId', '==', userId)
+    .limit(1)
+    .get();
+
+  if (!usersSnapshot.empty) {
+    batch.update(usersSnapshot.docs[0].ref, { linkedManagerId: managerId });
+  }
+
   await batch.commit();
 }
 
-// 매니저 로그인 (포탈 서버 호출용 — 쿠키 없음)
+export async function unlinkManagerFromUser(managerId: string): Promise<void> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const doc = await db.collection('users_managers').doc(managerId).get();
+  if (!doc.exists) throw new Error('Manager not found');
+
+  const data = doc.data()!;
+  const { FieldValue } = await import('firebase-admin/firestore');
+
+  const batch = db.batch();
+  batch.update(db.collection('users_managers').doc(managerId), {
+    linkedUserId: FieldValue.delete(),
+    updatedAt: new Date(),
+  });
+
+  if (data.linkedUserId) {
+    const usersSnapshot = await db.collection('users')
+      .where('userId', '==', data.linkedUserId)
+      .limit(1)
+      .get();
+    if (!usersSnapshot.empty) {
+      batch.update(usersSnapshot.docs[0].ref, { linkedManagerId: FieldValue.delete() });
+    }
+  }
+
+  await batch.commit();
+}
+
+export async function getLinkedManagerByUserId(userId: string): Promise<Manager | null> {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) return null;
+
+  const snapshot = await db.collection('users_managers')
+    .where('linkedUserId', '==', userId)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  return docToManager(snapshot.docs[0].data());
+}
+
+// -----------------------------------------------
+// 대시보드 자동 연동 헬퍼
+// -----------------------------------------------
+async function createDashboardLinkIfStoreExists(
+  db: FirebaseFirestore.Firestore,
+  managerId: string,
+  tenantId: string
+): Promise<void> {
+  const storeSnapshot = await db.collection('dashboard_stores')
+    .where('tenantId', '==', tenantId)
+    .limit(1)
+    .get();
+
+  if (storeSnapshot.empty) return;
+
+  const storeId = storeSnapshot.docs[0].id;
+  const linkId = managerId + '_' + storeId;
+
+  const existingLink = await db.collection('dashboard_manager_links').doc(linkId).get();
+  if (existingLink.exists) return;
+
+  await db.collection('dashboard_manager_links').doc(linkId).set({
+    managerId,
+    storeId,
+    staffPermissions: {},
+    createdAt: new Date(),
+  });
+}
+
+// -----------------------------------------------
+// 매니저 로그인 (포탈 서버 호출용)
+// -----------------------------------------------
 export async function loginManager(
   loginId: string,
   password: string
-): Promise<{ managerId: string; loginId: string; masterEmail: string; tenants: ManagerTenantAccess[]; sessionId: string }> {
+): Promise<{ managerId: string; loginId: string; tenants: ManagerTenantAccess[]; sessionId: string }> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
 
@@ -225,7 +563,6 @@ export async function loginManager(
     sessionId,
     managerId: data.managerId,
     loginId: data.loginId,
-    masterEmail: data.masterEmail,
     tenants: data.tenants || [],
     createdAt: now,
     expiresAt,
@@ -234,7 +571,6 @@ export async function loginManager(
   return {
     managerId: data.managerId,
     loginId: data.loginId,
-    masterEmail: data.masterEmail,
     tenants: data.tenants || [],
     sessionId,
   };
@@ -258,7 +594,6 @@ export async function verifyManagerSession(sessionId: string): Promise<ManagerSe
       return null;
     }
 
-    // 매니저 원본 데이터에서 최신 정보 조회 (권한 변경 즉시 반영)
     const managerDoc = await db.collection('users_managers').doc(session.managerId).get();
     if (!managerDoc.exists) {
       db.collection('manager_sessions').doc(sessionId).delete().catch(() => {});
@@ -267,7 +602,6 @@ export async function verifyManagerSession(sessionId: string): Promise<ManagerSe
 
     const manager = managerDoc.data()!;
 
-    // 비활성화된 매니저 → 세션 무효
     if (!manager.active) {
       db.collection('manager_sessions').doc(sessionId).delete().catch(() => {});
       return null;
@@ -277,7 +611,6 @@ export async function verifyManagerSession(sessionId: string): Promise<ManagerSe
       sessionId,
       managerId: manager.managerId,
       loginId: manager.loginId,
-      masterEmail: manager.masterEmail,
       tenants: manager.tenants || [],
       createdAt: session.createdAt?.toDate ? session.createdAt.toDate() : new Date(session.createdAt),
       expiresAt,
@@ -295,7 +628,7 @@ export async function deleteManagerSession(sessionId: string): Promise<void> {
   await db.collection('manager_sessions').doc(sessionId).delete();
 }
 
-// 포탈 → 홈페이지 SSO용 단기 JWT 생성 (10분)
+// 포탈 -> 홈페이지 SSO용 단기 JWT 생성 (10분)
 export function generateManagerBillingToken(session: ManagerSession): string {
   if (!JWT_SECRET) throw new Error('JWT_SECRET not configured');
 
@@ -304,7 +637,6 @@ export function generateManagerBillingToken(session: ManagerSession): string {
       purpose: 'manager_billing',
       managerId: session.managerId,
       loginId: session.loginId,
-      masterEmail: session.masterEmail,
       tenants: session.tenants,
       nonce: crypto.randomUUID(),
     },
@@ -317,7 +649,6 @@ export function generateManagerBillingToken(session: ManagerSession): string {
 export function verifyManagerBillingToken(token: string): {
   managerId: string;
   loginId: string;
-  masterEmail: string;
   tenants: ManagerTenantAccess[];
 } | null {
   if (!JWT_SECRET) return null;
@@ -327,7 +658,6 @@ export function verifyManagerBillingToken(token: string): {
       purpose: string;
       managerId: string;
       loginId: string;
-      masterEmail: string;
       tenants: ManagerTenantAccess[];
     };
 
@@ -336,7 +666,6 @@ export function verifyManagerBillingToken(token: string): {
     return {
       managerId: payload.managerId,
       loginId: payload.loginId,
-      masterEmail: payload.masterEmail,
       tenants: payload.tenants,
     };
   } catch {
@@ -344,91 +673,53 @@ export function verifyManagerBillingToken(token: string): {
   }
 }
 
-// 마스터 이메일 기준 매니저 목록 조회
-export async function getManagersByMaster(masterEmail: string): Promise<Manager[]> {
-  const db = adminDb || initializeFirebaseAdmin();
-  if (!db) return [];
-
-  try {
-    const snapshot = await db.collection('users_managers')
-      .where('masterEmail', '==', masterEmail.toLowerCase())
-      .get();
-
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        managerId: data.managerId,
-        loginId: data.loginId,
-        name: data.name,
-        phone: data.phone,
-        slackUserId: data.slackUserId,
-        masterEmail: data.masterEmail,
-        active: data.active,
-        tenants: data.tenants || [],
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-      };
-    });
-  } catch (error) {
-    console.error('Get managers error:', error);
-    return [];
-  }
-}
-
-// 매니저 상세 조회 (소유권 확인)
-export async function getManagerById(managerId: string, masterEmail: string): Promise<Manager | null> {
+// 매니저 loginId 검색 (초대용)
+export async function searchManagerByLoginId(loginId: string): Promise<{
+  managerId: string;
+  loginId: string;
+  name: string;
+} | null> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) return null;
 
-  try {
-    const doc = await db.collection('users_managers').doc(managerId).get();
-    if (!doc.exists) return null;
+  const snapshot = await db.collection('users_managers')
+    .where('loginId', '==', loginId)
+    .limit(1)
+    .get();
 
-    const data = doc.data()!;
-    if (data.masterEmail !== masterEmail.toLowerCase()) return null;
+  if (snapshot.empty) return null;
 
-    return {
-      managerId: data.managerId,
-      loginId: data.loginId,
-      name: data.name,
-      phone: data.phone,
-      slackUserId: data.slackUserId,
-      masterEmail: data.masterEmail,
-      active: data.active,
-      tenants: data.tenants || [],
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
-    };
-  } catch (error) {
-    console.error('Get manager by ID error:', error);
-    return null;
-  }
+  const data = snapshot.docs[0].data();
+  return {
+    managerId: data.managerId,
+    loginId: data.loginId,
+    name: data.name,
+  };
 }
 
 export const MANAGER_SESSION_MAX_AGE = SESSION_EXPIRY_HOURS * 60 * 60;
 
-// ───────────────────────────────────────────────
-// 어드민 포탈 계정 (초 마스터 계정, ad_ prefix)
-// ───────────────────────────────────────────────
+// -----------------------------------------------
+// 어드민 포탈 계정 (ad_ prefix)
+// -----------------------------------------------
 
 export interface AdminPortalAccount {
-  managerId: string;       // ad_xxxxxxxx
+  managerId: string;
   loginId: string;
   name: string;
   active: boolean;
-  adminId: string;         // 연결된 admins 문서 ID
+  adminId: string;
   tenants: ManagerTenantAccess[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-// 어드민 포탈 계정 생성 (passwordHash는 어드민 계정에서 복사)
 export async function createAdminPortalAccount(
   adminId: string,
   adminDocRef: FirebaseFirestore.DocumentReference,
   data: {
     loginId: string;
-    passwordHash: string;  // 어드민 문서에서 복사한 해시값
+    passwordHash: string;
     name: string;
     tenants?: ManagerTenantAccess[];
   }
@@ -458,7 +749,6 @@ export async function createAdminPortalAccount(
     loginId: data.loginId,
     passwordHash: data.passwordHash,
     name: data.name,
-    masterEmail: null,
     active: true,
     createdByAdmin: true,
     adminId,
@@ -483,7 +773,6 @@ export async function createAdminPortalAccount(
   };
 }
 
-// 어드민 포탈 계정 수정
 export async function updateAdminPortalAccount(
   managerId: string,
   updates: {
@@ -511,7 +800,6 @@ export async function updateAdminPortalAccount(
   await db.collection('users_managers').doc(managerId).update(updateData);
 }
 
-// 어드민 포탈 계정 삭제 (admins 문서의 portalAccountId도 제거)
 export async function deleteAdminPortalAccount(
   managerId: string,
   adminDocRef: FirebaseFirestore.DocumentReference
@@ -523,7 +811,6 @@ export async function deleteAdminPortalAccount(
   if (!doc.exists) throw new Error('Portal account not found');
   if (!doc.data()!.createdByAdmin) throw new Error('Not an admin portal account');
 
-  // 세션도 삭제
   const sessions = await db.collection('manager_sessions')
     .where('managerId', '==', managerId)
     .get();
@@ -535,7 +822,6 @@ export async function deleteAdminPortalAccount(
   await batch.commit();
 }
 
-// 어드민 포탈 계정 조회
 export async function getAdminPortalAccount(managerId: string): Promise<AdminPortalAccount | null> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) return null;

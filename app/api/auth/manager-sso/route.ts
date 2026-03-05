@@ -6,9 +6,7 @@ import {
 } from '@/lib/manager-auth';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 
-// GET: 포탈 → 홈페이지 마이페이지 SSO 진입점 (브라우저 리다이렉트)
-// query: ?token=xxx
-// 토큰 검증 → manager_session 쿠키 설정 → /account 리다이렉트
+// GET: 포탈 -> 홈페이지 마이페이지 SSO 진입점 (브라우저 리다이렉트)
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
@@ -23,7 +21,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // Firestore에 새 manager_session 생성
     const db = adminDb || initializeFirebaseAdmin();
     if (!db) {
       return NextResponse.redirect(new URL('/login', request.url));
@@ -41,7 +38,6 @@ export async function GET(request: NextRequest) {
       sessionId,
       managerId: payload.managerId,
       loginId: payload.loginId,
-      masterEmail: payload.masterEmail,
       tenants: payload.tenants,
       createdAt: now,
       expiresAt,

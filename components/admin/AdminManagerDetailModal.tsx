@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Xmark, User, ArrowUpRight } from 'iconoir-react';
+import { Xmark, ArrowUpRight } from 'iconoir-react';
 import { useRouter } from 'next/navigation';
 import { PERMISSION_SECTIONS } from '@/lib/manager-permissions';
 import type { PermissionLevel } from '@/lib/manager-permissions';
@@ -12,7 +12,6 @@ interface ManagerRow {
   loginId: string;
   name: string;
   phone: string | null;
-  masterEmail: string;
   active: boolean;
   tenants: ManagerTenantAccess[];
   tenantCount: number;
@@ -83,7 +82,6 @@ export default function AdminManagerDetailModal({
                 {manager.name}
                 <span className="ml-2 text-sm font-normal text-gray-400">@{manager.loginId}</span>
               </p>
-              <p className="text-xs text-gray-400">{manager.masterEmail}</p>
             </div>
           </div>
           <button
@@ -183,16 +181,7 @@ export default function AdminManagerDetailModal({
 
         {/* 푸터 */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-          <button
-            onClick={() => {
-              onClose();
-              router.push(`/admin/members/${encodeURIComponent(manager.masterEmail)}`);
-            }}
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1.5"
-          >
-            <User className="w-4 h-4" />
-            마스터 회원 상세
-          </button>
+<div />
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"

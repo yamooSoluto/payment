@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
         loginId: data.loginId,
         name: data.name,
         phone: data.phone || null,
-        masterEmail: data.masterEmail,
         active: data.active,
         tenants: data.tenants || [],
         tenantCount: (data.tenants || []).length,
@@ -44,7 +43,6 @@ export async function GET(request: NextRequest) {
       managers = managers.filter(m =>
         m.loginId.toLowerCase().includes(q) ||
         m.name.toLowerCase().includes(q) ||
-        m.masterEmail.toLowerCase().includes(q) ||
         (m.phone && m.phone.includes(q))
       );
     }

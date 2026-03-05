@@ -110,37 +110,7 @@ export async function POST(
 
     await batch.commit();
 
-    // 4. users_managers 승계 처리
-    // 이 매장을 담당하는 매니저 전체 스캔 (관리자 전용 작업이므로 full scan 허용)
-    const managersSnapshot = await db.collection('users_managers').get();
 
-    const managerUpdates: Promise<FirebaseFirestore.WriteResult>[] = [];
-    let managersTransferred = 0;
-    let managersDetached = 0;
-
-    for (const doc of managersSnapshot.docs) {
-      const data = doc.data();
-      const tenants: Array<{ tenantId: string }> = data.tenants || [];
-      const hasTenant = tenants.some(t => t.tenantId === tenantId);
-      if (!hasTenant) continue;
-
-      if (tenants.length === 1 && data.masterEmail === oldEmail) {
-        // 이 매장만 담당 + 구 오너 소속 → masterEmail을 새 오너로 변경 (완전 승계)
-        managerUpdates.push(
-          doc.ref.update({
-            masterEmail: normalizedEmail,
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-        );
-        managersTransferred++;
-      }
-      // 그 외(다중 매장 담당 or 다른 마스터 소속) → 변경 없음
-      // 매니저의 tenants 배열은 그대로 유지 (매장 접근 권한 보존)
-    }
-
-    if (managerUpdates.length > 0) {
-      await Promise.all(managerUpdates);
-    }
 
     // 어드민 로그
     await addAdminLog(db, admin, {
@@ -157,8 +127,6 @@ export async function POST(
         userCreated,
         cardsDeleted: cardsDoc.exists,
         subscriptionBillingCleared: subDoc.exists,
-        managersTransferred,
-        managersDetached,
       },
     });
 
@@ -170,8 +138,6 @@ export async function POST(
       userCreated,
       cardsDeleted: cardsDoc.exists,
       subscriptionBillingCleared: subDoc.exists,
-      managersTransferred,
-      managersDetached,
     });
   } catch (error) {
     console.error('Transfer ownership error:', error);
