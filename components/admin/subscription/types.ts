@@ -138,7 +138,7 @@ export function isSubscriptionActive(status: SubscriptionStatus | null | undefin
 
 // 구독을 시작할 수 있는 상태인지 확인
 export function canStartSubscription(status: SubscriptionStatus | null | undefined): boolean {
-  return !status || status === 'none' || status === 'expired' || status === 'canceled';
+  return !status || status === 'none' || status === 'expired' || status === 'canceled' || status === 'past_due';
 }
 
 // 날짜 포맷 (YYYY-MM-DD)
