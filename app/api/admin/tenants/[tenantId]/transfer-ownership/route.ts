@@ -50,8 +50,14 @@ export async function POST(
     let newUserId: string;
     let userCreated = false;
 
+    let newUserName = '';
+    let newUserPhone = '';
+
     if (userDoc.exists) {
-      newUserId = userDoc.data()!.userId;
+      const ud = userDoc.data()!;
+      newUserId = ud.userId;
+      newUserName = ud.name || '';
+      newUserPhone = ud.phone || '';
     } else {
       newUserId = 'u_' + Math.random().toString(36).substr(2, 8);
       await db.collection('users').doc(normalizedEmail).set({
@@ -74,10 +80,12 @@ export async function POST(
     // Batch: tenants + subscriptions(클리어) + cards(삭제)
     const batch = db.batch();
 
-    // 1. tenants — email, userId 변경
+    // 1. tenants — email, userId, name, phone 변경
     batch.update(db.collection('tenants').doc(tenantId), {
       email: normalizedEmail,
       userId: newUserId,
+      name: newUserName,
+      phone: newUserPhone,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: admin.adminId,
     });

@@ -31,11 +31,18 @@ export async function GET(request: NextRequest) {
     const planFilter = searchParams.get('plan') || '';
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
 
-    // 1~2. 테넌트 + 구독 정보 병렬 조회
-    const [tenantsSnapshot, subscriptionsSnapshot] = await Promise.all([
+    // 1~3. 테넌트 + 구독 + 유저 정보 병렬 조회
+    const [tenantsSnapshot, subscriptionsSnapshot, usersSnapshot] = await Promise.all([
       db.collection('tenants').get(),
       db.collection('subscriptions').get(),
+      db.collection('users').get(),
     ]);
+    const userMap = new Map<string, { name: string; phone: string }>();
+    usersSnapshot.docs.forEach(doc => {
+      const d = doc.data();
+      userMap.set(doc.id, { name: d.name || '', phone: d.phone || '' });
+    });
+
     const subscriptionMap = new Map<string, {
       plan: string;
       status: string;
@@ -97,11 +104,11 @@ export async function GET(request: NextRequest) {
           id: doc.id,
           tenantId,
           email: data.email || '',
-          name: data.name || data.ownerName || '',
+          name: userMap.get(data.email?.toLowerCase() || '')?.name || data.name || data.ownerName || '',
           brandName: data.brandName || data.businessName || '이름 없음',
           brandCode: data.brandCode || '',
           branchNo: data.branchNo != null ? String(data.branchNo) : null,
-          phone: data.phone || '',
+          phone: userMap.get(data.email?.toLowerCase() || '')?.phone || data.phone || '',
           industry: data.industry || '',
           plan: subscription?.plan || '',
           subscriptionStatus: subscription?.status || 'none',
