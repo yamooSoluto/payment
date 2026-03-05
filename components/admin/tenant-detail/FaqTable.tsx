@@ -46,8 +46,8 @@ interface FaqTableProps {
 // ═══════════════════════════════════════════════════════════
 
 const TOPIC_OPTIONS = [
-  '매장/운영', '공간/환경', '좌석/룸', '시설/비품', '상품/서비스',
-  '정책/규정', '결제/환불', '문제/해결', '혜택/이벤트', '기타',
+  '매장/운영', '시설/환경', '상품/서비스', '예약/주문', '결제/환불',
+  '회원/혜택', '기술/접속', '제보/신고', '기타',
 ];
 const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
 const ACTION_PRODUCTS = ['ticket', 'room', 'locker', 'seat', 'shop', 'reservation'];
@@ -142,7 +142,7 @@ export default function FaqTable({ faqs, searchQuery, onSearchChange, onCellEdit
           <Database className="w-12 h-12 mx-auto text-gray-300 mb-4" />
           <p className="text-gray-500 mb-2">등록된 FAQ가 없습니다.</p>
           <p className="text-sm text-gray-400">
-            &apos;전체 동기화&apos; 버튼을 클릭하여 템플릿 기반 FAQ를 생성하세요.
+            &apos;질문 템플릿&apos; 탭에서 전체 동기화로 FAQ를 생성하세요.
           </p>
         </div>
       </div>

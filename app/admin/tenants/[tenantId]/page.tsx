@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { HomeSimpleDoor, NavArrowLeft, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Timer, Database, User } from 'iconoir-react';
+import { HomeSimpleDoor, NavArrowLeft, RefreshDouble, Link as LinkIcon, CreditCards, InfoCircle, Spark, Timer, Database, User, Xmark } from 'iconoir-react';
 import Link from 'next/link';
 import Spinner from '@/components/admin/Spinner';
 import { DynamicField, DynamicFieldGroup } from '@/components/admin/DynamicFieldRenderer';
@@ -76,6 +76,9 @@ export default function TenantDetailPage() {
   // 충돌 감지용 원본 데이터
   const [originalTenant, setOriginalTenant] = useState<Record<string, unknown>>({});
   const [originalAdminFields, setOriginalAdminFields] = useState<Record<string, unknown>>({});
+
+  // 패키지 태그
+  const [pkgTagInput, setPkgTagInput] = useState('');
 
   // 삭제 모달
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -284,6 +287,33 @@ export default function TenantDetailPage() {
     await fetchTenantDetail(true);
     await fetchAdminFields();
     setIsEditMode(false);
+  };
+
+  // 패키지 태그 즉시 저장 (편집모드와 독립)
+  const handleSavePackageTags = async (newTags: string[]) => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenantId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageTags: newTags }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setTenant(prev => ({ ...prev, packageTags: newTags }));
+    } catch { alert('패키지 태그 저장 실패'); }
+  };
+
+  const handleAddPkgTag = () => {
+    const tag = pkgTagInput.trim().toLowerCase();
+    if (!tag) return;
+    const current = Array.isArray(tenant.packageTags) ? tenant.packageTags as string[] : [];
+    if (current.includes(tag)) { setPkgTagInput(''); return; }
+    handleSavePackageTags([...current, tag]);
+    setPkgTagInput('');
+  };
+
+  const handleRemovePkgTag = (tag: string) => {
+    const current = Array.isArray(tenant.packageTags) ? tenant.packageTags as string[] : [];
+    handleSavePackageTags(current.filter(t => t !== tag));
   };
 
   const handleCustomFieldChange = (fieldName: string, value: unknown) => {
@@ -519,6 +549,42 @@ export default function TenantDetailPage() {
                       />
                     ) : null;
                   })()}
+                  {/* 패키지 태그 */}
+                  <div className="border border-gray-100 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-gray-700">패키지 태그</h3>
+                      <span className="text-[11px] text-gray-400">FAQ 불러오기 시 노출할 패키지를 결정</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(Array.isArray(tenant.packageTags) ? tenant.packageTags as string[] : []).map((tag: string) => (
+                        <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
+                          {tag}
+                          <button
+                            onClick={() => handleRemovePkgTag(tag)}
+                            className="text-blue-400 hover:text-blue-600 ml-0.5"
+                          >
+                            <Xmark className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      <div className="inline-flex items-center">
+                        <input
+                          value={pkgTagInput}
+                          onChange={e => setPkgTagInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.nativeEvent.isComposing) return;
+                            if (e.key === 'Enter') { e.preventDefault(); handleAddPkgTag(); }
+                          }}
+                          placeholder="태그 추가..."
+                          className="w-28 px-2 py-1 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300"
+                        />
+                      </div>
+                    </div>
+                    {(!Array.isArray(tenant.packageTags) || (tenant.packageTags as string[]).length === 0) && (
+                      <p className="text-[11px] text-gray-400 mt-2">태그가 없으면 전체 공개 패키지만 노출됩니다.</p>
+                    )}
+                  </div>
+
                   {Object.keys(otherFields).length > 0 && (
                     <DynamicFieldGroup
                       title="기타"

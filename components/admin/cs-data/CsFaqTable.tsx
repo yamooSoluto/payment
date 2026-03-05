@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, Fragment } from 'react';
-import { Trash, NavArrowDown, Xmark } from 'iconoir-react';
+import { Trash, NavArrowDown, Xmark, Check } from 'iconoir-react';
 
 // ═══════════════════════════════════════════════════════════
 // 타입
@@ -11,6 +11,7 @@ interface TenantFaq {
   id: string;
   templateId?: string;
   questions: string[];
+  questionsRaw?: string[];
   answer: string;
   guide?: string;
   keyData?: string;
@@ -56,25 +57,35 @@ interface CsFaqTableProps {
   onSelectToggle: (faqId: string) => void;
   onSelectAll: (ids: string[]) => void;
   onDeselectAll: () => void;
+  startIndex?: number;
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════���═══════════════════════════════════════════════════
 // 상수
 // ═══════════════════════════════════════════════════════════
 
 const TOPIC_OPTIONS = [
-  '매장/운영', '공간/환경', '좌석/룸', '시설/비품', '상품/서비스',
-  '정책/규정', '결제/환불', '문제/해결', '혜택/이벤트', '기타',
+  '매장/운영', '시설/환경', '상품/서비스', '예약/주문', '결제/환불',
+  '회원/혜택', '기술/접속', '제보/신고', '기타',
 ];
 
-const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
+const TAG_OPTIONS = ['문의', '칭찬', '건���', '불만', '요청', '긴급'];
 
 const ACTION_PRODUCTS = ['ticket', 'room', 'locker', 'seat', 'shop', 'reservation'];
 const ACTION_TYPES = ['change', 'cancel', 'refund', 'extend', 'transfer', 'check', 'issue'];
 
-const COL_SPAN = 12;
+const TAG_COLORS: Record<string, string> = {
+  '문의': 'bg-blue-100 text-blue-700',
+  '칭찬': 'bg-emerald-100 text-emerald-700',
+  '건의': 'bg-yellow-100 text-yellow-700',
+  '불만': 'bg-red-100 text-red-700',
+  '요청': 'bg-purple-100 text-purple-700',
+  '긴급': 'bg-orange-100 text-orange-700',
+};
 
-// ═══════════════════════════════════════════════════════════
+const COL_SPAN = 13;
+
+// ═════���═════════════��═══════════════════════════════════════
 // 헬퍼
 // ═══════════════════════════════════════════════════════════
 
@@ -98,13 +109,6 @@ function getHandlerBadge(faq: CsFaq) {
   return { label: 'AI 답변', style: 'bg-blue-50 text-blue-600' };
 }
 
-function getHandlerDisplay(faq: CsFaq) {
-  if (!faq.handler || faq.handler === 'bot') return '—';
-  if (faq.handler === 'op') return '운영';
-  if (faq.handler === 'manager') return '현장';
-  return faq.handler;
-}
-
 function getStatusDisplay(status?: string) {
   switch (status) {
     case 'synced': return { dot: 'bg-green-500', text: 'SYNCED', color: 'text-green-600' };
@@ -113,18 +117,28 @@ function getStatusDisplay(status?: string) {
   }
 }
 
-function getActionDisplay(faq: CsFaq): string | null {
-  const parts = [faq.action_product, faq.action].filter(Boolean);
-  return parts.length > 0 ? parts.join('_') : null;
-}
-
 function isTransferMode(faq: CsFaq) {
   return faq.handlerType === 'staff' || faq.handlerType === 'conditional';
 }
 
-function getTagDisplay(tags?: string[]): { text: string; extra: number } {
-  if (!tags || tags.length === 0) return { text: '—', extra: 0 };
-  return { text: tags[0], extra: tags.length - 1 };
+// questionsRaw가 있으면 원본 질문을 우선 사용 (Airtable 등 외부 소스에서 여러 질문이 들어온 경우)
+function getDisplayQuestions(faq: CsFaq): string[] {
+  if (Array.isArray(faq.questionsRaw) && faq.questionsRaw.length > 0) return faq.questionsRaw;
+  if (Array.isArray(faq.questions) && faq.questions.length > 0) return faq.questions;
+  return [''];
+}
+
+function normalizeTag(tag: string): string {
+  // "문의: 정보 확인" → "문의" (콜론 이전 부분만)
+  const base = tag.split(':')[0].trim();
+  return base || tag;
+}
+
+function getTagDisplay(tags?: string[]): { labels: string[]; } {
+  if (!tags || tags.length === 0) return { labels: [] };
+  // 중복 제거 + 정규화
+  const unique = [...new Set(tags.map(normalizeTag))];
+  return { labels: unique };
 }
 
 // 매장별 배지 색상 (해시 기반)
@@ -147,7 +161,7 @@ function getTenantColor(tenantId: string): string {
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═��═════════════════════════════════════════════════════════
 // 매장 멀티셀렉 팝오버 (로컬 pending → 배치 반영)
 // ═══════════════════════════════════════════════════════════
 
@@ -286,9 +300,9 @@ function TenantMultiSelect({
   );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═════════════════════════════════════════���═══════════���═════
 // 컴포넌트
-// ═══════════════════════════════════════════════════════════
+// ══���════════════════════════════════════════════════════════
 
 export default function CsFaqTable({
   faqs,
@@ -302,6 +316,7 @@ export default function CsFaqTable({
   onSelectToggle,
   onSelectAll,
   onDeselectAll,
+  startIndex = 0,
 }: CsFaqTableProps) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -332,6 +347,17 @@ export default function CsFaqTable({
 
   const stopEdit = () => setEditingCell(null);
 
+  // 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    if (!editingCell) return;
+    const handler = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-dropdown]')) return;
+      stopEdit();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [editingCell]);
+
   const toggleExpand = (id: string) =>
     setExpandedId(prev => prev === id ? null : id);
 
@@ -350,8 +376,9 @@ export default function CsFaqTable({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1100px]">
+      {/* 드롭다운 열릴 때 overflow 해제 */}
+      <div className={editingCell ? '' : 'overflow-x-auto'}>
+        <table className="w-full min-w-[1300px]">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               {/* 체크박스 */}
@@ -363,28 +390,29 @@ export default function CsFaqTable({
                   className="w-3.5 h-3.5 rounded border-gray-300"
                 />
               </th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-24">매장</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-10">소스</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[180px]">질문</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[140px]">답변</th>
+              <th className="text-center px-2 py-2.5 text-xs font-medium text-gray-500 w-10">No.</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[140px]">매장</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-12">소스</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[200px]">질문</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[160px]">답변</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-24">처리</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-16">handler</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-24">topic</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-20">tag</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-32">action</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-20">상태</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-20">handler</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[80px]">topic</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[80px]">tag</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 min-w-[120px]">action</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-24">상태</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 w-10"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {faqs.map((faq) => {
+            {faqs.map((faq, _idx) => {
               const k = faqKey(faq);
               const isDirty = dirtyIds.has(k);
               const badge = getHandlerBadge(faq);
               const status = getStatusDisplay(faq.vectorStatus);
               const isExpanded = expandedId === k;
               const transfer = isTransferMode(faq);
-              const tagInfo = getTagDisplay(faq.tags);
+              const tagLabels = getTagDisplay(faq.tags).labels;
               const isSelected = selectedIds.has(k);
               const tenantColor = getTenantColor(faq.tenantId);
               const activeIds = getActiveTenantIds(faq);
@@ -403,6 +431,12 @@ export default function CsFaqTable({
                         onChange={() => onSelectToggle(k)}
                         className="w-3.5 h-3.5 rounded border-gray-300"
                       />
+                    </td>
+
+
+                    {/* No. */}
+                    <td className="text-center px-2 py-2.5">
+                      <span className="text-xs text-gray-400">{startIndex + _idx + 1}</span>
                     </td>
 
                     {/* 매장 (인라인 멀티셀렉) */}
@@ -454,17 +488,22 @@ export default function CsFaqTable({
                       className="px-3 py-2.5 max-w-[260px] cursor-pointer"
                       onClick={() => toggleExpand(k)}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <NavArrowDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                        <span className="text-sm text-gray-900 truncate">
-                          {faq.questions[0] || '(질문 없음)'}
-                        </span>
-                        {faq.questions.length > 1 && (
-                          <span className="shrink-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[10px] font-medium bg-gray-200 text-gray-600 rounded-full">
-                            +{faq.questions.length - 1}
-                          </span>
-                        )}
-                      </div>
+                      {(() => {
+                        const displayQuestions = getDisplayQuestions(faq);
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <NavArrowDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                            <span className="text-sm text-gray-900 truncate">
+                              {displayQuestions[0] || '(질문 없음)'}
+                            </span>
+                            {displayQuestions.length > 1 && (
+                              <span className="shrink-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[10px] font-medium bg-gray-200 text-gray-600 rounded-full">
+                                +{displayQuestions.length - 1}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {isDirty && (
                         <span className="text-[10px] text-blue-500 ml-5">● 변경됨</span>
                       )}
@@ -480,198 +519,223 @@ export default function CsFaqTable({
                       </span>
                     </td>
 
-                    {/* 처리 */}
+                    {/* ── 처리 ── */}
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      {isEditing(k, 'handlerType') ? (
-                        <select
-                          autoFocus
-                          value={transfer ? 'transfer' : 'bot'}
-                          onChange={(e) => {
-                            if (e.target.value === 'bot') {
-                              onCellEdit(faq.id, faq.tenantId, { handlerType: 'bot', handler: undefined, rule: undefined });
-                            } else {
-                              onCellEdit(faq.id, faq.tenantId, {
-                                handlerType: faq.rule?.trim() ? 'conditional' : 'staff',
-                                handler: (!faq.handler || faq.handler === 'bot') ? 'op' : faq.handler,
-                              });
-                            }
-                            stopEdit();
-                          }}
-                          onBlur={stopEdit}
-                          className="text-xs px-1.5 py-1 border border-blue-300 rounded outline-none bg-white"
-                        >
-                          <option value="bot">AI 답변</option>
-                          <option value="transfer">담당자 전달</option>
-                        </select>
-                      ) : (
+                      <div className="relative">
                         <span
                           onClick={() => startEdit(k, 'handlerType')}
-                          className={`inline-flex px-1.5 py-0.5 text-[11px] font-medium rounded cursor-pointer hover:opacity-80 ${badge.style}`}
+                          className={`inline-flex px-1.5 py-0.5 text-[11px] font-medium rounded cursor-pointer hover:ring-2 hover:ring-gray-200 transition-all ${badge.style}`}
                         >
                           {badge.label}
                         </span>
-                      )}
+                        {isEditing(k, 'handlerType') && (
+                          <div data-dropdown className="absolute left-0 top-full z-50 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[130px]">
+                            <button
+                              onClick={() => { onCellEdit(faq.id, faq.tenantId, { handlerType: 'bot', handler: undefined, rule: undefined }); stopEdit(); }}
+                              className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${!transfer ? 'bg-blue-50/40' : ''}`}
+                            >
+                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-100 text-blue-700">AI 답변</span>
+                              {!transfer && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                onCellEdit(faq.id, faq.tenantId, {
+                                  handlerType: faq.rule?.trim() ? 'conditional' : 'staff',
+                                  handler: (!faq.handler || faq.handler === 'bot') ? 'op' : faq.handler,
+                                });
+                                stopEdit();
+                              }}
+                              className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${transfer ? 'bg-blue-50/40' : ''}`}
+                            >
+                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-purple-100 text-purple-700">담당자 전달</span>
+                              {transfer && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
 
-                    {/* handler */}
+                    {/* ── handler ── */}
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {transfer ? (
-                        isEditing(k, 'handler') ? (
-                          <select
-                            autoFocus
-                            value={faq.handler === 'manager' ? 'manager' : 'op'}
-                            onChange={(e) => {
-                              onCellEdit(faq.id, faq.tenantId, { handler: e.target.value as 'op' | 'manager' });
-                              stopEdit();
-                            }}
-                            onBlur={stopEdit}
-                            className="text-xs px-1.5 py-1 border border-blue-300 rounded outline-none bg-white"
-                          >
-                            <option value="op">운영</option>
-                            <option value="manager">현장</option>
-                          </select>
-                        ) : (
+                        <div className="relative">
                           <span
                             onClick={() => startEdit(k, 'handler')}
-                            className="text-sm text-gray-600 cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 py-0.5"
+                            className={`inline-flex px-1.5 py-0.5 text-[11px] font-medium rounded-full cursor-pointer hover:ring-2 hover:ring-gray-200 transition-all ${
+                              faq.handler === 'manager' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            }`}
                           >
-                            {getHandlerDisplay(faq)}
+                            {faq.handler === 'manager' ? '현장' : '운영'}
                           </span>
-                        )
+                          {isEditing(k, 'handler') && (
+                            <div data-dropdown className="absolute left-0 top-full z-50 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[100px]">
+                              {[
+                                { value: 'op', label: '운영', color: 'bg-amber-100 text-amber-700' },
+                                { value: 'manager', label: '현장', color: 'bg-green-100 text-green-700' },
+                              ].map(opt => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => { onCellEdit(faq.id, faq.tenantId, { handler: opt.value as 'op' | 'manager' }); stopEdit(); }}
+                                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${faq.handler === opt.value ? 'bg-blue-50/40' : ''}`}
+                                >
+                                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${opt.color}`}>{opt.label}</span>
+                                  {faq.handler === opt.value && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-sm text-gray-400">—</span>
                       )}
                     </td>
 
-                    {/* topic */}
+                    {/* ── topic ── */}
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      {isEditing(k, 'topic') ? (
-                        <select
-                          autoFocus
-                          value={faq.topic || ''}
-                          onChange={(e) => {
-                            onCellEdit(faq.id, faq.tenantId, { topic: e.target.value });
-                            stopEdit();
-                          }}
-                          onBlur={stopEdit}
-                          className="text-xs px-1.5 py-1 border border-blue-300 rounded outline-none bg-white max-w-[100px]"
-                        >
-                          <option value="">—</option>
-                          {TOPIC_OPTIONS.map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      ) : (
+                      <div className="relative">
                         <span
                           onClick={() => startEdit(k, 'topic')}
-                          className="text-sm text-gray-600 cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 py-0.5"
+                          className={`cursor-pointer hover:ring-2 hover:ring-gray-200 rounded-full transition-all inline-flex ${
+                            faq.topic
+                              ? 'px-1.5 py-0.5 text-[11px] font-medium bg-gray-100 text-gray-700'
+                              : 'px-1 py-0.5 text-sm text-gray-400'
+                          }`}
                         >
                           {faq.topic || '—'}
                         </span>
-                      )}
+                        {isEditing(k, 'topic') && (
+                          <div data-dropdown className="absolute left-0 top-full z-50 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px] max-h-[260px] overflow-y-auto">
+                            <button
+                              onClick={() => { onCellEdit(faq.id, faq.tenantId, { topic: '' }); stopEdit(); }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
+                            >
+                              — 없음
+                            </button>
+                            {TOPIC_OPTIONS.map(t => (
+                              <button
+                                key={t}
+                                onClick={() => { onCellEdit(faq.id, faq.tenantId, { topic: t }); stopEdit(); }}
+                                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${faq.topic === t ? 'bg-blue-50/40' : ''}`}
+                              >
+                                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-gray-100 text-gray-700">{t}</span>
+                                {faq.topic === t && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
-                    {/* tag */}
-                    <td className="px-3 py-2.5">
-                      {isEditing(k, 'tag') ? (
-                        <div
-                          className="flex flex-wrap gap-1"
-                          tabIndex={0}
-                          onBlur={(e) => {
-                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                              stopEdit();
-                            }
-                          }}
-                        >
-                          {TAG_OPTIONS.map(tag => (
-                            <button
-                              key={tag}
-                              onClick={() => {
-                                const currentTags = faq.tags || [];
-                                const newTags = currentTags.includes(tag)
-                                  ? currentTags.filter(t => t !== tag)
-                                  : [...currentTags, tag];
-                                onCellEdit(faq.id, faq.tenantId, { tags: newTags });
-                              }}
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
-                                (faq.tags || []).includes(tag)
-                                  ? 'bg-gray-900 text-white'
-                                  : 'text-gray-500 border border-gray-200 hover:border-gray-400'
-                              }`}
-                            >
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
+                    {/* ── tag (멀티셀렉트) ── */}
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <div className="relative">
                         <span
                           onClick={() => startEdit(k, 'tag')}
-                          className="cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 py-0.5 inline-flex items-center gap-1"
+                          className="cursor-pointer hover:ring-2 hover:ring-gray-200 rounded transition-all inline-flex items-center gap-0.5 py-0.5"
                         >
-                          {tagInfo.extra > 0 ? (
-                            <>
-                              <span className="text-xs text-gray-600">{tagInfo.text}</span>
-                              <span className="text-[10px] bg-gray-200 text-gray-600 rounded-full px-1.5">{`+${tagInfo.extra}`}</span>
-                            </>
+                          {tagLabels.length === 0 ? (
+                            <span className="text-xs text-gray-400 px-1">—</span>
                           ) : (
-                            <span className={`text-xs ${tagInfo.text === '—' ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {tagInfo.text}
-                            </span>
+                            <>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TAG_COLORS[tagLabels[0]] || 'bg-gray-100 text-gray-600'}`}>
+                                {tagLabels[0]}
+                              </span>
+                              {tagLabels.length > 1 && (
+                                <span className="text-[10px] bg-gray-200 text-gray-600 rounded-full px-1">+{tagLabels.length - 1}</span>
+                              )}
+                            </>
                           )}
                         </span>
-                      )}
+                        {isEditing(k, 'tag') && (
+                          <div data-dropdown className="absolute left-0 top-full z-50 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[130px]">
+                            {TAG_OPTIONS.map(tag => {
+                              const isActive = (faq.tags || []).includes(tag);
+                              return (
+                                <button
+                                  key={tag}
+                                  onClick={() => {
+                                    const currentTags = faq.tags || [];
+                                    const newTags = isActive
+                                      ? currentTags.filter(t => t !== tag)
+                                      : [...currentTags, tag];
+                                    onCellEdit(faq.id, faq.tenantId, { tags: newTags });
+                                  }}
+                                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${isActive ? 'bg-blue-50/40' : ''}`}
+                                >
+                                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${
+                                    isActive ? (TAG_COLORS[tag] || 'bg-gray-900 text-white') : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {tag}
+                                  </span>
+                                  {isActive && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
-                    {/* action */}
+                    {/* ── action (product + type 2단 드롭다운) ── */}
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      {isEditing(k, 'action') ? (
-                        <div
-                          className="flex gap-1"
-                          onBlur={(e) => {
-                            const container = e.currentTarget;
-                            requestAnimationFrame(() => {
-                              if (!container.contains(document.activeElement)) {
-                                stopEdit();
-                              }
-                            });
-                          }}
-                        >
-                          <select
-                            autoFocus
-                            value={faq.action_product || ''}
-                            onChange={(e) => onCellEdit(faq.id, faq.tenantId, { action_product: e.target.value || null })}
-                            className="text-[11px] px-1 py-0.5 border border-blue-300 rounded outline-none bg-white w-[72px]"
-                          >
-                            <option value="">—</option>
-                            {ACTION_PRODUCTS.map(p => (
-                              <option key={p} value={p}>{p}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={faq.action || ''}
-                            onChange={(e) => onCellEdit(faq.id, faq.tenantId, { action: e.target.value || null })}
-                            className="text-[11px] px-1 py-0.5 border border-blue-300 rounded outline-none bg-white w-[72px]"
-                          >
-                            <option value="">—</option>
-                            {ACTION_TYPES.map(a => (
-                              <option key={a} value={a}>{a}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
+                      <div className="relative">
                         <span
                           onClick={() => startEdit(k, 'action')}
-                          className="cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 py-0.5 inline-block"
+                          className="cursor-pointer hover:ring-2 hover:ring-gray-200 rounded transition-all inline-flex items-center gap-0.5 py-0.5"
                         >
-                          {getActionDisplay(faq) ? (
-                            <span className="font-mono text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
-                              {getActionDisplay(faq)}
-                            </span>
+                          {faq.action_product || faq.action ? (
+                            <>
+                              {faq.action_product && (
+                                <span className="font-mono text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{faq.action_product}</span>
+                              )}
+                              {faq.action && (
+                                <span className="font-mono text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{faq.action}</span>
+                              )}
+                            </>
                           ) : (
-                            <span className="text-sm text-gray-400">—</span>
+                            <span className="text-sm text-gray-400 px-1">—</span>
                           )}
                         </span>
-                      )}
+                        {isEditing(k, 'action') && (
+                          <div data-dropdown className="absolute left-0 top-full z-50 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] max-h-[320px] overflow-y-auto">
+                            <div className="px-3 py-1 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Product</div>
+                            <button
+                              onClick={() => onCellEdit(faq.id, faq.tenantId, { action_product: null })}
+                              className={`w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 ${!faq.action_product ? 'bg-blue-50/40' : ''}`}
+                            >
+                              — 없음
+                            </button>
+                            {ACTION_PRODUCTS.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => onCellEdit(faq.id, faq.tenantId, { action_product: p })}
+                                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${faq.action_product === p ? 'bg-blue-50/40' : ''}`}
+                              >
+                                <span className="font-mono text-[11px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{p}</span>
+                                {faq.action_product === p && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                              </button>
+                            ))}
+                            <div className="border-t border-gray-100 my-1" />
+                            <div className="px-3 py-1 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Type</div>
+                            <button
+                              onClick={() => onCellEdit(faq.id, faq.tenantId, { action: null })}
+                              className={`w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 ${!faq.action ? 'bg-blue-50/40' : ''}`}
+                            >
+                              — 없음
+                            </button>
+                            {ACTION_TYPES.map(a => (
+                              <button
+                                key={a}
+                                onClick={() => onCellEdit(faq.id, faq.tenantId, { action: a })}
+                                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${faq.action === a ? 'bg-blue-50/40' : ''}`}
+                              >
+                                <span className="font-mono text-[11px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{a}</span>
+                                {faq.action === a && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* 상태 */}
@@ -701,40 +765,61 @@ export default function CsFaqTable({
                     <tr className={isDirty ? 'border-l-2 border-l-blue-400 bg-blue-50/20' : 'bg-gray-50/50'}>
                       <td colSpan={COL_SPAN} className="px-6 py-4">
                         <div className="space-y-4 max-w-2xl">
-                          {/* 질문 배열 */}
+                          {/* 질문 배열 (questionsRaw 우선, 없으면 questions) */}
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-2">질문</label>
                             <div className="space-y-1.5">
-                              {faq.questions.map((q, idx) => (
-                                <div key={idx} className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    value={q}
-                                    onChange={(e) => {
-                                      const newQ = [...faq.questions];
-                                      newQ[idx] = e.target.value;
-                                      onCellEdit(faq.id, faq.tenantId, { questions: newQ });
-                                    }}
-                                    placeholder="유사표현은 세미콜론(;)으로 구분"
-                                    className="flex-1 px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      const newQ = faq.questions.filter((_, i) => i !== idx);
-                                      onCellEdit(faq.id, faq.tenantId, { questions: newQ.length ? newQ : [''] });
-                                    }}
-                                    className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-                                  >
-                                    <Trash className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                onClick={() => onCellEdit(faq.id, faq.tenantId, { questions: [...faq.questions, ''] })}
-                                className="w-full px-2.5 py-1.5 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-white hover:text-gray-700 transition-colors"
-                              >
-                                + 질문 추가
-                              </button>
+                              {(() => {
+                                const editQuestions = getDisplayQuestions(faq);
+                                return (
+                                  <>
+                                    {editQuestions.map((q, idx) => (
+                                      <div key={idx} className="flex gap-2">
+                                        <input
+                                          type="text"
+                                          value={q}
+                                          onChange={(e) => {
+                                            const newQ = [...editQuestions];
+                                            newQ[idx] = e.target.value;
+                                            // questionsRaw와 questions 모두 업데이트
+                                            onCellEdit(faq.id, faq.tenantId, {
+                                              questions: newQ,
+                                              questionsRaw: newQ,
+                                            });
+                                          }}
+                                          placeholder="유사표현은 세미콜론(;)으로 구분"
+                                          className="flex-1 px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 outline-none"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            const newQ = editQuestions.filter((_, i) => i !== idx);
+                                            const updated = newQ.length ? newQ : [''];
+                                            onCellEdit(faq.id, faq.tenantId, {
+                                              questions: updated,
+                                              questionsRaw: updated,
+                                            });
+                                          }}
+                                          className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                        >
+                                          <Trash className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => {
+                                        const newQ = [...editQuestions, ''];
+                                        onCellEdit(faq.id, faq.tenantId, {
+                                          questions: newQ,
+                                          questionsRaw: newQ,
+                                        });
+                                      }}
+                                      className="w-full px-2.5 py-1.5 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-white hover:text-gray-700 transition-colors"
+                                    >
+                                      + 질문 추가
+                                    </button>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
 

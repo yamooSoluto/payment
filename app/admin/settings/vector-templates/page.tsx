@@ -37,22 +37,28 @@ interface KeyDataSource {
   matchKeywords?: string[];
 }
 
-// 핸들러 타입: 3개 (스크린샷 기준)
+// 핸들러 타입: UI에서는 2옵션 (AI답변/담당자전달), 저장 시 rule 유무로 conditional 자동 결정
 type HandlerType = 'bot' | 'staff' | 'conditional';
 type Handler = 'bot' | 'op' | 'manager';
 
-// 태그 프리셋 (스크린샷 기준)
+// 태그 프리셋
 const TAG_PRESETS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
+
+// 액션 옵션
+const ACTION_PRODUCTS = ['ticket', 'room', 'locker', 'seat', 'shop', 'reservation'];
+const ACTION_TYPES = ['change', 'cancel', 'refund', 'extend', 'transfer', 'check', 'issue'];
 
 // FAQ 분류 토픽 옵션
 const FAQ_TOPIC_OPTIONS = [
   { value: '', label: '선택 안함' },
-  { value: '기본정보', label: '기본정보' },
-  { value: '이용방법', label: '이용방법' },
-  { value: '정책/규정', label: '정책/규정' },
+  { value: '매장/운영', label: '매장/운영' },
+  { value: '시설/환경', label: '시설/환경' },
+  { value: '상품/서비스', label: '상품/서비스' },
+  { value: '예약/주문', label: '예약/주문' },
   { value: '결제/환불', label: '결제/환불' },
-  { value: '문제/해결', label: '문제/해결' },
-  { value: '혜택/이벤트', label: '혜택/이벤트' },
+  { value: '회원/혜택', label: '회원/혜택' },
+  { value: '기술/접속', label: '기술/접속' },
+  { value: '제보/신고', label: '제보/신고' },
   { value: '기타', label: '기타' },
 ];
 
@@ -75,7 +81,10 @@ interface QuestionTemplate {
   // 처리 방식
   handlerType?: HandlerType;  // 'bot' | 'staff' | 'conditional'
   handler?: Handler;          // 'bot' | 'op' | 'manager'
-  rule?: string;              // 전달조건 (conditional일 때)
+  rule?: string;              // 사전안내 (입력 시 조건부 전달)
+  // 액션
+  action_product?: string | null;
+  action?: string | null;
 }
 
 export default function VectorTemplatesPage() {
@@ -131,6 +140,10 @@ export default function VectorTemplatesPage() {
   const [handler, setHandler] = useState<Handler>('op');
   const [rule, setRule] = useState('');
 
+  // action
+  const [actionProduct, setActionProduct] = useState('');
+  const [actionType, setActionType] = useState('');
+
   const availableFacets = useMemo(() => {
     const topicFacetKeys = TOPIC_FACETS[selectedTopic] || [];
     if (topicFacetKeys.length === 0) return FACETS;
@@ -168,6 +181,8 @@ export default function VectorTemplatesPage() {
     setHandlerType('bot');
     setHandler('op');
     setRule('');
+    setActionProduct('');
+    setActionType('');
   };
 
   const handleSelect = (template: QuestionTemplate) => {
@@ -200,10 +215,15 @@ export default function VectorTemplatesPage() {
     setFaqTopic(template.faqTopic || '');
     setSelectedTags(template.tags || []);
 
-    // 처리 방식 로드
-    setHandlerType(template.handlerType || 'bot');
+    // 처리 방식 로드 (conditional은 staff로 표시, rule 유무로 구분)
+    const ht = template.handlerType || 'bot';
+    setHandlerType(ht === 'conditional' ? 'staff' : ht);
     setHandler(template.handler || 'op');
     setRule(template.rule || '');
+
+    // 액션 로드
+    setActionProduct(template.action_product || '');
+    setActionType(template.action || '');
 
   };
 
@@ -307,13 +327,16 @@ export default function VectorTemplatesPage() {
         guide: guide || undefined,
         faqTopic: faqTopic || undefined,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
-        // 처리 방식 (Weaviate 매핑)
+        // 처리 방식 (v2: rule 유무로 conditional 자동 결정)
         // - bot: handler="bot", rule 없음
-        // - staff: handler="op"|"manager" (선택), rule 없음
-        // - conditional: handler 미지정 (n8n에서 rule 파싱 후 LLM이 결정), rule="조건텍스트"
-        handlerType,
-        handler: handlerType === 'bot' ? 'bot' : (handlerType === 'staff' ? handler : undefined),
-        rule: handlerType === 'conditional' ? rule : undefined,
+        // - staff (rule 없음): handler="op"|"manager", handlerType="staff"
+        // - staff (rule 있음): handler="op"|"manager", handlerType="conditional", rule="조건텍스트"
+        handlerType: handlerType === 'bot' ? 'bot' : (rule.trim() ? 'conditional' : 'staff'),
+        handler: handlerType === 'bot' ? 'bot' : handler,
+        rule: handlerType !== 'bot' && rule.trim() ? rule.trim() : undefined,
+        // 액션
+        action_product: actionProduct || undefined,
+        action: actionType || undefined,
       };
 
       const url = isAddingNew
@@ -661,9 +684,8 @@ export default function VectorTemplatesPage() {
                         <label className="block text-[13px] font-medium text-gray-400 mb-1.5">처리 방식</label>
                         <div className="inline-flex bg-gray-100 rounded-full p-0.5 w-full">
                           {[
-                            { value: 'bot', label: '챗봇' },
-                            { value: 'staff', label: '담당자' },
-                            { value: 'conditional', label: '조건부' },
+                            { value: 'bot', label: 'AI 답변' },
+                            { value: 'staff', label: '담당자 전달' },
                           ].map((opt) => (
                             <button
                               key={opt.value}
@@ -684,33 +706,38 @@ export default function VectorTemplatesPage() {
                     </div>
 
                     {handlerType === 'staff' && (
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
-                        <select
-                          value={handler}
-                          onChange={(e) => setHandler(e.target.value as Handler)}
-                          disabled={!isEditMode}
-                          className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
-                        >
-                          <option value="op">운영팀</option>
-                          <option value="manager">매니저</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {handlerType === 'conditional' && (
-                      <div>
-                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">전달 조건</label>
-                        <textarea
-                          value={rule}
-                          onChange={(e) => setRule(e.target.value)}
-                          disabled={!isEditMode}
-                          placeholder="예: VIP 고객 / 결제 관련 / 불만 접수 시 전달"
-                          rows={2}
-                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">미충족 시 챗봇, 충족 시 담당자에게 전달</p>
-                      </div>
+                      <>
+                        <div>
+                          <label className="block text-[13px] font-medium text-gray-400 mb-1.5">담당자 지정</label>
+                          <select
+                            value={handler}
+                            onChange={(e) => setHandler(e.target.value as Handler)}
+                            disabled={!isEditMode}
+                            className="w-full sm:w-1/2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
+                          >
+                            <option value="op">운영</option>
+                            <option value="manager">현장</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[13px] font-medium text-gray-400 mb-1.5">
+                            사전 안내 <span className="text-gray-400 font-normal">(입력 시 조건부 전달)</span>
+                          </label>
+                          <textarea
+                            value={rule}
+                            onChange={(e) => setRule(e.target.value)}
+                            disabled={!isEditMode}
+                            placeholder="비워두면 바로 담당자에게 전달"
+                            rows={2}
+                            className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-60 resize-none"
+                          />
+                          <p className="text-xs text-gray-400 mt-1">
+                            {rule.trim()
+                              ? '조건 미충족 시 챗봇이 응답, 충족 시 담당자에게 전달됩니다'
+                              : '비워두면 바로 담당자에게 전달됩니다'}
+                          </p>
+                        </div>
+                      </>
                     )}
 
                     <div>
@@ -762,6 +789,38 @@ export default function VectorTemplatesPage() {
                             {tag}
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* action */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">action product</label>
+                        <select
+                          value={actionProduct}
+                          onChange={(e) => setActionProduct(e.target.value)}
+                          disabled={!isEditMode}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
+                        >
+                          <option value="">없음</option>
+                          {ACTION_PRODUCTS.map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-400 mb-1.5">action type</label>
+                        <select
+                          value={actionType}
+                          onChange={(e) => setActionType(e.target.value)}
+                          disabled={!isEditMode}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:opacity-60"
+                        >
+                          <option value="">없음</option>
+                          {ACTION_TYPES.map(a => (
+                            <option key={a} value={a}>{a}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>

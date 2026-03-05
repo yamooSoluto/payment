@@ -41,14 +41,13 @@ const SOURCE_OPTIONS = [
 const TOPIC_OPTIONS = [
   { value: '', label: '전체 topic' },
   { value: '매장/운영', label: '매장/운영' },
-  { value: '공간/환경', label: '공간/환경' },
-  { value: '좌석/룸', label: '좌석/룸' },
-  { value: '시설/비품', label: '시설/비품' },
+  { value: '시설/환경', label: '시설/환경' },
   { value: '상품/서비스', label: '상품/서비스' },
-  { value: '정책/규정', label: '정책/규정' },
+  { value: '예약/주문', label: '예약/주문' },
   { value: '결제/환불', label: '결제/환불' },
-  { value: '문제/해결', label: '문제/해결' },
-  { value: '혜택/이벤트', label: '혜택/이벤트' },
+  { value: '회원/혜택', label: '회원/혜택' },
+  { value: '기술/접속', label: '기술/접속' },
+  { value: '제보/신고', label: '제보/신고' },
   { value: '기타', label: '기타' },
 ];
 

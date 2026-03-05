@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshDouble, Plus, Trash } from 'iconoir-react';
+import { RefreshDouble, Plus, Trash, Download, Upload } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import CsFaqFilters, { type FaqFilters } from '@/components/admin/cs-data/CsFaqFilters';
 import CsFaqTable, { type CsFaq, type TenantOption, faqKey } from '@/components/admin/cs-data/CsFaqTable';
 import CsFaqAddModal, { type FaqAddData } from '@/components/admin/cs-data/CsFaqAddModal';
+import CsFaqCsvUploadModal, { type CsvRow } from '@/components/admin/cs-data/CsFaqCsvUploadModal';
 
 // ═══════════════════════════════════════════════════════════
 // 타입 (TenantOption은 CsFaqTable에서 import)
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════��══════════════════
 
 // ═══════════════════════════════════════════════════════════
 // 메인 페이지
@@ -69,6 +70,7 @@ export default function CsDataFaqsPage() {
 
   // 모달
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [csvUploadOpen, setCsvUploadOpen] = useState(false);
 
   // ── 데이터 로드 ──
   const fetchData = useCallback(async (cursor?: string | null) => {
@@ -176,6 +178,7 @@ export default function CsDataFaqsPage() {
             body: JSON.stringify({
               updates: {
                 questions: faq.questions,
+                questionsRaw: faq.questionsRaw || faq.questions,
                 answer: faq.answer,
                 guide: faq.guide,
                 handlerType: faq.handlerType,
@@ -209,28 +212,42 @@ export default function CsDataFaqsPage() {
 
   // ── FAQ 삭제 ──
   const handleDeleteFaq = async (faqId: string, tenantId: string) => {
-    if (!confirm('이 FAQ를 삭제하시겠습니까?')) return;
-    const compositeKey = `${tenantId}_${faqId}`;
+    // 그룹화된 FAQ: 같은 질문의 모든 매장 문서를 찾아서 전부 삭제
+    const qKey = faqs.find(f => f.id === faqId && f.tenantId === tenantId)
+      ?.questions[0]?.trim().toLowerCase() || '';
+    const linkedFaqs = qKey
+      ? faqs.filter(f => f.questions[0]?.trim().toLowerCase() === qKey)
+      : faqs.filter(f => f.id === faqId && f.tenantId === tenantId);
+
+    const tenantCount = linkedFaqs.length;
+    const msg = tenantCount > 1
+      ? `이 FAQ를 ${tenantCount}개 매장에서 모두 삭제하시겠습니까?`
+      : '이 FAQ를 삭제하시겠습니까?';
+    if (!confirm(msg)) return;
+
     try {
-      const res = await fetch(`/api/admin/cs-data/faqs/${faqId}?tenantId=${tenantId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setFaqs(prev => prev.filter(f => faqKey(f) !== compositeKey));
-        setDirtyIds(prev => {
-          const next = new Set(prev);
-          next.delete(compositeKey);
-          return next;
-        });
-        setSelectedIds(prev => {
-          const next = new Set(prev);
-          next.delete(compositeKey);
-          return next;
-        });
-      } else {
-        const data = await res.json();
-        alert(`삭제 실패: ${data.error}`);
+      const results = await Promise.all(
+        linkedFaqs.map(f =>
+          fetch(`/api/admin/cs-data/faqs/${f.id}?tenantId=${f.tenantId}`, { method: 'DELETE' })
+        )
+      );
+      const failed = results.filter(r => !r.ok).length;
+      if (failed > 0) {
+        alert(`${tenantCount}건 중 ${failed}건 삭제 실패`);
       }
+      // 삭제된 문서 로컬���서 제거
+      const deletedKeys = new Set(linkedFaqs.map(f => faqKey(f)));
+      setFaqs(prev => prev.filter(f => !deletedKeys.has(faqKey(f))));
+      setDirtyIds(prev => {
+        const next = new Set(prev);
+        deletedKeys.forEach(k => next.delete(k));
+        return next;
+      });
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        deletedKeys.forEach(k => next.delete(k));
+        return next;
+      });
     } catch {
       alert('삭제 중 오류가 발생했습니다.');
     }
@@ -246,6 +263,83 @@ export default function CsDataFaqsPage() {
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
     alert(result.message);
+    fetchData(currentCursor);
+  };
+
+
+  // ── CSV 다운로드 ──
+  const handleCsvDownload = () => {
+    const escapeField = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return '"' + val.replace(/"/g, '""') + '"';
+      }
+      return val;
+    };
+
+    const headers = ['tenantId', 'tenantName', 'questions', 'answer', 'guide', 'topic', 'tags', 'handlerType', 'handler', 'rule', 'action_product', 'action'];
+    const rows = faqs.map(faq => [
+      faq.tenantId,
+      faq.tenantName || '',
+      (faq.questions || []).join(';'),
+      faq.answer || '',
+      faq.guide || '',
+      faq.topic || '',
+      (faq.tags || []).join(';'),
+      faq.handlerType || 'bot',
+      faq.handler || 'bot',
+      faq.rule || '',
+      faq.action_product || '',
+      faq.action || '',
+    ].map(escapeField).join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `faq_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── CSV 업로드 ──
+  const handleCsvUpload = async (rows: CsvRow[]) => {
+    let created = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      try {
+        const res = await fetch('/api/admin/cs-data/faqs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantIds: row.tenantIds,
+            questions: row.questions,
+            answer: row.answer,
+            guide: row.guide,
+            topic: row.topic,
+            tags: row.tags,
+            handlerType: row.handlerType,
+            handler: row.handler,
+            rule: row.rule,
+            action_product: row.action_product || null,
+            action: row.action || null,
+            skipExpander: true,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          created += data.created || 1;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+    }
+
+    alert(`CSV 업로드 완료: ${created}건 생성${failed > 0 ? `, ${failed}건 실패` : ''}`);
     fetchData(currentCursor);
   };
 
@@ -469,6 +563,21 @@ export default function CsDataFaqsPage() {
             </button>
           )}
           <button
+            onClick={handleCsvDownload}
+            disabled={faqs.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+            title="CSV 다운로드"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setCsvUploadOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            title="CSV 업로드"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => setAddModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
           >
@@ -511,14 +620,13 @@ export default function CsDataFaqsPage() {
               </optgroup>
               <optgroup label="topic 변경">
                 <option value="topic:매장/운영">매장/운영</option>
-                <option value="topic:공간/환경">공간/환경</option>
-                <option value="topic:좌석/룸">좌석/룸</option>
-                <option value="topic:시설/비품">시설/비품</option>
+                <option value="topic:시설/환경">시설/환경</option>
                 <option value="topic:상품/서비스">상품/서비스</option>
-                <option value="topic:정책/규정">정책/규정</option>
+                <option value="topic:예약/주문">예약/주문</option>
                 <option value="topic:결제/환불">결제/환불</option>
-                <option value="topic:문제/해결">문제/해결</option>
-                <option value="topic:혜택/이벤트">혜택/이벤트</option>
+                <option value="topic:회원/혜택">회원/혜택</option>
+                <option value="topic:기술/접속">기술/접속</option>
+                <option value="topic:제보/신고">제보/신고</option>
                 <option value="topic:기타">기타</option>
               </optgroup>
             </select>
@@ -552,6 +660,7 @@ export default function CsDataFaqsPage() {
         onSelectToggle={handleSelectToggle}
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
+        startIndex={(currentPage - 1) * PAGE_SIZE}
       />
 
       {/* 커서 기반 페이지네이션 */}
@@ -587,6 +696,13 @@ export default function CsDataFaqsPage() {
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onSubmit={handleAddFaq}
+        tenants={tenants}
+      />
+
+      <CsFaqCsvUploadModal
+        isOpen={csvUploadOpen}
+        onClose={() => setCsvUploadOpen(false)}
+        onUpload={handleCsvUpload}
         tenants={tenants}
       />
     </div>

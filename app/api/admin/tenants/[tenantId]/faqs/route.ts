@@ -199,6 +199,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     filteredUpdates.updatedBy = admin.adminId;
     filteredUpdates.vectorStatus = 'pending';  // 재동기화 필요 표시
 
+    // 패키지 소스 FAQ를 수동 편집하면 overridden 플래그 설정
+    const faqData = faqDoc.data();
+    if (faqData?.source === 'package' && !faqData?.overridden) {
+      filteredUpdates.overridden = true;
+    }
+
     await faqRef.update(filteredUpdates);
 
     // Weaviate 재동기화 트리거 (datapage API 호출)

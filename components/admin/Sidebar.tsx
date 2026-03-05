@@ -31,6 +31,8 @@ const prefetchMap: Record<string, string> = {
   '/admin/plans': '/api/admin/plans',
   '/admin/tenants': '/api/admin/tenants',
   '/admin/cs-data/faqs': '/api/admin/cs-data/faqs',
+  '/admin/cs-data/rules': '/api/admin/cs-data/rules',
+  '/admin/cs-data/packages': '/api/admin/cs-data/packages',
   '/admin/orders': '/api/admin/orders',
   '/admin/subscriptions': '/api/admin/subscriptions/list',
   '/admin/stats': '/api/admin/stats',
@@ -86,9 +88,15 @@ const menuItems = [
   },
   {
     name: 'CS 데이터',
-    href: '/admin/cs-data/faqs',
+    href: '/admin/cs-data',
     icon: DatabaseScript,
     permission: 'tenants:read',
+    children: [
+      { name: 'FAQ 관리', href: '/admin/cs-data/faqs' },
+      { name: '규정 관리', href: '/admin/cs-data/rules' },
+      { name: '패키지', href: '/admin/cs-data/packages' },
+      { name: '설정', href: '/admin/cs-data/settings' },
+    ],
   },
   {
     name: '결제',
@@ -196,30 +204,57 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         {/* 메뉴 */}
         <nav className={`p-2 space-y-1 px-4 ${collapsed ? 'lg:px-2' : ''}`}>
           {filteredMenuItems.map((item) => {
-            const isActive = pathname === item.href ||
-              (item.href !== '/admin' && pathname.startsWith(item.href));
+            const hasChildren = 'children' in item && Array.isArray((item as any).children);
+            const isActive = hasChildren
+              ? pathname.startsWith(item.href)
+              : (pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href)));
             const Icon = item.icon;
+            const defaultChildHref = hasChildren ? (item as any).children[0].href : item.href;
 
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                onMouseEnter={() => handlePrefetch(item.href)}
-                title={collapsed ? item.name : undefined}
-                className={`
-                  flex items-center gap-3 py-3 rounded-lg transition-colors px-4
-                  ${collapsed ? 'lg:justify-center lg:px-2' : ''}
-                  ${isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                  }
-                `}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {/* 메뉴 텍스트 - 모바일에서 항상 표시, 데스크톱에서는 펼침 모드일 때만 */}
-                <span className={`font-medium ${collapsed ? 'lg:hidden' : ''}`}>{item.name}</span>
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={defaultChildHref}
+                  onClick={onClose}
+                  onMouseEnter={() => handlePrefetch(defaultChildHref)}
+                  title={collapsed ? item.name : undefined}
+                  className={`
+                    flex items-center gap-3 py-3 rounded-lg transition-colors px-4
+                    ${collapsed ? 'lg:justify-center lg:px-2' : ''}
+                    ${isActive
+                      ? hasChildren ? 'bg-gray-800 text-white' : 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    }
+                  `}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className={`font-medium ${collapsed ? 'lg:hidden' : ''}`}>{item.name}</span>
+                </Link>
+                {hasChildren && isActive && !collapsed && (
+                  <div className="ml-8 mt-1 space-y-0.5">
+                    {(item as any).children.map((child: { name: string; href: string }) => {
+                      const childActive = pathname.startsWith(child.href);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={onClose}
+                          onMouseEnter={() => handlePrefetch(child.href)}
+                          className={`
+                            block py-2 px-3 rounded-md text-sm transition-colors
+                            ${childActive
+                              ? 'text-blue-400 bg-blue-600/10 font-medium'
+                              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
+                            }
+                          `}
+                        >
+                          {child.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

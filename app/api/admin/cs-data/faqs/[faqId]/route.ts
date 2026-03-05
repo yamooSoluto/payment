@@ -4,9 +4,9 @@ import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { addAdminLog } from '@/lib/admin-log';
 
 // ═══════════════════════════════════════════════════════════
-// 개별 FAQ 수정/삭제 API
+// 개별 FAQ 수정/��제 API
 // tenantId는 query parameter로 수신: ?tenantId=xxx
-// ═══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════��════════════
 
 interface RouteContext {
   params: Promise<{ faqId: string }>;
@@ -52,7 +52,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // 허용된 필드만 업데이트
     const allowedFields = [
-      'questions', 'answer', 'guide', 'keyData', 'handlerType', 'handler',
+      'questions', 'questionsRaw', 'answer', 'guide', 'keyData', 'handlerType', 'handler',
       'rule', 'tags', 'topic', 'tag_actions', 'action_product', 'action', 'isActive',
     ];
     const filteredUpdates: Record<string, unknown> = {};
@@ -65,6 +65,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     filteredUpdates.updatedAt = Date.now();
     filteredUpdates.updatedBy = admin.adminId;
     filteredUpdates.vectorStatus = 'pending';
+
+    // 패키지 소스 FAQ를 수동 편집하면 overridden 플래그 설정
+    const faqData = faqDoc.data();
+    if (faqData?.source === 'package' && !faqData?.overridden) {
+      filteredUpdates.overridden = true;
+    }
 
     await faqRef.update(filteredUpdates);
 

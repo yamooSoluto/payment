@@ -315,26 +315,43 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 변경사항 동기화 버튼 */}
+          {/* 변경사항 저장 버튼 */}
           {dirtyIds.size > 0 && (
             <button
               onClick={handleSyncDirty}
               disabled={syncingDirty}
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              <RefreshDouble className={`w-4 h-4 ${syncingDirty ? 'animate-spin' : ''}`} />
-              {syncingDirty ? '저장 중...' : `${dirtyIds.size}건 변경됨 — 동기화`}
+              {syncingDirty ? (
+                <RefreshDouble className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4" />
+              )}
+              {syncingDirty ? '저장 중...' : `${dirtyIds.size}건 변경됨 — 저장`}
             </button>
           )}
 
+          {/* 새로고침 */}
           <button
-            onClick={handleSyncAll}
-            disabled={syncing}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+            onClick={fetchData}
+            disabled={loading}
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            title="새로고침"
           >
-            <RefreshDouble className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            전체 동기화
+            <RefreshDouble className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {/* 전체 동기화 — 템플릿 탭에서만 표시 */}
+          {activeTab === 'templates' && (
+            <button
+              onClick={handleSyncAll}
+              disabled={syncing}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+            >
+              <RefreshDouble className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              전체 동기화
+            </button>
+          )}
         </div>
       </div>
 
