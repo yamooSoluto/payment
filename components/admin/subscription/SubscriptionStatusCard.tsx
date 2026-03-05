@@ -52,6 +52,10 @@ export default function SubscriptionStatusCard({
         return <span className={`${baseClass} bg-gray-100 text-gray-600`}>만료</span>;
       case 'none':
         return <span className={`${baseClass} bg-gray-100 text-gray-500`}>미구독</span>;
+      case 'past_due':
+        return <span className={`${baseClass} bg-red-100 text-red-600`}>결제 실패</span>;
+      case 'suspended':
+        return <span className={`${baseClass} bg-yellow-100 text-yellow-700`}>이용 정지</span>;
       default:
         return <span className={`${baseClass} bg-gray-100 text-gray-600`}>{status || '-'}</span>;
     }

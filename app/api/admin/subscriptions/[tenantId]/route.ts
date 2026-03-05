@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { handleSubscriptionChange } from '@/lib/subscription-history';
 
 const VALID_PLANS = ['trial', 'basic', 'business', 'enterprise'];
-const VALID_STATUSES = ['trial', 'active', 'canceled', 'past_due', 'expired'];
+const VALID_STATUSES = ['trial', 'trialing', 'active', 'pending_cancel', 'canceled', 'past_due', 'expired', 'suspended', 'none'];
 const PLAN_PRICES: Record<string, number> = {
   trial: 0,
   basic: 39000,
@@ -197,7 +197,7 @@ export async function PUT(
         changeType = 'cancel';
       } else if (status === 'expired') {
         changeType = 'expire';
-      } else if ((previousStatus === 'canceled' || previousStatus === 'expired') && status === 'active') {
+      } else if ((previousStatus === 'canceled' || previousStatus === 'expired' || previousStatus === 'past_due' || previousStatus === 'suspended') && status === 'active') {
         changeType = 'reactivate';
       }
 
