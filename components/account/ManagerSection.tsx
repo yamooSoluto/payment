@@ -123,12 +123,9 @@ export default function ManagerSection({ tenants }: ManagerSectionProps) {
                           {m.name}
                           <span className="ml-2 text-sm font-normal text-gray-400">@{m.loginId}</span>
                         </p>
-                        <p className="text-xs text-gray-400">
-                          {m.tenants.length}개 매장
-                          {!m.active && (
-                            <span className="ml-2 px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-xs">비활성</span>
-                          )}
-                        </p>
+                        {!m.active && (
+                          <p className="text-xs"><span className="px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-xs">비활성</span></p>
+                        )}
                       </div>
                     </div>
                   </div>
