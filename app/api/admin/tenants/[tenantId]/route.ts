@@ -72,7 +72,21 @@ export async function GET(
       return NextResponse.json({ error: '매장을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const tenant = convertTimestamps(tenantDoc.data() || {});
+    const tenantRaw = tenantDoc.data() || {};
+
+    // users 컬렉션에서 최신 name/phone 조회 (소유자 이전 후 동기화)
+    let ownerName = tenantRaw.name || tenantRaw.ownerName || '';
+    let ownerPhone = tenantRaw.phone || '';
+    if (tenantRaw.email) {
+      const userDoc = await db.collection('users').doc((tenantRaw.email as string).toLowerCase()).get();
+      if (userDoc.exists) {
+        const ud = userDoc.data()!;
+        ownerName = ud.name || ownerName;
+        ownerPhone = ud.phone || ownerPhone;
+      }
+    }
+
+    const tenant = convertTimestamps({ ...tenantRaw, name: ownerName, phone: ownerPhone });
 
     let subscription = null;
     if (subscriptionDoc.exists) {
