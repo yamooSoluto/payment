@@ -10,7 +10,7 @@ import CsFaqCsvUploadModal, { type CsvRow } from '@/components/admin/cs-data/CsF
 
 // ═══════════════════════════════════════════════════════════
 // 타입 (TenantOption은 CsFaqTable에서 import)
-// ════════════════════════════════════════��══════════════════
+// ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
 // 메인 페이지
@@ -235,7 +235,7 @@ export default function CsDataFaqsPage() {
       if (failed > 0) {
         alert(`${tenantCount}건 중 ${failed}건 삭제 실패`);
       }
-      // 삭제된 문서 로컬���서 제거
+      // 삭제된 문서 로컬에서 제거
       const deletedKeys = new Set(linkedFaqs.map(f => faqKey(f)));
       setFaqs(prev => prev.filter(f => !deletedKeys.has(faqKey(f))));
       setDirtyIds(prev => {
@@ -449,7 +449,7 @@ export default function CsDataFaqsPage() {
     if (selectedFaqs.length === 0) return;
 
     if (action === 'delete') {
-      if (!confirm(`${selectedFaqs.length}건의 FAQ���� 삭��하시겠습니까?`)) return;
+      if (!confirm(`${selectedFaqs.length}건의 FAQ를 삭제하시겠습니까?`)) return;
       const results = await Promise.all(
         selectedFaqs.map(faq =>
           fetch(`/api/admin/cs-data/faqs/${faq.id}?tenantId=${faq.tenantId}`, { method: 'DELETE' })

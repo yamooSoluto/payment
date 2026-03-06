@@ -4,12 +4,65 @@ import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { addAdminLog } from '@/lib/admin-log';
 
 // ═══════════════════════════════════════════════════════════
-// 개별 FAQ 수정/��제 API
+// 개별 FAQ 수정/삭제 API
 // tenantId는 query parameter로 수신: ?tenantId=xxx
-// ══════════════════════════════════════════════��════════════
+// ════════════════════════════════════════════════════════════
 
 interface RouteContext {
   params: Promise<{ faqId: string }>;
+}
+
+// GET: 개별 FAQ 조회 (참조 데이터 사이드패널용)
+export async function GET(request: NextRequest, context: RouteContext) {
+  try {
+    const admin = await getAdminFromRequest(request);
+    const { faqId } = await context.params;
+
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!hasPermission(admin, 'tenants:read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const tenantId = searchParams.get('tenantId');
+    if (!tenantId) {
+      return NextResponse.json({ error: 'tenantId query parameter is required' }, { status: 400 });
+    }
+
+    const db = initializeFirebaseAdmin();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+    }
+
+    const faqDoc = await db.collection('tenants').doc(tenantId).collection('faqs').doc(faqId).get();
+    if (!faqDoc.exists) {
+      return NextResponse.json({ error: 'FAQ not found' }, { status: 404 });
+    }
+
+    const data = faqDoc.data()!;
+    return NextResponse.json({
+      faq: {
+        id: faqDoc.id,
+        tenantId,
+        questions: data.questions || [],
+        questionsRaw: data.questionsRaw || [],
+        answer: data.answer || '',
+        answerRaw: data.answerRaw || '',
+        guide: data.guide || '',
+        topic: data.topic || '',
+        tags: data.tags || [],
+        handlerType: data.handlerType || 'bot',
+        handler: data.handler || 'bot',
+        source: data.source || 'manual',
+        isActive: data.isActive !== false,
+      },
+    });
+  } catch (error: any) {
+    console.error('[faq GET detail]', error);
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
+  }
 }
 
 // PATCH: FAQ 수정 + Weaviate 동기화

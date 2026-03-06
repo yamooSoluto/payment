@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
         store: data.store || ['공통'],
         label: data.label || '',
         content: data.content || '',
+        category: data.category || '',
+        tags: data.tags || [],
         linkedFaqIds: data.linkedFaqIds || [],
         linkedPackageIds: data.linkedPackageIds || [],
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
       rules = rules.filter((r: any) => r.store.includes(storeFilter));
     }
 
-    // JS ���렬: 플랫폼 → 라벨
+    // JS 정렬: 플랫폼 → 라벨
     rules.sort((a: any, b: any) => a.platform.localeCompare(b.platform) || a.label.localeCompare(b.label));
 
     // JS 필터: 텍스트 검색
@@ -69,7 +71,9 @@ export async function GET(request: NextRequest) {
       rules = rules.filter((r: any) =>
         r.label.toLowerCase().includes(q) ||
         r.content.toLowerCase().includes(q) ||
-        r.id.toLowerCase().includes(q)
+        r.id.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q) ||
+        r.tags.some((t: string) => t.toLowerCase().includes(q))
       );
     }
 
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, platform, store, label, content } = body;
+    const { id, platform, store, label, content, category, tags } = body;
 
     // 유효성 검증
     if (!id || !label || !content) {
@@ -120,6 +124,8 @@ export async function POST(request: NextRequest) {
       store: Array.isArray(store) ? store : ['공통'],
       label,
       content,
+      category: category || '',
+      tags: Array.isArray(tags) ? tags : [],
       linkedFaqIds: [],
       linkedPackageIds: [],
       createdAt: now,

@@ -5,7 +5,7 @@ import { Plus, Trash, Xmark, Check } from 'iconoir-react';
 
 // ═══════════════════════════════════════════════════════════
 // 타입
-// ═══════════════════════════════════════════════════════��═══
+// ════════════════════════════════════════════════════════════
 
 interface FaqTemplate {
   id: string;
@@ -415,7 +415,7 @@ export default function PackageFaqTab({ faqTemplates, onUpdateTemplates, applied
                                 onClick={e => { e.stopPropagation(); handleAddQuestion(t.id); }}
                                 className="text-xs text-blue-500 hover:text-blue-700"
                               >
-                                + ���문 추가
+                                + 질문 추가
                               </button>
                             </div>
 

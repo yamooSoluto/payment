@@ -83,7 +83,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="h-screen bg-gray-100 flex overflow-hidden">
       {/* 사이드바 */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -93,7 +93,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       />
 
       {/* 메인 컨텐츠 */}
-      <div className="flex-1 flex flex-col min-h-screen lg:ml-0 min-w-0">
+      <div className="flex-1 flex flex-col lg:ml-0 min-w-0 overflow-hidden">
         {/* 헤더 */}
         <AdminHeader onMenuClick={() => setSidebarOpen(true)} />
 

@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       platforms: data.platforms || ['스터디모아', '네이버예약'],
       services: data.services || ['좌석', '룸', '락커', '매점', '프린터'],
       customRequests: data.customRequests || [],
+      ruleCategories: data.ruleCategories || [],
     });
   } catch (error: any) {
     console.error('[cs-data settings GET]', error);
@@ -69,6 +70,11 @@ export async function PATCH(request: NextRequest) {
     // 커스텀 요청 제거 (승격 또는 무시 시)
     if (Array.isArray(body.customRequests)) {
       updates.customRequests = body.customRequests;
+    }
+
+    // 규정 분류 옵션
+    if (Array.isArray(body.ruleCategories)) {
+      updates.ruleCategories = body.ruleCategories.filter((c: any) => typeof c === 'string' && c.trim());
     }
 
     if (Object.keys(updates).length === 0) {

@@ -446,7 +446,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                               {source.type === 'storeinfo' ? (
                                 <>📍 매장정보: {source.sectionIds?.map(s => STOREINFO_SECTIONS[s]?.label || s).join(', ')}</>
                               ) : (
-                                <>���� {TOPICS[source.topic || '']?.name || source.topic}: {source.facets?.map(f => FACETS[f]?.label || f).join(', ')}</>
+                                <>📋 {TOPICS[source.topic || '']?.name || source.topic}: {source.facets?.map(f => FACETS[f]?.label || f).join(', ')}</>
                               )}
                             </div>
                           ))}

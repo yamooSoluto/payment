@@ -5,7 +5,7 @@ import { addAdminLog } from '@/lib/admin-log';
 
 // ═══════════════════════════════════════════════════════════
 // 규정 개별 API — PATCH(수정) + DELETE(삭제)
-// ═════════════════════════���═════════════════════════════════
+// ═════════════════════════════════════════════════════════════
 
 // PATCH: 규정 수정
 export async function PATCH(
@@ -28,7 +28,7 @@ export async function PATCH(
 
     const { ruleId } = await params;
     const body = await request.json();
-    const { label, content, platform, store, syncLinkedFaqs } = body;
+    const { label, content, platform, store, category, tags, syncLinkedFaqs } = body;
 
     const rulesRef = db.collection('admin').doc('cs-data').collection('rules');
     const ruleDoc = await rulesRef.doc(ruleId).get();
@@ -45,6 +45,8 @@ export async function PATCH(
     if (content !== undefined) updates.content = content;
     if (platform !== undefined) updates.platform = platform;
     if (store !== undefined) updates.store = store;
+    if (category !== undefined) updates.category = category;
+    if (tags !== undefined) updates.tags = tags;
 
     await rulesRef.doc(ruleId).update(updates);
 
@@ -103,6 +105,8 @@ export async function PATCH(
         store: updatedData.store || ['공통'],
         label: updatedData.label,
         content: updatedData.content,
+        category: updatedData.category || '',
+        tags: updatedData.tags || [],
         linkedFaqIds: updatedData.linkedFaqIds || [],
         linkedPackageIds: updatedData.linkedPackageIds || [],
         createdAt: updatedData.createdAt?.toDate?.()?.toISOString() || null,

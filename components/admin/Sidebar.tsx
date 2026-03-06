@@ -93,7 +93,7 @@ const menuItems = [
     permission: 'tenants:read',
     children: [
       { name: 'FAQ 관리', href: '/admin/cs-data/faqs' },
-      { name: '규정 관리', href: '/admin/cs-data/rules' },
+      { name: '참조 데이터', href: '/admin/cs-data/rules' },
       { name: '패키지', href: '/admin/cs-data/packages' },
       { name: '설정', href: '/admin/cs-data/settings' },
     ],
@@ -159,8 +159,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       {/* 사이드바 */}
       <aside
         className={`
-          fixed top-0 left-0 z-50 bg-gray-900 transform transition-all duration-200 ease-in-out
-          lg:translate-x-0 lg:sticky lg:z-auto lg:top-0 lg:h-screen
+          fixed top-0 left-0 z-50 bg-gray-900 transform transition-all duration-200 ease-in-out flex flex-col flex-shrink-0
+          lg:translate-x-0 lg:relative lg:z-auto
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           w-56 ${collapsed ? 'lg:w-16' : 'lg:w-56'}
         `}
@@ -202,7 +202,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         </div>
 
         {/* 메뉴 */}
-        <nav className={`p-2 space-y-1 px-4 ${collapsed ? 'lg:px-2' : ''}`}>
+        <nav className={`flex-1 overflow-y-auto p-2 space-y-1 pb-20 px-4 ${collapsed ? 'lg:px-2' : ''}`}>
           {filteredMenuItems.map((item) => {
             const hasChildren = 'children' in item && Array.isArray((item as any).children);
             const isActive = hasChildren
