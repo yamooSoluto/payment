@@ -23,7 +23,7 @@ export async function PATCH(
   try {
     const { id, tenantId } = await params;
     const body = await request.json();
-    const { permissions } = body as { permissions: ManagerPermissions };
+    const { permissions, canDelete } = body as { permissions: ManagerPermissions; canDelete?: boolean };
 
     // 내 매장인지 검증
     const myTenantIds = await getMasterTenantIds(masterEmail);
@@ -31,7 +31,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await updateManagerTenantPermissions(id, tenantId, permissions);
+    await updateManagerTenantPermissions(id, tenantId, permissions, canDelete);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update permissions';

@@ -17,12 +17,6 @@ interface ManagerFormProps {
   onClose: () => void;
 }
 
-const LEVEL_LABELS: Record<PermissionLevel, string> = {
-  hidden: '숨김',
-  read: '조회',
-  write: '편집',
-};
-
 export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerFormProps) {
   const [tenantAccess, setTenantAccess] = useState<Record<string, boolean>>({});
   const [tenantPerms, setTenantPerms] = useState<Record<string, ManagerPermissions>>(() => {
@@ -32,6 +26,8 @@ export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerForm
     });
     return map;
   });
+
+  const [tenantCanDelete, setTenantCanDelete] = useState<Record<string, boolean>>({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -64,6 +60,7 @@ export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerForm
       .map(t => ({
         tenantId: t.tenantId,
         permissions: tenantPerms[t.tenantId] ?? { ...DEFAULT_PERMISSIONS },
+        canDelete: tenantCanDelete[t.tenantId] ?? false,
       }));
 
     if (selectedTenants.length === 0) {
@@ -166,34 +163,43 @@ export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerForm
                         <div className="px-4 pb-3 pt-2 space-y-2.5">
                           {PERMISSION_SECTIONS.map(section => {
                             const current = tenantPerms[tenant.tenantId]?.[section.key] ?? 'hidden';
+                            const isVisible = current !== 'hidden';
                             return (
                               <div key={section.key} className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                   <span className="text-xs font-medium text-gray-700">{section.label}</span>
                                 </div>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  {(['hidden', 'read', 'write'] as PermissionLevel[]).map(level => (
-                                    <button
-                                      key={level}
-                                      type="button"
-                                      onClick={() => setPermission(tenant.tenantId, section.key, level)}
-                                      className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
-                                        current === level
-                                          ? level === 'hidden'
-                                            ? 'bg-gray-200 text-gray-700 font-medium'
-                                            : level === 'read'
-                                            ? 'bg-blue-100 text-blue-700 font-medium'
-                                            : 'bg-yamoo-primary text-white font-medium'
-                                          : 'text-gray-400 hover:bg-gray-100'
-                                      }`}
-                                    >
-                                      {LEVEL_LABELS[level]}
-                                    </button>
-                                  ))}
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setPermission(tenant.tenantId, section.key, isVisible ? 'hidden' : 'read')}
+                                  className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                                    isVisible
+                                      ? 'bg-blue-100 text-blue-700 font-medium'
+                                      : 'bg-gray-200 text-gray-700 font-medium'
+                                  }`}
+                                >
+                                  {isVisible ? '허용' : '숨김'}
+                                </button>
                               </div>
                             );
                           })}
+                          <div className="flex items-center justify-between gap-3 pt-1 border-t border-gray-100">
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium text-gray-700">삭제 권한</span>
+                              <p className="text-[11px] text-gray-400">대화, FAQ, 업무, 라이브러리 삭제</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setTenantCanDelete(prev => ({ ...prev, [tenant.tenantId]: !prev[tenant.tenantId] }))}
+                              className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                                tenantCanDelete[tenant.tenantId]
+                                  ? 'bg-red-100 text-red-700 font-medium'
+                                  : 'bg-gray-200 text-gray-700 font-medium'
+                              }`}
+                            >
+                              {tenantCanDelete[tenant.tenantId] ? '허용' : '불가'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

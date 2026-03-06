@@ -13,6 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 export interface ManagerTenantAccess {
   tenantId: string;
   permissions: ManagerPermissions;
+  canDelete?: boolean; // 삭제 권한 (기본 false)
 }
 
 export interface Manager {
@@ -409,7 +410,8 @@ export async function removeManagerFromTenant(
 export async function updateManagerTenantPermissions(
   managerId: string,
   tenantId: string,
-  permissions: ManagerPermissions
+  permissions: ManagerPermissions,
+  canDelete?: boolean
 ): Promise<void> {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
@@ -422,7 +424,7 @@ export async function updateManagerTenantPermissions(
   const idx = tenants.findIndex(t => t.tenantId === tenantId);
   if (idx === -1) throw new Error('Manager not linked to this tenant');
 
-  tenants[idx] = { tenantId, permissions };
+  tenants[idx] = { ...tenants[idx], tenantId, permissions, canDelete: canDelete ?? false };
 
   await db.collection('users_managers').doc(managerId).update({
     tenants,
