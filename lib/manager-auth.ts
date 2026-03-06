@@ -137,6 +137,7 @@ export async function registerManager(data: {
     active: true,
     tenants: [],
     tenantIds: [],
+    agreedToTermsAt: now,
     createdAt: now,
     updatedAt: now,
   };

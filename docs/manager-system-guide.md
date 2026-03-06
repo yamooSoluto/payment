@@ -42,6 +42,21 @@
 
 → `masterEmail` 필드 삭제됨. `session.masterEmail` 참조하는 코드 모두 제거 필요.
 
+### 1-1. 포탈 로그인 페이지 UI 구분
+
+포탈 로그인 페이지에서 마스터/매니저 탭을 분리하여 혼동 방지:
+
+| 구분 | 마스터 탭 | 매니저 탭 |
+|------|----------|----------|
+| 로그인 | O (이메일 + 비밀번호) | O (아이디 + 비밀번호) |
+| 아이디 찾기 | X (홈페이지 안내 링크) | O (SMS 인증) |
+| 비밀번호 찾기 | X (홈페이지 안내 링크) | O (SMS 인증) |
+| 회원가입 | X (홈페이지 안내 링크) | O |
+
+> **SMS 인증:** 포탈에서 yamoo-payment의 `/api/auth/sms-verify` API를 호출하는 방식. SMS 관련 환경변수는 yamoo-payment 서버에만 있으면 됨 (포탈에 별도 추가 불필요).
+
+> **마스터 안내:** 마스터 탭의 아이디/비밀번호 찾기에는 "홈페이지에서 찾기" 링크를 표시하여 홈페이지로 안내.
+
 ### 2. 세션 조회 응답 변경 (GET /api/auth/manager-session)
 
 `masterEmail` 필드 삭제됨.
@@ -156,6 +171,30 @@ const email = session.masterEmail;
 
 **수락 후 리다이렉트:** 수락 완료 시 해당 매장 채널 페이지로 자동 이동 (예: `/store/{tenantId}`)
 
+### 8. 어드민 매니저(ad_) 포탈 접근 권한 수정
+
+현재 어드민 생성 매니저(ad_)는 `masterEmail: null`이라 포탈에서 데이터가 제대로 안 보임.
+
+**문제:**
+- 매니저 목록 API가 `masterEmail` 기준 조회 → ad_ 매니저는 결과 없음
+- `accounts: hidden`이면 ManagerSection 통째로 안 보임
+- 결제/구독 차단 로직 없이 전체가 안 보이는 상태
+
+**수정 방향:**
+- [ ] 매니저 목록 조회: `masterEmail` → `tenantIds` 기반으로 변경
+- [ ] 어드민 매니저도 매장 운영 관련 페이지 접근 가능하게 (대화, 데이터, 통계, 매니저 목록)
+- [ ] 결제/구독/플랜 변경 등 민감 정보는 어드민 매니저 접근 차단 (`ad_` prefix 체크)
+- [ ] `settings.email` 조건 완화 (어드민 매니저는 email 없을 수 있음)
+
+**권한 원칙:**
+| 영역 | 마스터 | 일반 매니저 | 어드민 매니저(ad_) |
+|------|--------|-----------|-----------------|
+| 대화/데이터/통계 | O | 권한에 따라 | O (전체) |
+| 매니저 목록 조회 | O | accounts 권한 | O |
+| 매니저 초대/내보내기 | O | X | X |
+| 결제/구독/플랜 관리 | O | X | X (차단) |
+| 계정 정보 수정 | O | 본인만 | X |
+
 ---
 
 ## 대시보드 변경사항
@@ -258,6 +297,46 @@ const snapshot = await db.collection('users_managers')
 | POST /api/managers | registerManager API로 대체 |
 | PATCH /api/managers/{id} | 분리된 API로 대체 (profile, tenants) |
 | DELETE /api/managers/{id} | 계정삭제/내보내기로 분리 |
+
+---
+
+## 서버 간 인증 (INTERNAL_API_KEY)
+
+포탈에서 yamoo-payment API를 프록시 호출할 때 서버 간 인증이 필요한 API:
+
+| API | 인증 방식 |
+|-----|----------|
+| POST /api/managers/invite | 쿠키(`auth_session`) 또는 `x-internal-key` + `x-master-email` 헤더 |
+
+**설정:**
+- yamoo-payment `.env.local`: `INTERNAL_API_KEY=<랜덤 시크릿>`
+- 포탈 `.env.local`: `INTERNAL_API_KEY=<동일한 시크릿>`
+
+**포탈 프록시 호출 시:**
+```javascript
+await fetch(`${PAYMENT_API}/api/managers/invite`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-master-email': email,
+    'x-internal-key': process.env.INTERNAL_API_KEY,
+  },
+  body: JSON.stringify(req.body),
+});
+```
+
+---
+
+## 약관 동의 기록
+
+회원가입 시 `agreedToTermsAt` 필드가 자동 저장됨:
+
+| 대상 | 컬렉션 | 필드 |
+|------|--------|------|
+| 마스터 | `users` | `agreedToTermsAt: Date` |
+| 매니저 | `users_managers` | `agreedToTermsAt: Date` |
+
+> 재가입 시 마스터는 최초 동의 시각 유지 (`existingData?.agreedToTermsAt || now`).
 
 ---
 
