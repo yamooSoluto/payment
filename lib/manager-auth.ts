@@ -528,14 +528,13 @@ async function createDashboardLinkIfStoreExists(
 }
 
 // -----------------------------------------------
-// 아이디 찾기 (이름 + 전화번호)
+// 아이디 찾기 (전화번호)
 // -----------------------------------------------
-export async function findManagerLoginId(name: string, phone: string) {
+export async function findManagerLoginId(phone: string) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
 
   const snapshot = await db.collection('users_managers')
-    .where('name', '==', name)
     .where('phone', '==', phone)
     .where('active', '==', true)
     .get();
@@ -554,15 +553,14 @@ export async function findManagerLoginId(name: string, phone: string) {
 }
 
 // -----------------------------------------------
-// 비밀번호 재설정 (loginId + 이름 + 전화번호 확인)
+// 비밀번호 재설정 (loginId + 전화번호 확인)
 // -----------------------------------------------
-export async function resetManagerPassword(loginId: string, name: string, phone: string, newPassword: string) {
+export async function resetManagerPassword(loginId: string, phone: string, newPassword: string) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) throw new Error('Database unavailable');
 
   const snapshot = await db.collection('users_managers')
     .where('loginId', '==', loginId)
-    .where('name', '==', name)
     .where('phone', '==', phone)
     .where('active', '==', true)
     .limit(1)

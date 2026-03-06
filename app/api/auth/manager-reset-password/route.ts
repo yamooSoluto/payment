@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resetManagerPassword } from '@/lib/manager-auth';
 
-// POST: 매니저 비밀번호 재설정 (loginId + 이름 + 전화번호 확인)
+// POST: 매니저 비밀번호 재설정 (loginId + 전화번호 확인)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { loginId, name, phone, newPassword, phoneVerified } = body;
+    const { loginId, phone, newPassword, phoneVerified } = body;
 
-    if (!loginId || !name || !phone || !newPassword) {
+    if (!loginId || !phone || !newPassword) {
       return NextResponse.json({ error: '모든 항목을 입력해주세요.' }, { status: 400 });
     }
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '비밀번호는 6자 이상, 특수기호를 포함해야 합니다.' }, { status: 400 });
     }
 
-    await resetManagerPassword(loginId, name, phone, newPassword);
+    await resetManagerPassword(loginId, phone, newPassword);
 
     return NextResponse.json({ success: true });
   } catch (error) {

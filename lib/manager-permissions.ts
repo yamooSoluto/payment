@@ -18,7 +18,7 @@ export const PERMISSION_SECTIONS: PermissionSection[] = [
 
 export type ManagerPermissions = Record<string, PermissionLevel>;
 
-// 신규 매니저 생성 시 기본값 (모두 hidden)
+// 신규 매니저 생성 시 기본값 (모두 read/뷰어)
 export const DEFAULT_PERMISSIONS: ManagerPermissions = Object.fromEntries(
-  PERMISSION_SECTIONS.map(s => [s.key, 'hidden' as PermissionLevel])
+  PERMISSION_SECTIONS.map(s => [s.key, 'read' as PermissionLevel])
 );
