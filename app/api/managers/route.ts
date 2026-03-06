@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       phone: m.phone,
       slackUserId: m.slackUserId,
       active: m.active,
+      createdByAdmin: m.createdByAdmin || false,
       tenants: m.tenants,
       createdAt: m.createdAt.toISOString(),
       updatedAt: m.updatedAt.toISOString(),

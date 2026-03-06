@@ -24,6 +24,7 @@ export interface Manager {
   linkedUserId?: string;
   active: boolean;
   tenants: ManagerTenantAccess[];
+  createdByAdmin?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -93,6 +94,7 @@ function docToManager(data: FirebaseFirestore.DocumentData): Manager {
     linkedUserId: data.linkedUserId,
     active: data.active,
     tenants: data.tenants || [],
+    createdByAdmin: data.createdByAdmin || false,
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
   };
@@ -521,6 +523,58 @@ async function createDashboardLinkIfStoreExists(
     storeId,
     staffPermissions: {},
     createdAt: new Date(),
+  });
+}
+
+// -----------------------------------------------
+// 아이디 찾기 (이름 + 전화번호)
+// -----------------------------------------------
+export async function findManagerLoginId(name: string, phone: string) {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const snapshot = await db.collection('users_managers')
+    .where('name', '==', name)
+    .where('phone', '==', phone)
+    .where('active', '==', true)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  return snapshot.docs.map(doc => {
+    const data = doc.data();
+    const loginId = data.loginId;
+    // 아이디 일부 마스킹: 앞 2자 + ***
+    const masked = loginId.length > 2
+      ? loginId.substring(0, 2) + '*'.repeat(loginId.length - 2)
+      : loginId;
+    return { loginId, maskedLoginId: masked };
+  });
+}
+
+// -----------------------------------------------
+// 비밀번호 재설정 (loginId + 이름 + 전화번호 확인)
+// -----------------------------------------------
+export async function resetManagerPassword(loginId: string, name: string, phone: string, newPassword: string) {
+  const db = adminDb || initializeFirebaseAdmin();
+  if (!db) throw new Error('Database unavailable');
+
+  const snapshot = await db.collection('users_managers')
+    .where('loginId', '==', loginId)
+    .where('name', '==', name)
+    .where('phone', '==', phone)
+    .where('active', '==', true)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) throw new Error('No matching account');
+
+  const doc = snapshot.docs[0];
+  const passwordHash = bcrypt.hashSync(newPassword, SALT_ROUNDS);
+
+  await db.collection('users_managers').doc(doc.id).update({
+    passwordHash,
+    updatedAt: new Date(),
   });
 }
 

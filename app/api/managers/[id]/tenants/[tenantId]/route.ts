@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth-session';
-import { getMasterTenantIds, updateManagerTenantPermissions, removeManagerFromTenant } from '@/lib/manager-auth';
+import { getMasterTenantIds, updateManagerTenantPermissions, removeManagerFromTenant, getManagerById } from '@/lib/manager-auth';
 import type { ManagerPermissions } from '@/lib/manager-permissions';
 
 async function getMasterEmail(request: NextRequest): Promise<string | null> {
@@ -57,6 +57,15 @@ export async function DELETE(
     const myTenantIds = await getMasterTenantIds(masterEmail);
     if (!myTenantIds.includes(tenantId)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // 어드민이 생성한 관리자 계정은 마스터가 내보내기 불가
+    const manager = await getManagerById(id, myTenantIds);
+    if (!manager) {
+      return NextResponse.json({ error: 'Manager not found' }, { status: 404 });
+    }
+    if (manager.createdByAdmin) {
+      return NextResponse.json({ error: '관리자가 생성한 계정은 내보낼 수 없습니다.' }, { status: 403 });
     }
 
     await removeManagerFromTenant(id, tenantId);

@@ -5,10 +5,18 @@ import { registerManager } from '@/lib/manager-auth';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { loginId, password, name, phone } = body;
+    const { loginId, password, name, phone, agreedToTerms, phoneVerified } = body;
 
-    if (!loginId || !password || !name) {
-      return NextResponse.json({ error: 'loginId, password, name required' }, { status: 400 });
+    if (!loginId || !password || !name || !phone) {
+      return NextResponse.json({ error: 'loginId, password, name, phone required' }, { status: 400 });
+    }
+
+    if (!phoneVerified) {
+      return NextResponse.json({ error: '전화번호 인증이 필요합니다.' }, { status: 400 });
+    }
+
+    if (!agreedToTerms) {
+      return NextResponse.json({ error: '이용약관 및 개인정보처리방침에 동의해주세요.' }, { status: 400 });
     }
 
     if (loginId.includes('@')) {

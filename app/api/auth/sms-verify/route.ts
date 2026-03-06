@@ -65,6 +65,22 @@ export async function POST(request: Request) {
         }
       }
 
+      // 매니저 회원가입일 경우 매니저 전화번호 중복 확인
+      if (purpose === 'manager-signup') {
+        const existingManager = await db.collection('users_managers')
+          .where('phone', '==', normalizedPhone)
+          .where('active', '==', true)
+          .limit(1)
+          .get();
+
+        if (!existingManager.empty) {
+          return NextResponse.json(
+            { error: '이미 사용 중인 연락처입니다.' },
+            { status: 400 }
+          );
+        }
+      }
+
       // 아이디 찾기/비밀번호 찾기일 경우 가입된 번호인지 확인
       if (purpose === 'find-id' || purpose === 'reset-password') {
         const [existingUser, existingTenant] = await Promise.all([
@@ -73,6 +89,22 @@ export async function POST(request: Request) {
         ]);
 
         if (existingUser.empty && existingTenant.empty) {
+          return NextResponse.json(
+            { error: '등록되지 않은 연락처입니다.' },
+            { status: 400 }
+          );
+        }
+      }
+
+      // 매니저 아이디 찾기/비밀번호 찾기일 경우 매니저 전화번호 확인
+      if (purpose === 'manager-find-id' || purpose === 'manager-reset-password') {
+        const existingManager = await db.collection('users_managers')
+          .where('phone', '==', normalizedPhone)
+          .where('active', '==', true)
+          .limit(1)
+          .get();
+
+        if (existingManager.empty) {
           return NextResponse.json(
             { error: '등록되지 않은 연락처입니다.' },
             { status: 400 }

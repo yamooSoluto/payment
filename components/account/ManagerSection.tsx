@@ -17,6 +17,7 @@ interface ManagerData {
   name: string;
   phone?: string;
   active: boolean;
+  createdByAdmin?: boolean;
   tenants: ManagerTenantAccess[];
   createdAt: string;
   updatedAt: string;
@@ -139,30 +140,32 @@ export default function ManagerSection({ tenants }: ManagerSectionProps) {
                           return (
                             <div key={t.tenantId} className="flex items-center justify-between text-xs">
                               <span className="text-gray-500">{tenantInfo?.brandName || t.tenantId}</span>
-                              {isConfirming ? (
-                                <div className="flex items-center gap-1">
+                              {!m.createdByAdmin && (
+                                isConfirming ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => handleRemoveFromTenant(m.managerId, t.tenantId)}
+                                      disabled={removeLoading}
+                                      className="px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                                    >
+                                      해제
+                                    </button>
+                                    <button
+                                      onClick={() => setRemoveConfirm(null)}
+                                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                    >
+                                      취소
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
-                                    onClick={() => handleRemoveFromTenant(m.managerId, t.tenantId)}
-                                    disabled={removeLoading}
-                                    className="px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                                    onClick={() => setRemoveConfirm({ managerId: m.managerId, tenantId: t.tenantId })}
+                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                    title="내보내기"
                                   >
-                                    해제
+                                    <Trash className="w-3.5 h-3.5" />
                                   </button>
-                                  <button
-                                    onClick={() => setRemoveConfirm(null)}
-                                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                                  >
-                                    취소
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => setRemoveConfirm({ managerId: m.managerId, tenantId: t.tenantId })}
-                                  className="text-gray-400 hover:text-red-500 transition-colors"
-                                  title="초대 해제"
-                                >
-                                  <Trash className="w-3.5 h-3.5" />
-                                </button>
+                                )
                               )}
                             </div>
                           );
