@@ -171,14 +171,16 @@ export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerForm
                                 </div>
                                 <button
                                   type="button"
+                                  role="switch"
+                                  aria-checked={isVisible}
                                   onClick={() => setPermission(tenant.tenantId, section.key, isVisible ? 'hidden' : 'read')}
-                                  className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
-                                    isVisible
-                                      ? 'bg-blue-100 text-blue-700 font-medium'
-                                      : 'bg-gray-200 text-gray-700 font-medium'
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                    isVisible ? 'bg-blue-500' : 'bg-gray-300'
                                   }`}
                                 >
-                                  {isVisible ? '허용' : '숨김'}
+                                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                    isVisible ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                                  }`} />
                                 </button>
                               </div>
                             );
@@ -190,14 +192,16 @@ export default function ManagerForm({ tenants, onSuccess, onClose }: ManagerForm
                             </div>
                             <button
                               type="button"
+                              role="switch"
+                              aria-checked={!!tenantCanDelete[tenant.tenantId]}
                               onClick={() => setTenantCanDelete(prev => ({ ...prev, [tenant.tenantId]: !prev[tenant.tenantId] }))}
-                              className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
-                                tenantCanDelete[tenant.tenantId]
-                                  ? 'bg-red-100 text-red-700 font-medium'
-                                  : 'bg-gray-200 text-gray-700 font-medium'
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
+                                tenantCanDelete[tenant.tenantId] ? 'bg-red-500' : 'bg-gray-300'
                               }`}
                             >
-                              {tenantCanDelete[tenant.tenantId] ? '허용' : '불가'}
+                              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                tenantCanDelete[tenant.tenantId] ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                              }`} />
                             </button>
                           </div>
                         </div>
