@@ -284,7 +284,7 @@ export default function ManagerSection({ tenants }: ManagerSectionProps) {
                                       <div key={sec.key} className="flex items-center justify-between">
                                         <span className="text-xs text-gray-600">{sec.label}</span>
                                         <div className="flex items-center gap-2">
-                                          <span className={`text-[11px] ${isVisible ? 'text-blue-500' : 'text-gray-400'}`}>{isVisible ? '조회' : '숨김'}</span>
+                                          <span className={`text-[11px] ${isVisible ? 'text-blue-500' : 'text-gray-400'}`}>{isVisible ? '허용' : '숨김'}</span>
                                         <button
                                           type="button"
                                           role="switch"
@@ -302,47 +302,57 @@ export default function ManagerSection({ tenants }: ManagerSectionProps) {
                                       </div>
                                     );
                                   })}
-                                  {/* 매니저 관리 권한 */}
-                                  <div className="flex items-center justify-between pt-2 mt-1 border-t border-gray-200">
-                                    <span className="text-xs text-gray-600">{MANAGER_ADMIN_PERMISSION.label}</span>
-                                    <div className="flex gap-1">
-                                      {(['hidden', 'read', 'write'] as PermissionLevel[]).map(level => (
+                                  {/* 삭제 권한 + 매니저 관리 */}
+                                  <div className="pt-2 mt-1 border-t border-gray-200 space-y-2">
+                                    {/* 삭제 권한 */}
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-xs text-gray-600">삭제 권한</span>
+                                        <p className="text-[11px] text-gray-400">대화, FAQ, 업무, 라이브러리 삭제</p>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        <span className={`text-[11px] ${editCanDelete ? 'text-red-500' : 'text-gray-400'}`}>{editCanDelete ? '허용' : '차단'}</span>
                                         <button
-                                          key={level}
                                           type="button"
-                                          onClick={() => setPermValues(prev => ({ ...prev, [MANAGER_ADMIN_PERMISSION.key]: level }))}
-                                          className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                                            permValues[MANAGER_ADMIN_PERMISSION.key] === level
-                                              ? 'bg-gray-900 text-white'
-                                              : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+                                          role="switch"
+                                          aria-checked={editCanDelete}
+                                          title={editCanDelete ? '대화, FAQ, 업무, 라이브러리를 삭제할 수 있습니다' : '삭제 기능이 비활성화됩니다'}
+                                          onClick={() => setEditCanDelete(prev => !prev)}
+                                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
+                                            editCanDelete ? 'bg-red-500' : 'bg-gray-300'
                                           }`}
                                         >
-                                          {LEVEL_LABELS[level]}
+                                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                            editCanDelete ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                                          }`} />
                                         </button>
-                                      ))}
+                                      </div>
                                     </div>
-                                  </div>
-                                  {/* 삭제 권한 */}
-                                  <div className="flex items-center justify-between mt-1">
-                                    <div>
-                                      <span className="text-xs text-gray-600">삭제 권한</span>
-                                      <p className="text-[11px] text-gray-400">대화, FAQ, 업무, 라이브러리 삭제</p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={`text-[11px] ${editCanDelete ? 'text-red-500' : 'text-gray-400'}`}>{editCanDelete ? '허용' : '차단'}</span>
-                                    <button
-                                      type="button"
-                                      role="switch"
-                                      aria-checked={editCanDelete}
-                                      onClick={() => setEditCanDelete(prev => !prev)}
-                                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
-                                        editCanDelete ? 'bg-red-500' : 'bg-gray-300'
-                                      }`}
-                                    >
-                                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                                        editCanDelete ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                                      }`} />
-                                    </button>
+                                    {/* 매니저 관리 권한 */}
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs text-gray-600">{MANAGER_ADMIN_PERMISSION.label}</span>
+                                      <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 flex-shrink-0">
+                                        {(['hidden', 'read', 'write'] as PermissionLevel[]).map(level => {
+                                          const curMgr = permValues[MANAGER_ADMIN_PERMISSION.key] ?? 'hidden';
+                                          return (
+                                            <button
+                                              key={level}
+                                              type="button"
+                                              title={level === 'hidden' ? '매니저 관리 메뉴가 표시되지 않습니다' : level === 'read' ? '매니저 목록 조회만 가능합니다' : '매니저 초대, 권한 수정, 내보내기가 가능합니다'}
+                                              onClick={() => setPermValues(prev => ({ ...prev, [MANAGER_ADMIN_PERMISSION.key]: level }))}
+                                              className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                                                curMgr === level
+                                                  ? level === 'hidden' ? 'bg-white text-gray-700 font-medium shadow-sm'
+                                                    : level === 'read' ? 'bg-white text-blue-600 font-medium shadow-sm'
+                                                    : 'bg-amber-400 text-white font-medium shadow-sm'
+                                                  : 'text-gray-400 hover:text-gray-600'
+                                              }`}
+                                            >
+                                              {LEVEL_LABELS[level]}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
                                   </div>
                                   {/* 저장/취소 */}
