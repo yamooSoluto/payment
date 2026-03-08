@@ -106,7 +106,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // 허용된 필드만 업데이트
     const allowedFields = [
       'questions', 'questionsRaw', 'answer', 'guide', 'keyData', 'handlerType', 'handler',
-      'rule', 'tags', 'topic', 'tag_actions', 'action_product', 'action', 'isActive',
+      'rule', 'tags', 'topic', 'intent', 'action_product', 'action', 'isActive',
     ];
     const filteredUpdates: Record<string, unknown> = {};
     for (const field of allowedFields) {

@@ -62,8 +62,12 @@ export async function GET(request: NextRequest) {
       rules = rules.filter((r: any) => r.store.includes(storeFilter));
     }
 
-    // JS 정렬: 플랫폼 → 라벨
-    rules.sort((a: any, b: any) => a.platform.localeCompare(b.platform) || a.label.localeCompare(b.label));
+    // JS 정렬: 생성일 오름차순 (넘버링 순서 유지)
+    rules.sort((a: any, b: any) => {
+      const ta = a.createdAt || '';
+      const tb = b.createdAt || '';
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
 
     // JS 필터: 텍스트 검색
     if (searchQuery) {
@@ -104,8 +108,8 @@ export async function POST(request: NextRequest) {
     const { id, platform, store, label, content, category, tags } = body;
 
     // 유효성 검증
-    if (!id || !label || !content) {
-      return NextResponse.json({ error: 'id, label, content are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
     if (!id.startsWith('rule_')) {
       return NextResponse.json({ error: 'ID must start with rule_' }, { status: 400 });
@@ -122,8 +126,8 @@ export async function POST(request: NextRequest) {
     const ruleData = {
       platform: platform || '-',
       store: Array.isArray(store) ? store : ['공통'],
-      label,
-      content,
+      label: label || '',
+      content: content || '',
       category: category || '',
       tags: Array.isArray(tags) ? tags : [],
       linkedFaqIds: [],

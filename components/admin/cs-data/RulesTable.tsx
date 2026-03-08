@@ -52,6 +52,7 @@ interface RulesTableProps {
   scopeOptions: ScopeOptions;
   onCellEdit: (ruleId: string, field: string, value: any) => void;
   onDelete: (ruleId: string) => void;
+  onBulkDelete?: (ruleIds: string[]) => Promise<void>;
   onAdd: (data: RuleAddData) => Promise<void>;
   dirtyIds: Set<string>;
   packagesMap: Map<string, PackageInfo>;
@@ -59,6 +60,8 @@ interface RulesTableProps {
   onRefClick: (type: 'package' | 'faq', id: string, tenantId?: string) => void;
   categoryOptions: string[];
   onAddCategory: (cat: string) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 const COL_SPAN = 8;
@@ -71,16 +74,50 @@ const FIELD_LABELS: Record<string, string> = {
 
 const GROUPABLE: SortField[] = ['platform', 'store', 'category', 'tags'];
 
+// 네비게이션 가능한 필드 순서 (방향키/탭 이동용)
+const NAV_FIELDS = ['platform', 'store', 'category', 'label', 'content', 'tags', 'ref'] as const;
+// 편집 가능한 필드 (ref 제외)
+const EDITABLE_FIELDS = new Set(['platform', 'store', 'category', 'label', 'content', 'tags']);
+
+// 셀 값을 텍스트로 변환 (복사용)
+function getCellText(rule: Rule, field: string): string {
+  switch (field) {
+    case 'platform': return rule.platform;
+    case 'store': return rule.store.join(', ');
+    case 'label': return rule.label;
+    case 'content': return rule.content;
+    case 'category': return rule.category || '';
+    case 'tags': return rule.tags.join(', ');
+    case 'ref': {
+      const parts: string[] = [];
+      if (rule.linkedPackageIds.length > 0) parts.push(`패키지 ${rule.linkedPackageIds.length}`);
+      if (rule.linkedFaqIds.length > 0) parts.push(`FAQ ${rule.linkedFaqIds.length}`);
+      return parts.join(', ') || '-';
+    }
+    default: return '';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // 메인 테이블
 // ═══════════════════════════════════════════════════════════
 
 export default function RulesTable({
-  rules, scopeOptions, onCellEdit, onDelete, onAdd, dirtyIds,
+  rules, scopeOptions, onCellEdit, onDelete, onBulkDelete, onAdd, dirtyIds,
   packagesMap, tenantsMap, onRefClick,
   categoryOptions, onAddCategory,
+  onUndo, onRedo,
 }: RulesTableProps) {
+  // 셀 선택 (클릭)
+  const [selectedCell, setSelectedCell] = useState<{ id: string; field: string } | null>(null);
+  // 셀 편집 (더블클릭 / Enter)
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
+  // 복사 피드백
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  // 행 체크 (일괄 작업)
+  const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
+
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // 정렬
   const [sortField, setSortField] = useState<SortField>(null);
@@ -96,40 +133,71 @@ export default function RulesTable({
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const groupRef = useRef<HTMLDivElement>(null);
 
-  // 새 행
-  const [adding, setAdding] = useState(false);
-  const [newPlatform, setNewPlatform] = useState('-');
-  const [newStore, setNewStore] = useState<string[]>(['공통']);
-  const [newLabel, setNewLabel] = useState('');
-  const [newContent, setNewContent] = useState('');
-  const [newCategory, setNewCategory] = useState('');
-  const [newTags, setNewTags] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-
-  const canSubmit = newLabel.trim() && newContent.trim();
-
-  const resetNewRow = () => {
-    setNewPlatform('-'); setNewStore(['공통']); setNewLabel(''); setNewContent('');
-    setNewCategory(''); setNewTags([]);
+  // 칼럼 너비 리사이즈
+  const MIN_CONTENT_WIDTH = 200;
+  const DEFAULT_WIDTHS: Record<string, number> = {
+    platform: 90, store: 90, category: 100, label: 150,
+    tags: 120, ref: 120,
   };
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
+  // content 칼럼 별도 너비 (null = auto/나머지 공간)
+  const [contentWidth, setContentWidth] = useState<number | null>(null);
 
-  const handleSubmitNew = useCallback(async () => {
-    if (!canSubmit || submitting) return;
-    setSubmitting(true);
+  // 테이블 최소 너비: # + 고정 칼럼 합 + content + actions
+  const NUM_WIDTH = 40;
+  const fixedSum = Object.values(columnWidths).reduce((a, b) => a + b, 0);
+  const effectiveContentW = contentWidth ?? MIN_CONTENT_WIDTH;
+  const tableMinWidth = NUM_WIDTH + fixedSum + effectiveContentW;
+  const resizing = useRef<{ field: string; startX: number; startW: number } | null>(null);
+
+  const handleResizeStart = useCallback((field: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (field === 'content') {
+      // content: 현재 실제 칼럼 너비에서 시작
+      const th = (e.target as HTMLElement).closest('th');
+      const startW = contentWidth ?? (th?.offsetWidth || MIN_CONTENT_WIDTH);
+      resizing.current = { field: 'content', startX: e.clientX, startW };
+    } else {
+      const startW = columnWidths[field] || DEFAULT_WIDTHS[field];
+      resizing.current = { field, startX: e.clientX, startW };
+    }
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const delta = ev.clientX - resizing.current.startX;
+      const newW = Math.max(60, resizing.current.startW + delta);
+      if (resizing.current.field === 'content') {
+        setContentWidth(newW);
+      } else {
+        setColumnWidths(prev => ({ ...prev, [resizing.current!.field]: newW }));
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      requestAnimationFrame(() => { resizing.current = null; });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [columnWidths, contentWidth]);
+
+  // 새 행 추가
+  const handleAddBlankRow = useCallback(async () => {
     try {
       await onAdd({
-        id: generateId(), platform: newPlatform, store: newStore,
-        label: newLabel.trim(), content: newContent.trim(),
-        category: newCategory, tags: newTags,
+        id: generateId(),
+        platform: '-',
+        store: ['공통'],
+        label: '',
+        content: '',
+        category: '',
+        tags: [],
       });
-      resetNewRow();
-      setAdding(false);
     } catch (err: any) {
       alert(err.message || '추가 실패');
-    } finally {
-      setSubmitting(false);
     }
-  }, [canSubmit, submitting, newPlatform, newStore, newLabel, newContent, newCategory, newTags, onAdd]);
+  }, [onAdd]);
 
   const handleDuplicate = useCallback(async (rule: Rule) => {
     try {
@@ -143,20 +211,47 @@ export default function RulesTable({
     }
   }, [onAdd]);
 
+  // ── 셀 선택/편집 헬퍼 ──
+  const isSelected = (id: string, field: string) => selectedCell?.id === id && selectedCell?.field === field;
   const isEditing = (id: string, field: string) => editingCell?.id === id && editingCell?.field === field;
-  const startEdit = (id: string, field: string) => setEditingCell({ id, field });
-  const stopEdit = () => setEditingCell(null);
 
-  // 셀 편집 클릭 아웃사이드
+  const selectCell = useCallback((id: string, field: string) => {
+    setSelectedCell({ id, field });
+    setEditingCell(null);
+  }, []);
+
+  const startEdit = useCallback((id: string, field: string) => {
+    if (!EDITABLE_FIELDS.has(field)) return; // ref 등 편집 불가
+    setSelectedCell({ id, field });
+    setEditingCell({ id, field });
+  }, []);
+
+  const stopEdit = useCallback(() => {
+    // 편집 종료 → 선택 상태로 복귀, 테이블에 포커스 반환
+    setEditingCell(null);
+    requestAnimationFrame(() => tableRef.current?.focus());
+  }, []);
+
+  const deselectAll = useCallback(() => {
+    setSelectedCell(null);
+    setEditingCell(null);
+  }, []);
+
+  // ── 셀 편집 클릭 아웃사이드 ──
   useEffect(() => {
-    if (!editingCell) return;
+    if (!selectedCell && !editingCell) return;
     const handler = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('[data-dropdown]')) return;
-      stopEdit();
+      const target = e.target as HTMLElement;
+      // 드롭다운 내부 클릭은 무시
+      if (target.closest('[data-dropdown]')) return;
+      // 테이블 내부의 td 클릭은 무시 (selectCell에서 처리)
+      if (target.closest('[data-cell]')) return;
+      // 테이블 외부 클릭 → 전부 해제
+      deselectAll();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [editingCell]);
+  }, [selectedCell, editingCell, deselectAll]);
 
   // 그룹 메뉴 클릭 아웃사이드
   useEffect(() => {
@@ -172,6 +267,7 @@ export default function RulesTable({
 
   // 정렬 토글
   const handleSort = (field: SortField) => {
+    if (resizing.current) return; // 리사이즈 중 정렬 방지
     if (sortField === field) {
       if (sortDir === 'asc') setSortDir('desc');
       else { setSortField(null); setSortDir('asc'); }
@@ -208,14 +304,12 @@ export default function RulesTable({
     Object.entries(columnFilters).forEach(([field, fv]) => {
       if (!fv.trim()) return;
       result = result.filter(r => {
-        // 셀렉트 칼럼: 정확 매치
         if (field === 'platform') return r.platform === fv;
         if (field === 'store') return r.store.includes(fv);
         if (field === 'category') {
           if (fv === '__none__') return !r.category;
           return r.category === fv;
         }
-        // 텍스트 칼럼: 부분 매치
         const q = fv.toLowerCase();
         if (field === 'label') return r.label.toLowerCase().includes(q);
         if (field === 'content') return r.content.toLowerCase().includes(q);
@@ -251,6 +345,13 @@ export default function RulesTable({
     return result;
   }, [rules, sortField, sortDir, columnFilters]);
 
+  // 원본 배열 인덱스 기반 넘버링 (정렬/필터 무관)
+  const ruleIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    rules.forEach((r, i) => map.set(r.id, i + 1));
+    return map;
+  }, [rules]);
+
   // 그룹 데이터
   const groupedData = useMemo(() => {
     if (!groupByField) return null;
@@ -275,7 +376,195 @@ export default function RulesTable({
     return order.map(key => ({ key, rules: map.get(key)! }));
   }, [processedRules, groupByField]);
 
+  // 보이는 행 목록 (그룹 접힘 고려)
+  const visibleRules = useMemo(() => {
+    if (!groupByField || !groupedData) return processedRules;
+    const visible: Rule[] = [];
+    for (const group of groupedData!) {
+      if (!collapsedGroups.has(group.key)) {
+        visible.push(...group.rules);
+      }
+    }
+    return visible;
+  }, [processedRules, groupByField, groupedData, collapsedGroups]);
+
   const platformOptions = ['-', ...scopeOptions.platforms];
+
+  // ── 복사 ──
+  const handleCopy = useCallback(() => {
+    if (!selectedCell) return;
+    const rule = rules.find(r => r.id === selectedCell.id);
+    if (!rule) return;
+    const text = getCellText(rule, selectedCell.field);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 1200);
+    });
+  }, [selectedCell, rules]);
+
+  // ── 붙여넣기 ──
+  const handlePaste = useCallback(async () => {
+    if (!selectedCell || editingCell) return;
+    if (!EDITABLE_FIELDS.has(selectedCell.field)) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      const { id, field } = selectedCell;
+      switch (field) {
+        case 'platform': {
+          const trimmed = text.trim();
+          if (platformOptions.includes(trimmed)) onCellEdit(id, 'platform', trimmed);
+          break;
+        }
+        case 'store': {
+          const arr = text.split(',').map(s => s.trim()).filter(Boolean);
+          if (arr.length > 0) onCellEdit(id, 'store', arr);
+          break;
+        }
+        case 'category': {
+          const trimmed = text.trim();
+          if (categoryOptions.includes(trimmed) || trimmed === '') onCellEdit(id, 'category', trimmed);
+          break;
+        }
+        case 'label':
+          onCellEdit(id, 'label', text.trim());
+          break;
+        case 'content':
+          onCellEdit(id, 'content', text);
+          break;
+        case 'tags': {
+          const arr = text.split(',').map(s => s.trim()).filter(Boolean);
+          if (arr.length > 0) onCellEdit(id, 'tags', arr);
+          break;
+        }
+      }
+    } catch {
+      // clipboard permission denied 등
+    }
+  }, [selectedCell, editingCell, platformOptions, categoryOptions, onCellEdit]);
+
+  // ── Delete/Backspace 셀 초기화 ──
+  const handleClearCell = useCallback(() => {
+    if (!selectedCell || editingCell) return;
+    if (!EDITABLE_FIELDS.has(selectedCell.field)) return;
+    const { id, field } = selectedCell;
+    switch (field) {
+      case 'platform': onCellEdit(id, 'platform', '-'); break;
+      case 'store': onCellEdit(id, 'store', ['공통']); break;
+      case 'category': onCellEdit(id, 'category', ''); break;
+      case 'label': onCellEdit(id, 'label', ''); break;
+      case 'content': onCellEdit(id, 'content', ''); break;
+      case 'tags': onCellEdit(id, 'tags', []); break;
+    }
+  }, [selectedCell, editingCell, onCellEdit]);
+
+  // ── 키보드 네비게이션 ──
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Cmd/Ctrl+Z (undo/redo) — 편집 중이든 선택 중이든 항상 동작
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) { onRedo?.(); } else { onUndo?.(); }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+      e.preventDefault();
+      onRedo?.();
+      return;
+    }
+
+    // 편집 중이면 키보드 네비게이션 안 함 (각 편집 컴포넌트가 처리)
+    if (editingCell) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        stopEdit();
+      }
+      return;
+    }
+
+    // 선택된 셀이 없으면 무시
+    if (!selectedCell) return;
+
+    const rowIds = visibleRules.map(r => r.id);
+    const rowIdx = rowIds.indexOf(selectedCell.id);
+    const colIdx = NAV_FIELDS.indexOf(selectedCell.field as typeof NAV_FIELDS[number]);
+    if (rowIdx < 0 || colIdx < 0) return;
+
+    switch (e.key) {
+      case 'ArrowUp': {
+        e.preventDefault();
+        if (rowIdx > 0) setSelectedCell({ id: rowIds[rowIdx - 1], field: selectedCell.field });
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        if (rowIdx < rowIds.length - 1) setSelectedCell({ id: rowIds[rowIdx + 1], field: selectedCell.field });
+        break;
+      }
+      case 'ArrowLeft': {
+        e.preventDefault();
+        if (colIdx > 0) setSelectedCell({ id: selectedCell.id, field: NAV_FIELDS[colIdx - 1] });
+        break;
+      }
+      case 'ArrowRight': {
+        e.preventDefault();
+        if (colIdx < NAV_FIELDS.length - 1) setSelectedCell({ id: selectedCell.id, field: NAV_FIELDS[colIdx + 1] });
+        break;
+      }
+      case 'Tab': {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // 이전 셀
+          if (colIdx > 0) {
+            setSelectedCell({ id: selectedCell.id, field: NAV_FIELDS[colIdx - 1] });
+          } else if (rowIdx > 0) {
+            setSelectedCell({ id: rowIds[rowIdx - 1], field: NAV_FIELDS[NAV_FIELDS.length - 1] });
+          }
+        } else {
+          // 다음 셀
+          if (colIdx < NAV_FIELDS.length - 1) {
+            setSelectedCell({ id: selectedCell.id, field: NAV_FIELDS[colIdx + 1] });
+          } else if (rowIdx < rowIds.length - 1) {
+            setSelectedCell({ id: rowIds[rowIdx + 1], field: NAV_FIELDS[0] });
+          }
+        }
+        break;
+      }
+      case 'Enter': {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleAddBlankRow();
+        } else if (EDITABLE_FIELDS.has(selectedCell.field)) {
+          startEdit(selectedCell.id, selectedCell.field);
+        }
+        break;
+      }
+      case 'Escape': {
+        e.preventDefault();
+        deselectAll();
+        break;
+      }
+      case 'Delete':
+      case 'Backspace': {
+        e.preventDefault();
+        handleClearCell();
+        break;
+      }
+      default: {
+        // Cmd/Ctrl+C
+        if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+          e.preventDefault();
+          handleCopy();
+        }
+        // Cmd/Ctrl+V
+        if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+          e.preventDefault();
+          handlePaste();
+        }
+
+        break;
+      }
+    }
+  }, [editingCell, selectedCell, visibleRules, stopEdit, startEdit, deselectAll, handleCopy, handlePaste, handleClearCell, onUndo, onRedo]);
 
   // 셀 공통 클래스
   const th = 'h-9 px-3 text-left text-[11px] font-medium text-gray-400 tracking-wide';
@@ -287,21 +576,57 @@ export default function RulesTable({
 
   const sortLabel: Record<string, string> = FIELD_LABELS;
 
+  // 셀 선택/편집 스타일
+  const cellCls = (id: string, field: string, extra?: string) => {
+    const sel = isSelected(id, field) && !isEditing(id, field);
+    return [
+      td,
+      extra || '',
+      sel ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/20' : '',
+    ].filter(Boolean).join(' ');
+  };
+
   // ── 규정 행 렌더 ──
   const renderRuleRow = (rule: Rule) => {
     const isDirty = dirtyIds.has(rule.id);
     return (
       <tr key={rule.id} className={`group transition-colors ${isDirty ? 'bg-amber-50/40' : 'hover:bg-gray-50/50'}`}>
+        {/* # — 호버 시 체크박스, 기본은 넘버 */}
+        <td className={`${td} text-center select-none group/numcell`}>
+          {checkedRows.has(rule.id) ? (
+            <input
+              type="checkbox"
+              checked
+              onChange={e => { e.stopPropagation(); setCheckedRows(prev => { const n = new Set(prev); n.delete(rule.id); return n; }); }}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5"
+            />
+          ) : (
+            <>
+              <span className="text-[11px] text-gray-300 group-hover/numcell:hidden">{ruleIndexMap.get(rule.id) ?? ''}</span>
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={e => { e.stopPropagation(); setCheckedRows(prev => new Set(prev).add(rule.id)); }}
+                className="hidden group-hover/numcell:inline-block rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5"
+              />
+            </>
+          )}
+        </td>
         {/* 플랫폼 */}
-        <td className={td} data-dropdown>
+        <td
+          className={cellCls(rule.id, 'platform')}
+          data-cell data-dropdown
+          onClick={() => { if (isEditing(rule.id, 'platform')) return; isSelected(rule.id, 'platform') ? startEdit(rule.id, 'platform') : selectCell(rule.id, 'platform'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'platform') ? (
               <PlatformSelect value={rule.platform} options={platformOptions}
                 onChange={val => { onCellEdit(rule.id, 'platform', val); stopEdit(); }} onClose={stopEdit} />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'platform')}
-                className={`${rule.platform === '-' ? muted : cellText} cursor-pointer w-full flex items-center gap-0.5`}>
-                {rule.platform || '-'}
+              <div className="w-full flex items-center gap-0.5">
+                {rule.platform && rule.platform !== '-' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100 truncate max-w-full">{rule.platform}</span>
+                ) : <span className={muted}>-</span>}
                 <NavArrowDown className="w-2.5 h-2.5 text-gray-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             )}
@@ -309,24 +634,38 @@ export default function RulesTable({
         </td>
 
         {/* 매장 */}
-        <td className={td} data-dropdown>
+        <td
+          className={cellCls(rule.id, 'store')}
+          data-cell data-dropdown
+          onClick={() => { if (isEditing(rule.id, 'store')) return; isSelected(rule.id, 'store') ? startEdit(rule.id, 'store') : selectCell(rule.id, 'store'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'store') ? (
               <StoreMultiSelect value={rule.store} options={scopeOptions.stores}
                 onChange={val => onCellEdit(rule.id, 'store', val)} onClose={stopEdit} />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'store')}
-                className={`${rule.store.length === 1 && rule.store[0] === '공통' ? muted : cellText} cursor-pointer w-full`}>
-                {rule.store.length > 0 ? (
-                  <span>{rule.store[0]}{rule.store.length > 1 && <span className="text-gray-400 ml-0.5 text-xs">+{rule.store.length - 1}</span>}</span>
-                ) : <span className={muted}>공통</span>}
+              <div className="w-full flex items-center gap-1 overflow-hidden">
+                {rule.store.length === 0 || (rule.store.length === 1 && rule.store[0] === '공통') ? (
+                  <span className={muted}>공통</span>
+                ) : (
+                  <>
+                    {rule.store.filter(s => s !== '공통').map((s, i) => (
+                      <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0 truncate max-w-[80px]">{s}</span>
+                    ))}
+                    {rule.store.filter(s => s !== '공통').length > 1 ? null : null}
+                  </>
+                )}
               </div>
             )}
           </div>
         </td>
 
         {/* 분류 */}
-        <td className={td} data-dropdown>
+        <td
+          className={cellCls(rule.id, 'category')}
+          data-cell data-dropdown
+          onClick={() => { if (isEditing(rule.id, 'category')) return; isSelected(rule.id, 'category') ? startEdit(rule.id, 'category') : selectCell(rule.id, 'category'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'category') ? (
               <CategorySelect
@@ -337,9 +676,9 @@ export default function RulesTable({
                 onClose={stopEdit}
               />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'category')} className="cursor-pointer w-full">
+              <div className="w-full">
                 {rule.category ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-100">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-100 truncate max-w-full">
                     {rule.category}
                   </span>
                 ) : <span className={muted}>-</span>}
@@ -349,16 +688,20 @@ export default function RulesTable({
         </td>
 
         {/* 라벨 */}
-        <td className={td}>
+        <td
+          className={cellCls(rule.id, 'label')}
+          data-cell
+          onClick={() => { if (isEditing(rule.id, 'label')) return; isSelected(rule.id, 'label') ? startEdit(rule.id, 'label') : selectCell(rule.id, 'label'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'label') ? (
               <input autoFocus value={rule.label}
                 onChange={e => onCellEdit(rule.id, 'label', e.target.value)}
                 onBlur={stopEdit}
-                onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') stopEdit(); }}
-                className="w-full h-7 text-sm border border-blue-400 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') stopEdit(); if (e.key === 'Escape') stopEdit(); }}
+                className="w-full text-sm text-gray-700 bg-transparent focus:outline-none" />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'label')} className={`${cellText} cursor-text w-full`}>
+              <div className={`${cellText} w-full`}>
                 {rule.label || <span className={muted}>-</span>}
               </div>
             )}
@@ -366,12 +709,16 @@ export default function RulesTable({
         </td>
 
         {/* 내용 */}
-        <td className={`${td} relative`}>
+        <td
+          className={cellCls(rule.id, 'content', 'relative')}
+          data-cell
+          onClick={() => { if (isEditing(rule.id, 'content')) return; isSelected(rule.id, 'content') ? startEdit(rule.id, 'content') : selectCell(rule.id, 'content'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'content') ? (
               <ContentEditor value={rule.content} onChange={val => onCellEdit(rule.id, 'content', val)} onClose={stopEdit} />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'content')} className={`${cellText} cursor-text w-full text-gray-500`}>
+              <div className={`${cellText} w-full text-gray-500`}>
                 {rule.content ? rule.content.split('\n')[0] : <span className={muted}>-</span>}
               </div>
             )}
@@ -379,7 +726,11 @@ export default function RulesTable({
         </td>
 
         {/* 태그 */}
-        <td className={`${td} relative`}>
+        <td
+          className={cellCls(rule.id, 'tags')}
+          data-cell
+          onClick={() => { if (isEditing(rule.id, 'tags')) return; isSelected(rule.id, 'tags') ? startEdit(rule.id, 'tags') : selectCell(rule.id, 'tags'); }}
+        >
           <div className="flex items-center h-full">
             {isEditing(rule.id, 'tags') ? (
               <TagEditor
@@ -388,31 +739,39 @@ export default function RulesTable({
                 onClose={stopEdit}
               />
             ) : (
-              <div onClick={() => startEdit(rule.id, 'tags')} className="cursor-text w-full flex items-center gap-1 flex-wrap min-h-[28px]">
+              <div className="w-full flex items-center gap-1 overflow-hidden">
                 {rule.tags.length > 0 ? rule.tags.map((t, i) => (
-                  <span key={i} className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600">{t}</span>
+                  <span key={i} className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600 shrink-0">{t}</span>
                 )) : <span className={muted}>-</span>}
               </div>
             )}
           </div>
         </td>
 
-        {/* 참조 */}
-        <td className={td}>
+        {/* 참조 (선택 가능, 편집 불가) + 작업 오버레이 */}
+        <td
+          className={cellCls(rule.id, 'ref', 'relative overflow-visible')}
+          data-cell
+          onClick={() => { if (!isEditing(rule.id, 'ref')) selectCell(rule.id, 'ref'); }}
+        >
           <div className="flex items-center h-full">
             <ReferenceCell rule={rule} packagesMap={packagesMap} tenantsMap={tenantsMap} onRefClick={onRefClick} />
           </div>
-        </td>
-
-        {/* 작업 */}
-        <td className={td}>
-          <div className="flex items-center justify-end h-full gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => handleDuplicate(rule)} className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100" title="복제">
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-md shadow-sm border border-gray-200 px-0.5 z-20">
+            <button onClick={e => { e.stopPropagation(); handleDuplicate(rule); }} className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100" title="복제">
               <Copy className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => {
-                if (confirm(`규정 "${rule.label}"을 삭제하시겠습니까?${rule.linkedFaqIds.length > 0 ? `\n${rule.linkedFaqIds.length}개 FAQ에서 참조 중입니다.` : ''}`)) onDelete(rule.id);
+              onClick={e => {
+                e.stopPropagation();
+                const hasContent = rule.label || rule.content;
+                const hasRef = rule.linkedFaqIds.length > 0 || rule.linkedPackageIds.length > 0;
+                if (hasContent || hasRef) {
+                  const refMsg = hasRef ? `\n참조: 패키지 ${rule.linkedPackageIds.length}, FAQ ${rule.linkedFaqIds.length}` : '';
+                  const name = rule.label || "(제목 없음)";
+                  if (!confirm(name + " 삭제하시겠습니까?" + refMsg)) return;
+                }
+                onDelete(rule.id);
               }}
               className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50" title="삭제">
               <Trash className="w-3.5 h-3.5" />
@@ -427,18 +786,22 @@ export default function RulesTable({
   const filterSelectCls = 'w-full text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300 text-gray-600';
 
   return (
-    <div className="">
+    <div
+      ref={tableRef}
+      className="outline-none"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       {/* ── 툴바 ── */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/30">
         {/* 그룹 */}
         <div ref={groupRef} className="relative">
           <button
             onClick={() => setShowGroupMenu(!showGroupMenu)}
-            className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-colors ${
-              groupByField
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-colors ${groupByField
                 ? 'bg-indigo-50 text-indigo-600 font-medium'
                 : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-            }`}
+              }`}
           >
             그룹
             {groupByField && (
@@ -458,9 +821,8 @@ export default function RulesTable({
             <div className="absolute z-50 top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
               {GROUPABLE.map(f => (
                 <button key={f} onClick={() => handleGroupBy(f)}
-                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between ${
-                    groupByField === f ? 'text-indigo-600 font-medium bg-indigo-50/40' : 'text-gray-600'
-                  }`}>
+                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between ${groupByField === f ? 'text-indigo-600 font-medium bg-indigo-50/40' : 'text-gray-600'
+                    }`}>
                   <span>{FIELD_LABELS[f!]}</span>
                   {groupByField === f && <Check className="w-3.5 h-3.5" />}
                 </button>
@@ -481,11 +843,10 @@ export default function RulesTable({
         {/* 필터 토글 */}
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-colors ${
-            showFilters || hasActiveFilters
+          className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-colors ${showFilters || hasActiveFilters
               ? 'bg-blue-50 text-blue-600 font-medium'
               : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-          }`}
+            }`}
         >
           <FilterIcon className="w-3 h-3" />
           필터
@@ -513,6 +874,11 @@ export default function RulesTable({
           </div>
         )}
 
+        {/* 복사 피드백 */}
+        {copyFeedback && (
+          <span className="text-[11px] text-green-600 font-medium ml-2 animate-pulse">복사됨</span>
+        )}
+
         {/* 그룹 전체 접기/펼치기 */}
         {groupByField && groupedData && groupedData.length > 1 && (
           <button
@@ -526,25 +892,82 @@ export default function RulesTable({
             {groupedData.every(g => collapsedGroups.has(g.key)) ? '모두 펼치기' : '모두 접기'}
           </button>
         )}
+
+        {/* 일괄 액션 */}
+        {checkedRows.size > 0 && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[11px] font-medium text-blue-600">{checkedRows.size}개 선택</span>
+            <button
+              onClick={async () => {
+                const ids = Array.from(checkedRows);
+                if (!confirm(ids.length + '개 규정을 삭제하시겠습니까?')) return;
+                if (onBulkDelete) await onBulkDelete(ids); else for (const id of ids) onDelete(id);
+                setCheckedRows(new Set());
+              }}
+              className="text-[11px] text-red-600 hover:text-red-800 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
+            >
+              삭제
+            </button>
+            <button
+              onClick={() => setCheckedRows(new Set())}
+              className="text-[11px] text-gray-400 hover:text-gray-600 px-1 py-0.5 rounded hover:bg-gray-100 transition-colors"
+            >
+              해제
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── 테이블 ── */}
-      <table className="w-full border-collapse table-fixed">
+      <table className="border-collapse table-fixed" style={{ minWidth: tableMinWidth, width: '100%' }}>
+        <colgroup>
+          <col style={{ width: NUM_WIDTH }} />
+          <col style={{ width: columnWidths.platform }} />
+          <col style={{ width: columnWidths.store }} />
+          <col style={{ width: columnWidths.category }} />
+          <col style={{ width: columnWidths.label }} />
+          <col style={contentWidth ? { width: contentWidth } : undefined} />
+          <col style={{ width: columnWidths.tags }} />
+          <col style={{ width: columnWidths.ref }} />
+        </colgroup>
         <thead>
           <tr className="border-b border-gray-200/60 bg-gray-50/40">
-            <SortableHeader field="platform" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[7%]`}>플랫폼</SortableHeader>
-            <SortableHeader field="store" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[7%]`}>매장</SortableHeader>
-            <SortableHeader field="category" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[8%]`}>분류</SortableHeader>
-            <SortableHeader field="label" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[12%]`}>라벨</SortableHeader>
-            <SortableHeader field="content" active={sortField} dir={sortDir} onSort={handleSort} className={th}>내용</SortableHeader>
-            <SortableHeader field="tags" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[9%]`}>태그</SortableHeader>
-            <SortableHeader field="ref" active={sortField} dir={sortDir} onSort={handleSort} className={`${th} w-[9%]`}>참조</SortableHeader>
-            <th className={`${th} w-[4%]`} />
+            <th className={`${th} text-center group/num`}>
+              {checkedRows.size > 0 ? (
+                <input
+                  type="checkbox"
+                  checked={processedRules.length > 0 && processedRules.every(r => checkedRows.has(r.id))}
+                  onChange={e => {
+                    if (e.target.checked) setCheckedRows(new Set(processedRules.map(r => r.id)));
+                    else setCheckedRows(new Set());
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5"
+                />
+              ) : (
+                <>
+                  <span className="group-hover/num:hidden">#</span>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => setCheckedRows(new Set(processedRules.map(r => r.id)))}
+                    className="hidden group-hover/num:inline-block rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5"
+                  />
+                </>
+              )}
+            </th>
+            <ResizableHeader field="platform" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>플랫폼</ResizableHeader>
+            <ResizableHeader field="store" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>매장</ResizableHeader>
+            <ResizableHeader field="category" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>분류</ResizableHeader>
+            <ResizableHeader field="label" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>라벨</ResizableHeader>
+            <ResizableHeader field="content" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>내용</ResizableHeader>
+            <ResizableHeader field="tags" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th}>태그</ResizableHeader>
+            <ResizableHeader field="ref" active={sortField} dir={sortDir} onSort={handleSort} onResizeStart={handleResizeStart} className={th} isLast>참조</ResizableHeader>
           </tr>
 
           {/* 필터 행 */}
           {showFilters && (
             <tr className="border-b border-gray-200/40 bg-blue-50/20">
+              <td />
               {/* 플랫폼 — 셀렉트 */}
               <td className="px-2 py-1.5">
                 <select
@@ -602,13 +1025,12 @@ export default function RulesTable({
               <td className="px-2 py-1.5">
                 <FilterInput value={columnFilters.ref || ''} onChange={v => setColumnFilters(prev => ({ ...prev, ref: v }))} placeholder="참조" />
               </td>
-              <td />
             </tr>
           )}
         </thead>
 
         <tbody>
-          {processedRules.length === 0 && !adding && (
+          {processedRules.length === 0 && (
             <tr>
               <td colSpan={COL_SPAN} className="text-center py-16 text-sm text-gray-400">
                 {hasActiveFilters ? '필터 결과가 없습니다.' : '등록된 규정이 없습니다.'}
@@ -640,89 +1062,15 @@ export default function RulesTable({
             processedRules.map(rule => renderRuleRow(rule))
           )}
 
-          {/* 새 행 */}
-          {adding ? (
-            <tr className="bg-blue-50/30">
-              <td className={td} data-dropdown>
-                <div className="flex items-center h-full">
-                  <PlatformSelect value={newPlatform} options={platformOptions} onChange={setNewPlatform} onClose={() => {}} inline />
-                </div>
-              </td>
-              <td className={td} data-dropdown>
-                <div className="flex items-center h-full">
-                  <StoreMultiSelect value={newStore} options={scopeOptions.stores} onChange={setNewStore} onClose={() => {}} inline />
-                </div>
-              </td>
-              <td className={td} data-dropdown>
-                <div className="flex items-center h-full">
-                  <CategorySelect value={newCategory} options={categoryOptions}
-                    onChange={setNewCategory}
-                    onAddOption={opt => { onAddCategory(opt); setNewCategory(opt); }}
-                    onClose={() => {}} inline />
-                </div>
-              </td>
-              <td className={td}>
-                <div className="flex items-center h-full">
-                  <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="라벨"
-                    onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' && canSubmit) handleSubmitNew(); if (e.key === 'Escape') { setAdding(false); resetNewRow(); } }}
-                    className="w-full h-7 text-sm border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400" />
-                </div>
-              </td>
-              <td className={td}>
-                <div className="flex items-center h-full">
-                  <input value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="규정 본문..."
-                    onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' && canSubmit) handleSubmitNew(); if (e.key === 'Escape') { setAdding(false); resetNewRow(); } }}
-                    className="w-full h-7 text-sm border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400" />
-                </div>
-              </td>
-              <td className={td}>
-                <div className="flex items-center h-full gap-1 flex-wrap">
-                  {newTags.map((t, i) => (
-                    <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
-                      {t}
-                      <button onClick={() => setNewTags(newTags.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500">
-                        <Xmark className="w-2.5 h-2.5" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    placeholder={newTags.length === 0 ? "태그 입력 후 Enter" : ""}
-                    onKeyDown={e => {
-                      if (e.nativeEvent.isComposing) return;
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const v = e.currentTarget.value.trim();
-                        if (v && !newTags.includes(v)) { setNewTags([...newTags, v]); e.currentTarget.value = ''; }
-                      }
-                      if (e.key === 'Escape') { setAdding(false); resetNewRow(); }
-                    }}
-                    className="flex-1 min-w-[60px] h-6 text-[11px] border-none outline-none bg-transparent placeholder:text-gray-300"
-                  />
-                </div>
-              </td>
-              <td colSpan={2} className={td}>
-                <div className="flex items-center h-full gap-2">
-                  <button onClick={handleSubmitNew} disabled={!canSubmit || submitting}
-                    className="text-[11px] text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-300">
-                    {submitting ? '저장 중...' : 'Enter 저장'}
-                  </button>
-                  <button onClick={() => { setAdding(false); resetNewRow(); }}
-                    className="text-[11px] text-gray-400 hover:text-gray-600">
-                    Esc 취소
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ) : (
-            <tr>
-              <td colSpan={COL_SPAN}>
-                <button onClick={() => setAdding(true)}
-                  className="w-full h-9 text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50/80 transition-colors flex items-center justify-center gap-1">
-                  <Plus className="w-3.5 h-3.5" /> 새 규정
-                </button>
-              </td>
-            </tr>
-          )}
+          {/* 행 추가 */}
+          <tr>
+            <td colSpan={COL_SPAN}>
+              <button onClick={handleAddBlankRow}
+                className="w-full h-9 text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50/80 transition-colors flex items-center justify-center gap-1">
+                <Plus className="w-3.5 h-3.5" /> 행 추가
+              </button>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -733,19 +1081,28 @@ export default function RulesTable({
 // 정렬 가능 헤더
 // ═══════════════════════════════════════════════════════════
 
-function SortableHeader({ field, active, dir, onSort, className, children }: {
-  field: SortField; active: SortField; dir: SortDir;
-  onSort: (f: SortField) => void; className?: string; children: React.ReactNode;
+function ResizableHeader({ field, active, dir, onSort, onResizeStart, className, children, isLast }: {
+  field: string; active: SortField; dir: SortDir;
+  onSort: (f: SortField) => void;
+  onResizeStart: (field: string, e: React.MouseEvent) => void;
+  className?: string; children: React.ReactNode;
+  isLast?: boolean;
 }) {
   const isActive = active === field;
   return (
-    <th className={`${className} cursor-pointer select-none hover:bg-gray-100/60 transition-colors group/th`} onClick={() => onSort(field)}>
+    <th className={`${className} relative cursor-pointer select-none hover:bg-gray-100/60 transition-colors group/th`} onClick={() => onSort(field as SortField)}>
       <div className="flex items-center gap-1">
         {children}
         <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover/th:opacity-40'}`}>
           {isActive && dir === 'desc' ? <NavArrowUp className="w-3 h-3" /> : <NavArrowDown className="w-3 h-3" />}
         </span>
       </div>
+      {!isLast && (
+        <div
+          onMouseDown={(e) => onResizeStart(field, e)}
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-400/50 active:bg-blue-500/60 z-10"
+        />
+      )}
     </th>
   );
 }
@@ -778,9 +1135,12 @@ function CategorySelect({ value, options, onChange, onAddOption, onClose, inline
   const [open, setOpen] = useState(!inline);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  // 포커스 인덱스: 0 = "-"(없음), 1~ = filtered options, 마지막 = canAdd
+  const [fi, setFi] = useState(0);
 
   const filtered = options.filter(o => !search || o.toLowerCase().includes(search.toLowerCase()));
   const canAdd = search.trim() && !options.some(o => o.toLowerCase() === search.trim().toLowerCase());
+  const totalItems = 1 + filtered.length + (canAdd ? 1 : 0); // "-" + filtered + add
 
   useEffect(() => {
     if (!open && !inline) return;
@@ -810,22 +1170,33 @@ function CategorySelect({ value, options, onChange, onAddOption, onClose, inline
   const dropdown = (
     <div className="absolute z-50 top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[260px] overflow-hidden flex flex-col">
       <div className="p-2 border-b border-gray-100">
-        <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+        <input autoFocus value={search} onChange={e => { setSearch(e.target.value); setFi(0); }}
           onKeyDown={e => {
             if (e.nativeEvent.isComposing) return;
-            if (e.key === 'Enter' && canAdd) handleAdd();
+            if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setFi(i => Math.min(i + 1, totalItems - 1)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); setFi(i => Math.max(i - 1, 0)); }
+            else if (e.key === 'Enter') {
+              e.preventDefault(); e.stopPropagation();
+              if (fi === 0) handleSelect('');
+              else if (fi <= filtered.length) handleSelect(filtered[fi - 1]);
+              else if (canAdd) handleAdd();
+            } else if (e.key === 'Escape') {
+              e.preventDefault(); if (inline) setOpen(false); else onClose();
+            }
           }}
           placeholder="검색 또는 추가..."
           className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
       </div>
       <div className="overflow-y-auto flex-1 py-1">
         <button onClick={() => handleSelect('')}
-          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${!value ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>
+          onMouseEnter={() => setFi(0)}
+          className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${fi === 0 ? 'bg-blue-50' : 'hover:bg-gray-50'} ${!value ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>
           -
         </button>
-        {filtered.map(opt => (
+        {filtered.map((opt, idx) => (
           <button key={opt} onClick={() => handleSelect(opt)}
-            className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${value === opt ? 'text-blue-600 font-medium bg-blue-50/40' : 'text-gray-600'}`}>
+            onMouseEnter={() => setFi(idx + 1)}
+            className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${fi === idx + 1 ? 'bg-blue-50' : 'hover:bg-gray-50'} ${value === opt ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
             <span className="inline-flex items-center px-1.5 py-0 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-100">
               {opt}
             </span>
@@ -872,16 +1243,6 @@ function TagEditor({ tags, onChange, onClose }: {
   onClose: () => void;
 }) {
   const [input, setInput] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
 
   const addTag = () => {
     const trimmed = input.trim();
@@ -896,56 +1257,243 @@ function TagEditor({ tags, onChange, onClose }: {
   };
 
   return (
-    <div ref={ref} className="absolute left-0 top-0 z-40 w-[280px]">
-      <div className="bg-white border border-blue-400 rounded shadow-lg px-2 py-1.5 flex items-center gap-1 flex-wrap min-h-[32px]">
-        {tags.map((t, i) => (
-          <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
-            {t}
-            <button onClick={() => removeTag(i)} className="text-gray-400 hover:text-red-500">
-              <Xmark className="w-2.5 h-2.5" />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          autoFocus
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.nativeEvent.isComposing) return;
-            if (e.key === 'Enter') { e.preventDefault(); addTag(); }
-            if (e.key === 'Backspace' && !input && tags.length > 0) removeTag(tags.length - 1);
-            if (e.key === 'Escape') onClose();
-          }}
-          placeholder={tags.length === 0 ? '태그 입력 후 Enter' : ''}
-          className="flex-1 min-w-[60px] text-[11px] border-none outline-none bg-transparent"
-        />
-      </div>
+    <div className="w-full flex items-center gap-1 overflow-x-auto">
+      {tags.map((t, i) => (
+        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600 shrink-0">
+          {t}
+          <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); removeTag(i); }} className="text-gray-400 hover:text-red-500">
+            <Xmark className="w-2.5 h-2.5" />
+          </button>
+        </span>
+      ))}
+      <input
+        autoFocus
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+          if (e.key === 'Backspace' && !input && tags.length > 0) removeTag(tags.length - 1);
+          if (e.key === 'Escape') onClose();
+        }}
+        placeholder={tags.length === 0 ? '태그 입력' : ''}
+        className="flex-1 min-w-[60px] text-[11px] border-none outline-none bg-transparent"
+      />
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 내용 편집기
 // ═══════════════════════════════════════════════════════════
 
 function ContentEditor({ value, onChange, onClose }: {
   value: string; onChange: (val: string) => void; onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const lastValueRef = useRef(value);
+  const isComposing = useRef(false);
+  const initialized = useRef(false);
+  const [showVarMenu, setShowVarMenu] = useState(false);
+  const [varFocused, setVarFocused] = useState(0);
+
+  const RULE_VARS = [
+    { key: 'brandName', label: '매장명', desc: '적용 매장의 브랜드명' },
+  ];
+  const VAR_LABELS: Record<string, string> = { brandName: '매장명' };
+
+  // chip HTML 생성
+  const chipHtml = (key: string, label: string) =>
+    `<span contenteditable="false" data-var="${key}" style="display:inline-flex;align-items:center;padding:1px 8px;margin:0 2px;font-size:12px;font-weight:500;background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;border-radius:6px;cursor:default;user-select:all;vertical-align:baseline;line-height:1.6">${label}</span>`;
+
+  const textToHtml = (text: string) => {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\{\{(\w[\w.]*)\}\}/g, (_, key) => chipHtml(key, VAR_LABELS[key] || key))
+      .replace(/\n/g, '<br>');
+  };
+
+  const extractText = (el: HTMLElement): string => {
+    let result = '';
+    for (const node of Array.from(el.childNodes)) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        result += node.textContent || '';
+      } else if (node instanceof HTMLElement) {
+        if (node.dataset.var) result += `{{${node.dataset.var}}}`;
+        else if (node.tagName === 'BR') result += '\n';
+        else if (node.tagName === 'DIV' || node.tagName === 'P') {
+          if (result.length > 0 && !result.endsWith('\n')) result += '\n';
+          result += extractText(node);
+        } else result += extractText(node);
+      }
+    }
+    return result;
+  };
+
+  // 외부 클릭으로 닫기
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
+  // 초기 HTML 설정
+  useEffect(() => {
+    if (!editorRef.current || initialized.current) return;
+    editorRef.current.innerHTML = textToHtml(value) || '';
+    initialized.current = true;
+    lastValueRef.current = value;
+    // 포커스 + 커서 끝으로
+    editorRef.current.focus();
+    const sel = window.getSelection();
+    if (sel) {
+      const range = document.createRange();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }, []);
+
+  // 외부 value 변경 동기화
+  useEffect(() => {
+    if (!editorRef.current || !initialized.current) return;
+    if (extractText(editorRef.current) !== value) {
+      editorRef.current.innerHTML = textToHtml(value) || '';
+    }
+    lastValueRef.current = value;
+  }, [value]);
+
+  const emitChange = useCallback(() => {
+    if (isComposing.current || !editorRef.current) return;
+    const newText = extractText(editorRef.current);
+    if (newText !== lastValueRef.current) {
+      lastValueRef.current = newText;
+      onChange(newText);
+    }
+  }, [onChange]);
+
+  const insertVar = useCallback((key: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    // # 문자가 커서 앞에 있으면 제거
+    const range = sel.getRangeAt(0);
+    const startContainer = range.startContainer;
+    if (startContainer.nodeType === Node.TEXT_NODE) {
+      const text = startContainer.textContent || '';
+      const offset = range.startOffset;
+      if (offset > 0 && text[offset - 1] === '#') {
+        startContainer.textContent = text.slice(0, offset - 1) + text.slice(offset);
+        range.setStart(startContainer, offset - 1);
+        range.collapse(true);
+      }
+    }
+
+    const label = VAR_LABELS[key] || key;
+    const chip = document.createElement('span');
+    chip.contentEditable = 'false';
+    chip.dataset.var = key;
+    chip.style.cssText = 'display:inline-flex;align-items:center;padding:1px 8px;margin:0 2px;font-size:12px;font-weight:500;background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;border-radius:6px;cursor:default;user-select:all;vertical-align:baseline;line-height:1.6';
+    chip.textContent = label;
+
+    const insertRange = sel.getRangeAt(0);
+    insertRange.deleteContents();
+    insertRange.insertNode(chip);
+    const after = document.createTextNode('\u200B');
+    chip.after(after);
+    insertRange.setStartAfter(after);
+    insertRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(insertRange);
+
+    setShowVarMenu(false);
+    emitChange();
+  }, [emitChange]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showVarMenu) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setVarFocused(i => Math.min(i + 1, RULE_VARS.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setVarFocused(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Enter') { e.preventDefault(); insertVar(RULE_VARS[varFocused].key); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setShowVarMenu(false); return; }
+    }
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+  };
+
+  const handleInput = () => {
+    if (isComposing.current) return;
+    // # 감지
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        const offset = range.startOffset;
+        if (offset > 0 && text[offset - 1] === '#') {
+          setShowVarMenu(true);
+          setVarFocused(0);
+        } else {
+          setShowVarMenu(false);
+        }
+      }
+    }
+    emitChange();
+  };
+
   return (
-    <div ref={ref} className="absolute left-0 top-0 z-40 w-[480px]">
-      <textarea autoFocus value={value} onChange={e => onChange(e.target.value)}
-        rows={Math.min(Math.max(value.split('\n').length + 1, 3), 10)}
-        className="w-full text-sm border border-blue-400 rounded px-3 py-2 bg-white shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-50 resize-both leading-relaxed" />
+    <div ref={wrapRef} className="absolute z-40 left-0 top-0 w-full min-w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+      <div className="relative">
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={() => { isComposing.current = true; }}
+          onCompositionEnd={() => { isComposing.current = false; handleInput(); }}
+          onPaste={e => {
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+          }}
+          className="w-full text-sm text-gray-700 border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed resize-y"
+          style={{ minHeight: 120 }}
+        />
+        {!value && (
+          <div className="absolute top-1.5 left-2 text-sm text-gray-400 pointer-events-none">내용을 입력하세요</div>
+        )}
+      </div>
+      {/* # 변수 드롭다운 */}
+      {showVarMenu && (
+        <div className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 mt-0.5 w-52">
+          <div className="px-2.5 py-1 text-[10px] text-gray-400 font-semibold uppercase tracking-wider">변수 삽입</div>
+          {RULE_VARS.map((v, i) => (
+            <button key={v.key}
+              onMouseDown={e => { e.preventDefault(); insertVar(v.key); }}
+              onMouseEnter={() => setVarFocused(i)}
+              className={`w-full text-left px-2.5 py-1.5 transition-colors flex items-center gap-2 ${i === varFocused ? 'bg-violet-50' : 'hover:bg-gray-50'}`}>
+              <span className="text-[11px] font-medium text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">{v.label}</span>
+              <span className="text-[10px] text-gray-400">{v.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {/* 하단 힌트 */}
+      <div className="flex items-center gap-1.5 mt-1 px-0.5">
+        <span className="text-[10px] text-gray-300"># 입력으로 변수 삽입</span>
+        {value.includes('{{') && (
+          <span className="text-[10px] text-violet-400">변수 포함됨</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -958,11 +1506,42 @@ function PlatformSelect({ value, options, onChange, onClose, inline }: {
   value: string; options: string[]; onChange: (val: string) => void; onClose: () => void; inline?: boolean;
 }) {
   const [open, setOpen] = useState(!inline);
+  const [focused, setFocused] = useState(() => {
+    const idx = options.indexOf(value);
+    return idx >= 0 ? idx : 0;
+  });
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setFocused(i => Math.min(i + 1, options.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); setFocused(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') {
+      e.preventDefault(); e.stopPropagation();
+      if (options[focused]) {
+        if (inline) { onChange(options[focused]); setOpen(false); }
+        else { onChange(options[focused]); onClose(); }
+      }
+    } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (inline) setOpen(false); else onClose(); }
+  }, [focused, options, onChange, onClose, inline]);
+
+  // 마운트 시 리스트에 포커스 → 키보드 동작
+  useEffect(() => {
+    listRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current?.children[focused] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [focused]);
+
   const dropdownEl = (onSelect: (v: string) => void) => (
-    <div data-dropdown className="absolute z-50 top-full left-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto py-1">
-      {options.map(opt => (
+    <div ref={listRef} data-dropdown className="absolute z-50 top-full left-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto py-1 outline-none"
+      tabIndex={-1} onKeyDown={handleKeyDown}>
+      {options.map((opt, i) => (
         <button key={opt} onClick={() => onSelect(opt)}
-          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${value === opt ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+          onMouseEnter={() => setFocused(i)}
+          className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${i === focused ? 'bg-blue-50' : 'hover:bg-gray-50'} ${value === opt ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
           {opt}
         </button>
       ))}
@@ -971,7 +1550,7 @@ function PlatformSelect({ value, options, onChange, onClose, inline }: {
 
   if (inline) {
     return (
-      <div data-dropdown className="relative w-full">
+      <div data-dropdown className="relative w-full" onKeyDown={handleKeyDown}>
         <button onClick={() => setOpen(!open)} className="w-full h-7 text-left text-sm border border-gray-300 rounded px-2 bg-white truncate flex items-center justify-between">
           <span className="text-gray-600">{value || '-'}</span>
           <NavArrowDown className="w-3 h-3 text-gray-400 shrink-0" />
@@ -981,7 +1560,7 @@ function PlatformSelect({ value, options, onChange, onClose, inline }: {
     );
   }
   return (
-    <div data-dropdown className="relative w-full">
+    <div data-dropdown className="relative w-full" onKeyDown={handleKeyDown}>
       {dropdownEl((opt) => { onChange(opt); onClose(); })}
     </div>
   );
@@ -996,34 +1575,56 @@ function StoreMultiSelect({ value, options, onChange, onClose, inline }: {
 }) {
   const [open, setOpen] = useState(!inline);
   const [search, setSearch] = useState('');
-  const selected = new Set(value);
-  const isAllCommon = selected.has('공통');
+  const [fi, setFi] = useState(0); // focused index: 0=공통, 1+=filtered stores
+  const actualStores = value.filter(s => s !== '공통');
+  const isCommon = actualStores.length === 0;
 
   const toggle = (item: string) => {
-    if (item === '공통') { onChange(selected.has(item) ? [] : ['공통']); }
-    else {
-      const next = new Set(selected);
-      next.delete('공통');
+    if (item === '공통') {
+      onChange(['공통']);
+    } else {
+      const next = new Set(actualStores);
       if (next.has(item)) next.delete(item); else next.add(item);
-      onChange(Array.from(next));
+      onChange(next.size === 0 ? ['공통'] : Array.from(next));
     }
   };
 
   const filtered = options.filter(o => !search || o.includes(search));
+  // 전체 항목: [공통, ...filtered]
+  const allItems = ['공통', ...filtered];
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setFi(i => Math.min(i + 1, allItems.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); setFi(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === ' ' && search) return; // 검색 중 스페이스는 입력용
+      e.preventDefault(); e.stopPropagation();
+      if (allItems[fi]) toggle(allItems[fi]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (inline) setOpen(false); else onClose();
+    }
+  };
+
   const dropdown = (
     <div data-dropdown className="absolute z-50 top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[260px] overflow-hidden flex flex-col">
       <div className="p-2 border-b border-gray-100">
-        <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="검색..."
+        <input autoFocus value={search} onChange={e => { setSearch(e.target.value); setFi(0); }} placeholder="검색..."
+          onKeyDown={handleKey}
           className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400" />
       </div>
       <div className="overflow-y-auto flex-1 p-1">
-        <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-          <input type="checkbox" checked={selected.has('공통')} onChange={() => toggle('공통')} className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5" />
-          <span className="text-xs font-medium text-gray-700">공통</span>
+        <label className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${fi === 0 ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+          onMouseEnter={() => setFi(0)}>
+          <input type="checkbox" checked={isCommon} onChange={() => toggle('공통')} className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5" />
+          <span className={`text-xs font-medium ${isCommon ? 'text-blue-600' : 'text-gray-700'}`}>공통 (전체)</span>
         </label>
-        {filtered.map(item => (
-          <label key={item} className={`flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer ${isAllCommon ? 'opacity-40' : ''}`}>
-            <input type="checkbox" checked={selected.has(item)} onChange={() => toggle(item)} disabled={isAllCommon} className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5" />
+        <div className="border-t border-gray-100 my-0.5" />
+        {filtered.map((item, idx) => (
+          <label key={item} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${fi === idx + 1 ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+            onMouseEnter={() => setFi(idx + 1)}>
+            <input type="checkbox" checked={actualStores.includes(item)} onChange={() => toggle(item)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-3.5 h-3.5" />
             <span className="text-xs text-gray-700">{item}</span>
           </label>
         ))}

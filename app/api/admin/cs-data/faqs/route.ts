@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
         ...data,
         createdAt: data.createdAt?.toDate?.() || data.createdAt,
         updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
-        // tags fallback
-        tags: (data.tags && data.tags.length > 0) ? data.tags : (data.tag_actions || []),
+        tags: data.tags || [],
+        intent: data.intent || null,
       });
     }
 
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
               guide: guide || '',
               topic: topic || '',
               tags: tags || [],
-              tag_actions: tags || [],
+              intent: null,
               action_product: action_product || null,
               action: action || null,
               handlerType: rule?.trim() ? 'conditional' : (handlerType || 'bot'),

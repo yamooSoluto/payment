@@ -44,7 +44,7 @@ const TOPIC_OPTIONS = [
   '회원/혜택', '기술/접속', '제보/신고', '기타',
 ];
 
-const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
+const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급', 'c2c'];
 
 const ACTION_PRODUCTS = ['ticket', 'room', 'locker', 'seat', 'shop', 'reservation'];
 const ACTION_TYPES = ['change', 'cancel', 'refund', 'extend', 'transfer', 'check', 'issue'];

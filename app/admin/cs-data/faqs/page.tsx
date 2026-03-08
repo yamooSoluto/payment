@@ -186,7 +186,7 @@ export default function CsDataFaqsPage() {
                 rule: faq.rule,
                 tags: faq.tags,
                 topic: faq.topic,
-                tag_actions: faq.tags,
+                intent: faq.intent,
                 action_product: faq.action_product,
                 action: faq.action,
               },

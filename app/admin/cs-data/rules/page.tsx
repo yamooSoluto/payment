@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { RefreshDouble, Xmark, OpenNewWindow } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
 import RulesTable, { type Rule, type RuleAddData, type PackageInfo } from '@/components/admin/cs-data/RulesTable';
@@ -56,6 +56,11 @@ export default function CsDataRulesPage() {
   // 편집
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
   const [syncingDirty, setSyncingDirty] = useState(false);
+
+  // Undo / Redo
+  type HistoryEntry = { ruleId: string; field: string; oldValue: any; newValue: any };
+  const undoStack = useRef<HistoryEntry[]>([]);
+  const redoStack = useRef<HistoryEntry[]>([]);
 
   // 사이드패널
   const [sidePanelItem, setSidePanelItem] = useState<SidePanelItem | null>(null);
@@ -149,10 +154,38 @@ export default function CsDataRulesPage() {
 
   // ── 셀 편집 ──
   const handleCellEdit = useCallback((ruleId: string, field: string, value: any) => {
+    setRules(prev => {
+      const oldRule = prev.find(r => r.id === ruleId);
+      if (!oldRule) return prev;
+      const oldValue = (oldRule as any)[field];
+      if (JSON.stringify(oldValue) === JSON.stringify(value)) return prev;
+      undoStack.current.push({ ruleId, field, oldValue, newValue: value });
+      redoStack.current = [];
+      setDirtyIds(p => new Set(p).add(ruleId));
+      return prev.map(r => r.id === ruleId ? { ...r, [field]: value } : r);
+    });
+  }, []);
+
+  // ── Undo ──
+  const handleUndo = useCallback(() => {
+    const entry = undoStack.current.pop();
+    if (!entry) return;
+    redoStack.current.push(entry);
     setRules(prev => prev.map(r =>
-      r.id === ruleId ? { ...r, [field]: value } : r
+      r.id === entry.ruleId ? { ...r, [entry.field]: entry.oldValue } : r
     ));
-    setDirtyIds(prev => new Set(prev).add(ruleId));
+    setDirtyIds(prev => new Set(prev).add(entry.ruleId));
+  }, []);
+
+  // ── Redo ──
+  const handleRedo = useCallback(() => {
+    const entry = redoStack.current.pop();
+    if (!entry) return;
+    undoStack.current.push(entry);
+    setRules(prev => prev.map(r =>
+      r.id === entry.ruleId ? { ...r, [entry.field]: entry.newValue } : r
+    ));
+    setDirtyIds(prev => new Set(prev).add(entry.ruleId));
   }, []);
 
   // ── 변경사항 동기화 ──
@@ -228,7 +261,33 @@ export default function CsDataRulesPage() {
     }
   }, []);
 
-  // ── 추가 ─���
+  // ── 일괄 삭제 ──
+  const handleBulkDelete = useCallback(async (ruleIds: string[]) => {
+    try {
+      const results = await Promise.allSettled(
+        ruleIds.map(id => fetch('/api/admin/cs-data/rules/' + id, { method: 'DELETE' }))
+      );
+      const deletedIds = new Set<string>();
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value.ok) deletedIds.add(ruleIds[i]);
+      });
+      if (deletedIds.size > 0) {
+        setRules(prev => prev.filter(r => !deletedIds.has(r.id)));
+        setDirtyIds(prev => {
+          const next = new Set(prev);
+          deletedIds.forEach(id => next.delete(id));
+          return next;
+        });
+      }
+      const failed = ruleIds.length - deletedIds.size;
+      if (failed > 0) alert(failed + '개 규정 삭제에 실패��습니다.');
+    } catch (err) {
+      console.error('[rules page] bulk delete error:', err);
+      alert('일괄 삭제 중 오류가 발생했습니다.');
+    }
+  }, []);
+
+  // ── 추가 ──
   const handleAdd = useCallback(async (data: RuleAddData) => {
     const res = await fetch('/api/admin/cs-data/rules', {
       method: 'POST',
@@ -239,7 +298,12 @@ export default function CsDataRulesPage() {
       const err = await res.json();
       throw new Error(err.error || '추가 실패');
     }
-    fetchData();
+    const result = await res.json();
+    if (result.rule) {
+      setRules(prev => [...prev, result.rule]);
+    } else {
+      fetchData();
+    }
   }, [fetchData]);
 
   // ── 분류 옵션 추가 (인라인에서 새 옵션 입력 시) ──
@@ -347,6 +411,7 @@ export default function CsDataRulesPage() {
               scopeOptions={scopeOptions}
               onCellEdit={handleCellEdit}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDelete}
               onAdd={handleAdd}
               dirtyIds={dirtyIds}
               packagesMap={packagesMap}
@@ -354,6 +419,8 @@ export default function CsDataRulesPage() {
               onRefClick={handleRefClick}
               categoryOptions={categoryOptions}
               onAddCategory={handleAddCategory}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
             />
           </div>
         )}
@@ -410,7 +477,7 @@ export default function CsDataRulesPage() {
 
 // ═══════════════════════════════════════════════════════════
 // 사이드패널: 패키지 상세
-// ═══════════════════════════════════════════════════════════
+// ═════════════════��═════════════════════════════════════════
 
 function PackagePanelContent({ data }: { data: PackageDetail }) {
   return (

@@ -8,7 +8,7 @@ import { addAdminLog } from '@/lib/admin-log';
 // ═══════════════════════════════════════════════════════════
 
 function substituteVars(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+  return text.replace(/\{\{([\w.]+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 
 export async function POST(
@@ -99,7 +99,7 @@ export async function POST(
       const tenantInfo = tenantInfoMap.get(tenantId);
       if (!tenantInfo) continue;
 
-      const vars = { brandName: tenantInfo.brandName };
+      const baseVars: Record<string, string> = { brandName: tenantInfo.brandName };
       let createdCount = 0;
 
       for (const ft of faqTemplates) {
@@ -108,11 +108,39 @@ export async function POST(
           .map((ruleId: string) => {
             const rule = rulesMap.get(ruleId);
             if (!rule || !rule.content) return null;
-            const content = substituteVars(rule.content, vars);
+            const content = substituteVars(rule.content, baseVars);
             return rule.label ? `${rule.label}: ${content}` : content;
           })
           .filter(Boolean) as string[];
 
+        // keyDataSources resolve (datapage API) → keyData + vars
+        let resolvedVars: Record<string, string> = {};
+        let keyDataMatched = true; // 데이터 소스가 없으면 기본 true
+        if (ft.keyDataSources && ft.keyDataSources.length > 0) {
+          try {
+            const resolveRes = await fetch(`${datapageUrl}/api/keydata/resolve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenantId, keyDataSources: ft.keyDataSources }),
+            });
+            if (resolveRes.ok) {
+              const resolved = await resolveRes.json();
+              keyDataMatched = resolved.matched !== false;
+              keyData.push(...(resolved.keyData || []));
+              resolvedVars = resolved.vars || {};
+            }
+          } catch (err) {
+            console.warn(`[package apply] keyDataSources resolve failed for tenant ${tenantId}:`, err);
+          }
+        }
+
+        // 데이터 소스가 있는데 매칭 데이터가 없으면 해당 FAQ 건너뜀
+        if (!keyDataMatched) {
+          console.log(`[package apply] skipping FAQ "${(ft.questions || [])[0]}" for tenant ${tenantId}: no matching data`);
+          continue;
+        }
+
+        const vars = { ...baseVars, ...resolvedVars };
         const vectorUuid = `vec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const questions = (ft.questions || []).map((q: string) => substituteVars(q, vars));
         const ruleText = ft.rule || '';
@@ -126,9 +154,10 @@ export async function POST(
           guide: substituteVars(ft.guide || '', vars),
           keyData,
           keyDataRefs: ft.keyDataRefs || [],
+          keyDataSources: ft.keyDataSources || [],
           topic: ft.topic || '',
           tags: ft.tags || [],
-          tag_actions: ft.tags || [],
+          intent: (ft.tags && ft.tags[0]) || '문의',
           handlerType: derivedHandlerType,
           handler,
           rule: ruleText,

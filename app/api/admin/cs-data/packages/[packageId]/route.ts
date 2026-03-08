@@ -41,6 +41,7 @@ export async function GET(
         name: data.name || '',
         description: data.description || '',
         isPublic: data.isPublic || false,
+        provisionMode: data.provisionMode || 'manual',
         requiredTags: data.requiredTags || [],
         faqTemplates: data.faqTemplates || [],
         appliedTenants: data.appliedTenants || [],
@@ -91,6 +92,7 @@ export async function PATCH(
     if (body.description !== undefined) updates.description = body.description.trim();
     if (body.faqTemplates !== undefined) updates.faqTemplates = body.faqTemplates;
     if (body.isPublic !== undefined) updates.isPublic = !!body.isPublic;
+    if (body.provisionMode !== undefined) updates.provisionMode = body.provisionMode;
     if (body.requiredTags !== undefined) updates.requiredTags = Array.isArray(body.requiredTags) ? body.requiredTags : [];
 
     // 규정 역참조 업데이트: faqTemplates 변경 시 keyDataRefs diff 계산

@@ -8,7 +8,7 @@ import { addAdminLog } from '@/lib/admin-log';
 // ═══════════════════════════════════════════════════════════
 
 function substituteVars(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+  return text.replace(/\{\{([\w.]+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 
 export async function POST(
@@ -84,7 +84,7 @@ export async function POST(
     // 3. 각 테넌트에 동기화
     for (const tenantInfo of targetTenants) {
       const { tenantId, brandName } = tenantInfo;
-      const vars = { brandName };
+      const baseVars: Record<string, string> = { brandName };
 
       // 해당 테넌트의 패키지 FAQ 조회
       const faqsSnapshot = await db.collection('tenants').doc(tenantId).collection('faqs')
@@ -138,9 +138,54 @@ export async function POST(
         const keyData: string[] = (ft.keyDataRefs || [])
           .map((ruleId: string) => {
             const content = rulesMap.get(ruleId);
-            return content ? substituteVars(content, vars) : null;
+            return content ? substituteVars(content, baseVars) : null;
           })
           .filter(Boolean) as string[];
+
+        // keyDataSources resolve (datapage API) → keyData + vars
+        let resolvedVars: Record<string, string> = {};
+        let keyDataMatched = true;
+        if (ft.keyDataSources && ft.keyDataSources.length > 0) {
+          try {
+            const resolveRes = await fetch(`${datapageUrl}/api/keydata/resolve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenantId, keyDataSources: ft.keyDataSources }),
+            });
+            if (resolveRes.ok) {
+              const resolved = await resolveRes.json();
+              keyDataMatched = resolved.matched !== false;
+              keyData.push(...(resolved.keyData || []));
+              resolvedVars = resolved.vars || {};
+            }
+          } catch (err) {
+            console.warn(`[package sync] keyDataSources resolve failed for tenant ${tenantId}:`, err);
+          }
+        }
+
+        // 데이터 소스가 있는데 매칭 데이터가 없으면 해당 FAQ 건너뜀 (기존 FAQ가 있으면 soft delete)
+        if (!keyDataMatched) {
+          if (existing && !existing.data.overridden) {
+            await db.collection('tenants').doc(tenantId).collection('faqs').doc(existing.docId).update({
+              isActive: false, deletedAt: Date.now(), deletedBy: admin.adminId,
+            });
+            if (existing.data.vectorUuid) {
+              try {
+                await fetch(`${datapageUrl}/api/vector/delete`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tenantId, vectorUuid: existing.data.vectorUuid }),
+                });
+              } catch { /* ignore */ }
+            }
+            deleted++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
+        const vars = { ...baseVars, ...resolvedVars };
 
         if (existing) {
           // 이미 존재 — overridden이면 건너뜀
@@ -162,9 +207,10 @@ export async function POST(
             guide: substituteVars(ft.guide || '', vars),
             keyData,
             keyDataRefs: ft.keyDataRefs || [],
+            keyDataSources: ft.keyDataSources || [],
             topic: ft.topic || '',
             tags: ft.tags || [],
-            tag_actions: ft.tags || [],
+            intent: (ft.tags && ft.tags[0]) || '문의',
             handlerType: syncHandlerType,
             handler: syncHandler,
             rule: syncRule,
@@ -222,9 +268,10 @@ export async function POST(
             guide: substituteVars(ft.guide || '', vars),
             keyData,
             keyDataRefs: ft.keyDataRefs || [],
+            keyDataSources: ft.keyDataSources || [],
             topic: ft.topic || '',
             tags: ft.tags || [],
-            tag_actions: ft.tags || [],
+            intent: (ft.tags && ft.tags[0]) || '문의',
             handlerType: newHandlerType,
             handler: newHandler,
             rule: newRule,
@@ -274,13 +321,12 @@ export async function POST(
         }
       }
 
-      // appliedTenants의 faqCount 업데이트
+      // appliedTenants의 faqCount + appliedAt 업데이트
       const updatedApplied = (packageData.appliedTenants || []).map((t: any) =>
-        t.tenantId === tenantId ? { ...t, faqCount: faqTemplates.length } : t
+        t.tenantId === tenantId ? { ...t, faqCount: faqTemplates.length, appliedAt: new Date().toISOString() } : t
       );
       await packagesRef.doc(packageId).update({
         appliedTenants: updatedApplied,
-        updatedAt: new Date(),
       });
     }
 

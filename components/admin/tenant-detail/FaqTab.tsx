@@ -61,7 +61,7 @@ interface TenantFaq {
   rule?: string;
   tags?: string[];
   topic?: string;
-  tag_actions?: string[];
+  intent?: string;
   action_product?: string | null;  // ticket|room|locker|seat|shop|reservation|null
   action?: string | null;          // change|cancel|refund|extend|transfer|check|issue|null
   isActive: boolean;
@@ -125,10 +125,8 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
       const faqsRes = await fetch(`/api/admin/tenants/${tenantId}/faqs`);
       if (faqsRes.ok) {
         const data = await faqsRes.json();
-        // tags가 비어있으면 tag_actions(AI 확장 결과)를 fallback으로 사용
         const normalized = (data.faqs || []).map((f: TenantFaq) => ({
           ...f,
-          tags: (f.tags && f.tags.length > 0) ? f.tags : (f.tag_actions || []),
         }));
         setLocalFaqs(normalized);
         setDirtyIds(new Set());
@@ -170,7 +168,7 @@ export default function FaqTab({ tenantId }: FaqTabProps) {
                 rule: faq.rule,
                 tags: faq.tags,
                 topic: faq.topic,
-                tag_actions: faq.tags,
+                intent: faq.intent,
                 action_product: faq.action_product,
                 action: faq.action,
               },

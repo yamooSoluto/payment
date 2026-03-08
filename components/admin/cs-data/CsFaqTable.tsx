@@ -20,7 +20,7 @@ interface TenantFaq {
   rule?: string;
   tags?: string[];
   topic?: string;
-  tag_actions?: string[];
+  intent?: string;
   action_product?: string | null;
   action?: string | null;
   isActive: boolean;
@@ -69,7 +69,7 @@ const TOPIC_OPTIONS = [
   '회원/혜택', '기술/접속', '제보/신고', '기타',
 ];
 
-const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급'];
+const TAG_OPTIONS = ['문의', '칭찬', '건의', '불만', '요청', '긴급', 'c2c'];
 
 const ACTION_PRODUCTS = ['ticket', 'room', 'locker', 'seat', 'shop', 'reservation'];
 const ACTION_TYPES = ['change', 'cancel', 'refund', 'extend', 'transfer', 'check', 'issue'];
@@ -81,6 +81,7 @@ const TAG_COLORS: Record<string, string> = {
   '불만': 'bg-red-100 text-red-700',
   '요청': 'bg-purple-100 text-purple-700',
   '긴급': 'bg-orange-100 text-orange-700',
+  'c2c': 'bg-teal-100 text-teal-700',
 };
 
 const COL_SPAN = 13;

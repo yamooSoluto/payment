@@ -1,37 +1,81 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Plus, Package as PackageIcon } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
+import PackageFaqTab, { type PackageData, type RuleOption, type SchemaData } from '@/components/admin/cs-data/PackageFaqTab';
+import type { TenantOption } from '@/components/admin/cs-data/PackageTenantsTab';
+
+const SCHEMA_API_URL = process.env.NEXT_PUBLIC_DATAPAGE_URL
+  ? `${process.env.NEXT_PUBLIC_DATAPAGE_URL}/api/schema/data-types`
+  : 'http://localhost:3001/api/schema/data-types';
 
 // ═══════════════════════════════════════════════════════════
-// 패키지 목록 페이지
+// 패키지 통합 관리 페이지
 // ═══════════════════════════════════════════════════════════
-
-interface PackageSummary {
-  id: string;
-  name: string;
-  description: string;
-  faqCount: number;
-  appliedTenantCount: number;
-  createdAt: string | null;
-  updatedAt: string | null;
-}
 
 export default function PackagesPage() {
-  const router = useRouter();
-  const [packages, setPackages] = useState<PackageSummary[]>([]);
+  const [packages, setPackages] = useState<PackageData[]>([]);
+  const [rules, setRules] = useState<RuleOption[]>([]);
+  const [allTenants, setAllTenants] = useState<TenantOption[]>([]);
+  const [schemaData, setSchemaData] = useState<SchemaData | null>(null);
+  const [tagOptions, setTagOptions] = useState<{ platforms: string[]; services: string[] }>({ platforms: [], services: [] });
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
 
+  // ── 데이터 로드 ──
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/cs-data/packages');
-      if (!res.ok) throw new Error('Failed to fetch');
-      const data = await res.json();
-      setPackages(data.packages || []);
+      const [pkgRes, ruleRes, tenantRes, schemaRes, settingsRes] = await Promise.all([
+        fetch('/api/admin/cs-data/packages?full=true'),
+        fetch('/api/admin/cs-data/rules'),
+        fetch('/api/admin/tenants?limit=200&status=active'),
+        fetch(SCHEMA_API_URL).catch(() => null),
+        fetch('/api/admin/settings/cs-data').catch(() => null),
+      ]);
+
+      if (pkgRes.ok) {
+        const data = await pkgRes.json();
+        setPackages((data.packages || []).map((p: any) => ({
+          id: p.id,
+          name: p.name || '',
+          description: p.description || '',
+          isPublic: p.isPublic || false,
+          provisionMode: p.provisionMode || 'manual',
+          requiredTags: p.requiredTags || [],
+          faqTemplates: p.faqTemplates || [],
+          appliedTenants: p.appliedTenants || [],
+          createdAt: p.createdAt || null,
+          updatedAt: p.updatedAt || null,
+        })));
+      }
+
+      if (ruleRes.ok) {
+        const data = await ruleRes.json();
+        setRules((data.rules || []).map((r: any) => ({
+          id: r.id,
+          platform: r.platform || '-',
+          store: r.store || ['공통'],
+          label: r.label || '',
+          content: r.content || '',
+        })));
+      }
+
+      if (tenantRes.ok) {
+        const data = await tenantRes.json();
+        setAllTenants(
+          (data.tenants || []).map((t: any) => ({ tenantId: t.tenantId, brandName: t.brandName }))
+        );
+      }
+
+      if (schemaRes?.ok) {
+        const data = await schemaRes.json();
+        setSchemaData(data);
+      }
+
+      if (settingsRes?.ok) {
+        const data = await settingsRes.json();
+        setTagOptions({ platforms: data.platforms || [], services: data.services || [] });
+      }
     } catch (err) {
       console.error('[packages page] fetch error:', err);
     } finally {
@@ -41,99 +85,127 @@ export default function PackagesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async () => {
-    const name = prompt('패키지 이름을 입력하세요');
-    if (!name?.trim()) return;
+  // ── API 핸들러 ──
 
-    setCreating(true);
-    try {
-      const res = await fetch('/api/admin/cs-data/packages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: '' }),
-      });
-      if (!res.ok) throw new Error('Failed to create');
-      const data = await res.json();
-      router.push(`/admin/cs-data/packages/${data.id}`);
-    } catch (err) {
-      console.error('[packages page] create error:', err);
-      alert('패키지 생성에 실패했습니다.');
-    } finally {
-      setCreating(false);
+  const handleCreatePackage = useCallback(async (name: string): Promise<string> => {
+    const res = await fetch('/api/admin/cs-data/packages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description: '' }),
+    });
+    if (!res.ok) throw new Error('패키지 생성 실패');
+    const data = await res.json();
+    return data.id;
+  }, []);
+
+  const handleUpdateTemplates = useCallback(async (packageId: string, templates: any[]) => {
+    const res = await fetch(`/api/admin/cs-data/packages/${packageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ faqTemplates: templates }),
+    });
+    if (!res.ok) throw new Error('FAQ 저장 실패');
+  }, []);
+
+  const handleUpdateMeta = useCallback(async (packageId: string, updates: Record<string, any>) => {
+    const res = await fetch(`/api/admin/cs-data/packages/${packageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('업데이트 실패');
+  }, []);
+
+  const handleDeletePackage = useCallback(async (packageId: string, force?: boolean) => {
+    const url = force
+      ? `/api/admin/cs-data/packages/${packageId}?force=true`
+      : `/api/admin/cs-data/packages/${packageId}`;
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || '삭제 실패');
     }
-  };
+  }, []);
 
-  const formatDate = (iso: string | null) => {
-    if (!iso) return '-';
-    const d = new Date(iso);
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-  };
+  const handleApplyTenants = useCallback(async (packageId: string, tenantIds: string[]) => {
+    const res = await fetch(`/api/admin/cs-data/packages/${packageId}/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantIds }),
+    });
+    if (!res.ok) throw new Error('적용 실패');
+    const data = await res.json();
+    alert(`${data.applied}개 매장에 ${data.created}개 FAQ 적용 완료`);
+  }, []);
+
+  const handleSyncTenants = useCallback(async (packageId: string, tenantIds?: string[]) => {
+    if (!confirm('패키지 변경사항을 적용된 매장에 동기화하시겠습니까?')) return;
+    const body = tenantIds ? { tenantIds } : {};
+    const res = await fetch(`/api/admin/cs-data/packages/${packageId}/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('동기화 실패');
+    const data = await res.json();
+    alert(`동기화 완료: ${data.synced}건 업데이트, ${data.created}건 생성, ${data.deleted}건 삭제, ${data.skipped}건 건너뜀`);
+  }, []);
+
+  const handleRemoveTenant = useCallback(async (packageId: string, tenantId: string, brandName: string, mode: 'delete' | 'keep' = 'delete') => {
+    const res = await fetch(`/api/admin/cs-data/packages/${packageId}/remove-tenant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId, mode }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `매장 제거 실패 (${res.status})`);
+    }
+    const data = await res.json();
+    const msg = mode === 'delete'
+      ? `${data.processed}개 FAQ 삭제${data.skippedOverridden > 0 ? ` (${data.skippedOverridden}건 overridden 유지)` : ''}`
+      : `${data.processed}개 FAQ를 manual로 전환`;
+    alert(msg);
+  }, []);
+
+  // ── 렌더링 ──
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">패키지 관리</h1>
+            <p className="text-sm text-gray-500 mt-0.5">FAQ 템플릿을 패키지로 묶어 여러 매장에 한 번에 적용합니다.</p>
+          </div>
+        </div>
+        <div className="flex justify-center py-20"><Spinner /></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">패키지 관리</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            FAQ 템플릿을 패키지로 묶어 여러 매장에 한 번에 적용합니다.
-          </p>
-        </div>
-        <button
-          onClick={handleCreate}
-          disabled={creating}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-lg transition-colors disabled:bg-gray-300"
-        >
-          <Plus className="w-4 h-4" />
-          {creating ? '생성 중...' : '새 패키지'}
-        </button>
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900">패키지 관리</h1>
+        <p className="text-sm text-gray-500 mt-0.5">FAQ 템플릿을 패키지로 묶어 여러 매장에 한 번에 적용합니다.</p>
       </div>
 
-      {/* 목록 */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Spinner />
-        </div>
-      ) : packages.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
-          <PackageIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">등록된 패키지가 없습니다.</p>
-          <p className="text-xs mt-1">새 패키지를 만들어 FAQ 템플릿을 구성하세요.</p>
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {packages.map(pkg => (
-            <button
-              key={pkg.id}
-              onClick={() => router.push(`/admin/cs-data/packages/${pkg.id}`)}
-              className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left w-full"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate">{pkg.name}</h3>
-                </div>
-                {pkg.description && (
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">{pkg.description}</p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-6 text-xs text-gray-500 shrink-0">
-                <div className="text-center">
-                  <div className="font-semibold text-gray-900">{pkg.faqCount}</div>
-                  <div className="text-gray-400">FAQ</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-gray-900">{pkg.appliedTenantCount}</div>
-                  <div className="text-gray-400">매장</div>
-                </div>
-                <div className="text-right text-gray-400 w-20">
-                  {formatDate(pkg.updatedAt)}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+      <PackageFaqTab
+        packages={packages}
+        rules={rules}
+        allTenants={allTenants}
+        schemaData={schemaData}
+        tagOptions={tagOptions}
+        onCreatePackage={handleCreatePackage}
+        onUpdateTemplates={handleUpdateTemplates}
+        onUpdateMeta={handleUpdateMeta}
+        onDeletePackage={handleDeletePackage}
+        onApplyTenants={handleApplyTenants}
+        onSyncTenants={handleSyncTenants}
+        onRemoveTenant={handleRemoveTenant}
+        onRefresh={fetchData}
+      />
     </div>
   );
 }
