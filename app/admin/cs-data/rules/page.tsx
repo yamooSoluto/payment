@@ -280,7 +280,7 @@ export default function CsDataRulesPage() {
         });
       }
       const failed = ruleIds.length - deletedIds.size;
-      if (failed > 0) alert(failed + '개 규정 삭제에 실패��습니다.');
+      if (failed > 0) alert(failed + '개 규정 삭제에 실패했습니다.');
     } catch (err) {
       console.error('[rules page] bulk delete error:', err);
       alert('일괄 삭제 중 오류가 발생했습니다.');
@@ -477,7 +477,7 @@ export default function CsDataRulesPage() {
 
 // ═══════════════════════════════════════════════════════════
 // 사이드패널: 패키지 상세
-// ═════════════════��═════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 function PackagePanelContent({ data }: { data: PackageDetail }) {
   return (

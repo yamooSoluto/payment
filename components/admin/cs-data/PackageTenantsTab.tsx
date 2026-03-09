@@ -437,7 +437,7 @@ export default function PackageTenantsTab({ packageId, appliedTenants, onChanged
   const handleRemove = async (tenantId: string) => {
     const tenant = appliedTenants.find(t => t.tenantId === tenantId);
     if (!tenant) return;
-    if (!confirm(`"${tenant.brandName}" 매장을 패키지에서 제거하시겠��니까?`)) return;
+    if (!confirm(`"${tenant.brandName}" 매장을 패키지에서 제거하시겠습니까?`)) return;
     setRemoving(tenantId);
     try {
       const res = await fetch(`/api/admin/cs-data/packages/${packageId}/remove-tenant`, {

@@ -110,7 +110,7 @@ export default function CsDataSettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [platforms, services]);
+  }, [platforms, services, customRequests]);
 
   if (loading) {
     return (

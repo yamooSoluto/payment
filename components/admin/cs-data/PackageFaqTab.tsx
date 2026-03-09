@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
-import { Plus, Trash, Xmark, Check, Copy, NavArrowDown, NavArrowUp, NavArrowRight, MoreHoriz, RefreshDouble, Shop, Search } from 'iconoir-react';
+import { Plus, Trash, Xmark, Check, Copy, NavArrowDown, NavArrowUp, NavArrowRight, MoreHoriz, RefreshDouble, Shop, Search, EditPencil } from 'iconoir-react';
 import { TenantManageModal, type AppliedTenant, type TenantOption } from './PackageTenantsTab';
 
 // ═══════════════════════════════════════════════════════════
@@ -112,7 +112,7 @@ const TAG_COLORS: Record<string, string> = {
 
 const NAV_FIELDS = ['question', 'topic', 'handler', 'tag', 'keyDataRefs'] as const;
 const EDITABLE_FIELDS = new Set(['question', 'topic', 'handler', 'tag']);
-const COL_SPAN = 6;
+const COL_SPAN = 7;
 
 const DEFAULT_WIDTHS: Record<string, number> = { topic: 120, handler: 110, tag: 130, keyDataRefs: 180 };
 const NUM_WIDTH = 48;
@@ -1085,7 +1085,7 @@ export default function PackageFaqTab({
   const resizing = useRef<{ field: string; startX: number; startW: number } | null>(null);
 
   // 탭 (수동/자동)
-  const [activeTab, setActiveTab] = useState<'manual' | 'auto'>('manual');
+  const [activeTab, setActiveTab] = useState<'manual' | 'auto' | 'synonyms'>('manual');
 
   // 필터
   const [filterText, setFilterText] = useState('');
@@ -1098,9 +1098,14 @@ export default function PackageFaqTab({
 
   const tableRef = useRef<HTMLDivElement>(null);
 
+  // Undo / Redo
+  type HistoryEntry = { templateId: string; pkgId: string; field: string; oldValue: any; newValue: any };
+  const undoStack = useRef<HistoryEntry[]>([]);
+  const redoStack = useRef<HistoryEntry[]>([]);
+
   const fixedSum = Object.values(columnWidths).reduce((a, b) => a + b, 0);
   const effectiveQuestionW = questionWidth ?? MIN_QUESTION_WIDTH;
-  const tableMinWidth = NUM_WIDTH + fixedSum + effectiveQuestionW;
+  const tableMinWidth = 24 + NUM_WIDTH + fixedSum + effectiveQuestionW;
 
   // templateId → packageId
   const ownerMap = useMemo(() => buildOwnerMap(localPackages), [localPackages]);
@@ -1166,6 +1171,10 @@ export default function PackageFaqTab({
   const editTemplate = useCallback((templateId: string, field: string, value: any) => {
     const pkgId = ownerMap.get(templateId);
     if (!pkgId) return;
+    // answer/guide 필드: 리터럴 \n을 실제 줄바꿈으로 변환
+    if ((field === 'answer' || field === 'guide') && typeof value === 'string' && value.includes('\\n')) {
+      value = value.replace(/\\n/g, '\n');
+    }
     setLocalPackages(prev => {
       const pkgIdx = prev.findIndex(p => p.id === pkgId);
       if (pkgIdx === -1) return prev;
@@ -1173,6 +1182,8 @@ export default function PackageFaqTab({
       if (!tpl) return prev;
       const old = (tpl as any)[field];
       if (JSON.stringify(old) === JSON.stringify(value)) return prev;
+      undoStack.current.push({ templateId, pkgId, field, oldValue: old, newValue: value });
+      redoStack.current = [];
       const updated = prev.map(pkg => {
         if (pkg.id !== pkgId) return pkg;
         return { ...pkg, faqTemplates: pkg.faqTemplates.map(t => t.id === templateId ? { ...t, [field]: value } : t) };
@@ -1247,6 +1258,23 @@ export default function PackageFaqTab({
   const handleQuestionChange = (templateId: string, idx: number, value: string) => {
     const pkgId = ownerMap.get(templateId);
     if (!pkgId) return;
+    // // 로 구분된 복수 질문 자동 분리 (;는 같은 질문 내 구분자로 유지)
+    if (value.includes('//')) {
+      const parts = value.split('//').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        setLocalPackages(prev => prev.map(pkg => {
+          if (pkg.id !== pkgId) return pkg;
+          return { ...pkg, faqTemplates: pkg.faqTemplates.map(t => {
+            if (t.id !== templateId) return t;
+            const newQ = [...t.questions];
+            newQ.splice(idx, 1, ...parts);
+            return { ...t, questions: newQ };
+          }) };
+        }));
+        setDirtyPkgIds(prev => new Set(prev).add(pkgId));
+        return;
+      }
+    }
     setLocalPackages(prev => prev.map(pkg => {
       if (pkg.id !== pkgId) return pkg;
       return { ...pkg, faqTemplates: pkg.faqTemplates.map(t => {
@@ -1440,7 +1468,44 @@ export default function PackageFaqTab({
   }, [selectedCell, editingCell, editTemplate]);
 
   // ── 키보드 ──
+  const handleUndo = useCallback(() => {
+    const entry = undoStack.current.pop();
+    if (!entry) return;
+    redoStack.current.push(entry);
+    setLocalPackages(prev => prev.map(pkg => {
+      if (pkg.id !== entry.pkgId) return pkg;
+      return { ...pkg, faqTemplates: pkg.faqTemplates.map(t =>
+        t.id === entry.templateId ? { ...t, [entry.field]: entry.oldValue } : t
+      ) };
+    }));
+    setDirtyPkgIds(p => new Set(p).add(entry.pkgId));
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    const entry = redoStack.current.pop();
+    if (!entry) return;
+    undoStack.current.push(entry);
+    setLocalPackages(prev => prev.map(pkg => {
+      if (pkg.id !== entry.pkgId) return pkg;
+      return { ...pkg, faqTemplates: pkg.faqTemplates.map(t =>
+        t.id === entry.templateId ? { ...t, [entry.field]: entry.newValue } : t
+      ) };
+    }));
+    setDirtyPkgIds(p => new Set(p).add(entry.pkgId));
+  }, []);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Ctrl+Z / Ctrl+Shift+Z: undo/redo (편집 중이 아닐 때도 동작)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) handleRedo(); else handleUndo();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
     if (editingCell) { if (e.key === 'Escape') { e.preventDefault(); stopEdit(); } return; }
     if (!selectedCell) return;
 
@@ -1514,7 +1579,7 @@ export default function PackageFaqTab({
         if ((e.metaKey || e.ctrlKey) && e.key === 'v') { e.preventDefault(); handlePaste(); }
         break;
     }
-  }, [editingCell, selectedCell, rangeEnd, visibleRows, ownerMap, stopEdit, startEdit, deselectAll, handleCopy, handlePaste, handleClearCell, handleAddFaq]);
+  }, [editingCell, selectedCell, rangeEnd, visibleRows, ownerMap, stopEdit, startEdit, deselectAll, handleCopy, handlePaste, handleClearCell, handleAddFaq, handleUndo, handleRedo]);
 
   // ── 저장 (자동저장으로 대체, 수동 호출용 래퍼) ──
   const handleSave = useCallback(async () => {
@@ -1543,10 +1608,11 @@ export default function PackageFaqTab({
     if (!name?.trim()) return;
     try {
       const id = await onCreatePackage(name.trim());
-      await onUpdateMeta(id, { provisionMode: activeTab });
+      const mode = activeTab as 'manual' | 'auto';
+      await onUpdateMeta(id, { provisionMode: mode });
       setLocalPackages(prev => [...prev, {
         id, name: name.trim(), description: '', isPublic: false,
-        provisionMode: activeTab,
+        provisionMode: mode,
         requiredTags: [], faqTemplates: [], appliedTenants: [],
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       }]);
@@ -1596,6 +1662,56 @@ export default function PackageFaqTab({
   const answerHandleRef = useRef<ChipEditorHandle | null>(null);
   const guideHandleRef = useRef<ChipEditorHandle | null>(null);
   const lastFocusedEditor = useRef<'answer' | 'guide'>('answer');
+
+  // 행 드래그 순서 변경
+  const dragRowId = useRef<string | null>(null);
+  const dragOverRowId = useRef<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
+  const handleRowDragStart = useCallback((e: React.DragEvent, templateId: string) => {
+    dragRowId.current = templateId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', templateId);
+    (e.currentTarget as HTMLElement).style.opacity = '0.4';
+  }, []);
+
+  const handleRowDragEnd = useCallback((e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).style.opacity = '1';
+    dragRowId.current = null;
+    dragOverRowId.current = null;
+    setDragOverTarget(null);
+  }, []);
+
+  const handleRowDragOver = useCallback((e: React.DragEvent, templateId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverRowId.current !== templateId) {
+      dragOverRowId.current = templateId;
+      setDragOverTarget(templateId);
+    }
+  }, []);
+
+  const handleRowDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const srcId = dragRowId.current;
+    if (!srcId || srcId === targetId) return;
+    const srcPkgId = ownerMap.get(srcId);
+    const tgtPkgId = ownerMap.get(targetId);
+    if (!srcPkgId || srcPkgId !== tgtPkgId) return; // 같은 패키지 내에서만
+    setLocalPackages(prev => prev.map(pkg => {
+      if (pkg.id !== srcPkgId) return pkg;
+      const templates = [...pkg.faqTemplates];
+      const srcIdx = templates.findIndex(t => t.id === srcId);
+      const tgtIdx = templates.findIndex(t => t.id === targetId);
+      if (srcIdx < 0 || tgtIdx < 0) return pkg;
+      const [moved] = templates.splice(srcIdx, 1);
+      templates.splice(tgtIdx, 0, moved);
+      return { ...pkg, faqTemplates: templates };
+    }));
+    setDirtyPkgIds(prev => new Set(prev).add(srcPkgId));
+    dragRowId.current = null;
+    setDragOverTarget(null);
+  }, [ownerMap]);
   const varLabels = useMemo(() => buildVarLabels(schemaData), [schemaData]);
 
   const hasDirty = dirtyPkgIds.size > 0;
@@ -1684,10 +1800,21 @@ export default function PackageFaqTab({
           }`}>
           자동 FAQ 규칙 {autoCount > 0 && <span className="ml-1 text-xs text-gray-400">({autoCount})</span>}
         </button>
+        <button onClick={() => setActiveTab('synonyms')}
+          className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+            activeTab === 'synonyms'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'
+          }`}>
+          동의어 사전
+        </button>
       </div>
 
+      {/* 동의어 사전 탭 */}
+      {activeTab === 'synonyms' && <SynonymTab />}
+
       {/* 테이블 wrapper */}
-      <div className="overflow-visible">
+      {activeTab !== 'synonyms' && <div className="overflow-visible">
         <div ref={tableRef} className="outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
 
           {/* 필터 + 툴바 */}
@@ -1823,7 +1950,8 @@ export default function PackageFaqTab({
                     <div className="px-4 pb-4">
                       <table className="border-collapse table-fixed" style={{ minWidth: tableMinWidth, width: '100%' }}>
                         <colgroup>
-                          <col style={{ width: NUM_WIDTH }} />
+                          <col style={{ width: 24 }} />
+                            <col style={{ width: NUM_WIDTH }} />
                           <col style={questionWidth ? { width: questionWidth } : undefined} />
                           <col style={{ width: columnWidths.topic }} />
                           <col style={{ width: columnWidths.handler }} />
@@ -1832,6 +1960,7 @@ export default function PackageFaqTab({
                         </colgroup>
                         <thead>
                           <tr className="border-b border-stone-200/60">
+                            <th style={{ width: 24 }} />
                             <th className={`${th} text-center`}>
                               <span className="text-xs">#</span>
                             </th>
@@ -1924,7 +2053,16 @@ export default function PackageFaqTab({
                     {/* FAQ 행들 */}
                     {!isCollapsed && sorted.map(t => (
                       <Fragment key={t.id}>
-                        <tr className="group transition-colors hover:bg-stone-50/80">
+                        <tr className={`group transition-colors hover:bg-stone-50/80 ${dragOverTarget === t.id ? 'border-t-2 border-blue-400' : ''}`}
+                          onDragOver={e => handleRowDragOver(e, t.id)}
+                          onDrop={e => handleRowDrop(e, t.id)}>
+                          {/* 드래그 핸들 */}
+                          <td className="w-6 px-0 border-b border-stone-100 text-center align-middle"
+                            draggable
+                            onDragStart={e => handleRowDragStart(e, t.id)}
+                            onDragEnd={handleRowDragEnd}>
+                            <span className="cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-80 text-gray-400 text-[10px] select-none">⠿</span>
+                          </td>
                           {/* # */}
                           <td className={`${td} text-center select-none group/numcell`}>
                             {checkedRows.has(t.id) ? (
@@ -1933,7 +2071,7 @@ export default function PackageFaqTab({
                                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-4 h-4" />
                             ) : (
                               <>
-                                <span className="text-xs text-gray-300 group-hover/numcell:hidden">{globalNumbering.get(t.id) ?? ''}</span>
+                                <span className="text-xs text-gray-300 group-hover/numcell:hidden cursor-grab">{globalNumbering.get(t.id) ?? ''}</span>
                                 <input type="checkbox" checked={false}
                                   onChange={e => { e.stopPropagation(); setCheckedRows(prev => new Set(prev).add(t.id)); }}
                                   className="hidden group-hover/numcell:inline-block rounded border-gray-300 text-blue-600 focus:ring-blue-400 w-4 h-4" />
@@ -1952,9 +2090,11 @@ export default function PackageFaqTab({
                             </div>
                           </td>
 
-                          {/* Topic — 한 번 클릭으로 드롭다운 */}
-                          <td className={cellCls(t.id, 'topic')} data-cell data-dropdown
-                            onClick={() => { if (!isEditing(t.id, 'topic')) { setSelectedCell({ id: t.id, field: 'topic' }); startEdit(t.id, 'topic'); } }}>
+                          {/* Topic — 클릭=선택, 더블클릭=드롭다운 */}
+                          <td className={cellCls(t.id, 'topic')} data-cell
+                            onMouseDown={e => { if (!isEditing(t.id, 'topic')) handleCellMouseDown(t.id, 'topic', e); }}
+                            onMouseEnter={() => handleCellMouseEnter(t.id, 'topic')}
+                            onDoubleClick={() => startEdit(t.id, 'topic')}>
                             <div className="flex items-center h-full">
                               {isEditing(t.id, 'topic') ? (
                                 <TopicSelect value={t.topic} onChange={val => { editTemplate(t.id, 'topic', val); stopEdit(); }} onClose={stopEdit} />
@@ -1967,9 +2107,11 @@ export default function PackageFaqTab({
                             </div>
                           </td>
 
-                          {/* Handler — 한 번 클릭으로 드롭다운 */}
-                          <td className={cellCls(t.id, 'handler')} data-cell data-dropdown
-                            onClick={() => { if (!isEditing(t.id, 'handler')) { setSelectedCell({ id: t.id, field: 'handler' }); startEdit(t.id, 'handler'); } }}>
+                          {/* Handler — 클릭=선택, 더블클릭=드롭다운 */}
+                          <td className={cellCls(t.id, 'handler')} data-cell
+                            onMouseDown={e => { if (!isEditing(t.id, 'handler')) handleCellMouseDown(t.id, 'handler', e); }}
+                            onMouseEnter={() => handleCellMouseEnter(t.id, 'handler')}
+                            onDoubleClick={() => startEdit(t.id, 'handler')}>
                             <div className="flex items-center h-full">
                               {isEditing(t.id, 'handler') ? (
                                 <HandlerSelect value={t.handler}
@@ -1985,8 +2127,10 @@ export default function PackageFaqTab({
                           </td>
 
                           {/* 태그 (멀티셀렉트) */}
-                          <td className={cellCls(t.id, 'tag')} data-cell data-dropdown
-                            onClick={() => { if (!isEditing(t.id, 'tag')) { setSelectedCell({ id: t.id, field: 'tag' }); startEdit(t.id, 'tag'); } }}>
+                          <td className={cellCls(t.id, 'tag')} data-cell
+                            onMouseDown={e => { if (!isEditing(t.id, 'tag')) handleCellMouseDown(t.id, 'tag', e); }}
+                            onMouseEnter={() => handleCellMouseEnter(t.id, 'tag')}
+                            onDoubleClick={() => startEdit(t.id, 'tag')}>
                             <div className="relative flex items-center h-full">
                               <span className="cursor-pointer inline-flex items-center gap-0.5 py-0.5">
                                 {(t.tags || []).length === 0 ? (
@@ -2062,6 +2206,7 @@ export default function PackageFaqTab({
                                     {t.questions.map((q, qi) => (
                                       <div key={qi} className="flex items-center gap-1.5">
                                         <input value={q} onChange={e => handleQuestionChange(t.id, qi, e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleAddQuestion(t.id); } }}
                                           onClick={e => e.stopPropagation()} placeholder={`질문 ${qi + 1}`} autoFocus={qi === 0}
                                           className="flex-1 text-sm px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 focus:bg-white transition-colors" />
                                         {t.questions.length > 1 && (
@@ -2112,25 +2257,36 @@ export default function PackageFaqTab({
                                   </div>
                                   {/* Topic + Handler 가로 배치 */}
                                   <div className="bg-white rounded-xl p-4 shadow-sm" onClick={e => e.stopPropagation()}>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div>
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">토픽</label>
-                                        <select value={t.topic || ''} onChange={e => editTemplate(t.id, 'topic', e.target.value)}
-                                          className="w-full text-sm px-3 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-stone-50 focus:bg-white transition-colors">
-                                          <option value="">선택...</option>
-                                          {TOPIC_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
+                                    <div>
+                                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">토픽</label>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {TOPIC_OPTIONS.map(opt => (
+                                          <button key={opt} onClick={() => editTemplate(t.id, 'topic', t.topic === opt ? '' : opt)}
+                                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                                              t.topic === opt ? 'bg-violet-100 text-violet-800 border-violet-300' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-200 hover:bg-violet-50/50'
+                                            }`}>
+                                            {opt}
+                                          </button>
+                                        ))}
                                       </div>
-                                      <div>
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">처리</label>
-                                        <select value={t.handler} onChange={e => {
-                                          const val = e.target.value;
-                                          editTemplate(t.id, 'handler', val);
-                                          editTemplate(t.id, 'handlerType', val === 'bot' ? 'bot' : (t.rule?.trim() ? 'conditional' : 'staff'));
-                                        }}
-                                          className="w-full text-sm px-3 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-stone-50 focus:bg-white transition-colors">
-                                          {HANDLER_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                        </select>
+                                    </div>
+                                    <div className="mt-3">
+                                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">처리</label>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {HANDLER_OPTIONS.map(opt => {
+                                          const hc = opt.value === 'bot' ? 'bg-green-100 text-green-800 border-green-300' : opt.value === 'op' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-red-100 text-red-800 border-red-300';
+                                          return (
+                                            <button key={opt.value} onClick={() => {
+                                              editTemplate(t.id, 'handler', opt.value);
+                                              editTemplate(t.id, 'handlerType', opt.value === 'bot' ? 'bot' : (t.rule?.trim() ? 'conditional' : 'staff'));
+                                            }}
+                                              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                                                t.handler === opt.value ? hc : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                              }`}>
+                                              {opt.label}
+                                            </button>
+                                          );
+                                        })}
                                       </div>
                                     </div>
                                     {/* 전달 조건 (handler가 op/manager일 때) */}
@@ -2197,7 +2353,7 @@ export default function PackageFaqTab({
             })}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* 매장 관리 모달 */}
       {tenantModalPkg && (
@@ -2212,6 +2368,266 @@ export default function PackageFaqTab({
           onClose={() => setTenantModalPkgId(null)}
         />
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 동의어 사전 탭
+// ═══════════════════════════════════════════════════════════
+
+type SynonymDict = Record<string, string[]>;
+
+function SynonymTab() {
+  const [dict, setDict] = useState<SynonymDict>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const snapshotRef = useRef<string>('');
+
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editCanon, setEditCanon] = useState('');
+  const [editVars, setEditVars] = useState('');
+  const [addMode, setAddMode] = useState(false);
+  const [newCanon, setNewCanon] = useState('');
+  const [newVars, setNewVars] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/settings/synonyms');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const d = data.dict || {};
+        setDict(d);
+        snapshotRef.current = JSON.stringify(d);
+      } catch { /* ignore */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  const update = (next: SynonymDict) => {
+    setDict(next);
+    setDirty(JSON.stringify(next) !== snapshotRef.current);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/settings/synonyms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dict }),
+      });
+      if (!res.ok) throw new Error('저장 실패');
+      snapshotRef.current = JSON.stringify(dict);
+      setDirty(false);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = (key: string) => {
+    const next = { ...dict };
+    delete next[key];
+    update(next);
+  };
+
+  const handleStartEdit = (key: string) => {
+    setEditingKey(key);
+    setEditCanon(key);
+    setEditVars(dict[key].join(', '));
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingKey) return;
+    const canon = editCanon.trim();
+    const vars = editVars.split(',').map(s => s.trim()).filter(Boolean);
+    if (!canon || vars.length === 0) return;
+    const next = { ...dict };
+    if (canon !== editingKey) delete next[editingKey];
+    next[canon] = vars;
+    update(next);
+    setEditingKey(null);
+  };
+
+  const handleAdd = () => {
+    const canon = newCanon.trim();
+    const vars = newVars.split(',').map(s => s.trim()).filter(Boolean);
+    if (!canon || vars.length === 0) return;
+    if (dict[canon]) {
+      const merged = [...new Set([...(dict[canon] || []), ...vars])];
+      update({ ...dict, [canon]: merged });
+    } else {
+      update({ ...dict, [canon]: vars });
+    }
+    setNewCanon('');
+    setNewVars('');
+    setAddMode(false);
+  };
+
+  const entries = Object.entries(dict).sort(([a], [b]) => a.localeCompare(b, 'ko'));
+
+  if (loading) {
+    return <div className="flex justify-center py-20 text-sm text-gray-400">불러오는 중...</div>;
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100">
+        <div>
+          <span className="text-sm font-semibold text-gray-900">동의어 사전</span>
+          <span className="ml-2 text-xs text-gray-400">
+            회원이 다양하게 표현하는 단어를 대표어로 치환하여 검색 정확도를 높입니다.
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {dirty && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-lg transition-colors disabled:bg-gray-300"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {saving ? '저장 중...' : '저장'}
+            </button>
+          )}
+          {!dirty && !saving && entries.length > 0 && (
+            <span className="text-[11px] text-green-500">✓</span>
+          )}
+          <button
+            onClick={() => setAddMode(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> 추가
+          </button>
+        </div>
+      </div>
+
+      {/* 테이블 */}
+      <div className="px-5 py-3">
+        {entries.length === 0 && !addMode && (
+          <div className="text-center py-16 text-sm text-gray-400">
+            등록된 동의어가 없습니다. 추가 버튼으로 시작하세요.
+          </div>
+        )}
+
+        {entries.length > 0 && (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-gray-100">
+                <th className="pb-2 text-xs font-medium text-gray-400 w-[160px]">대표어</th>
+                <th className="pb-2 text-xs font-medium text-gray-400">동의어</th>
+                <th className="pb-2 text-xs font-medium text-gray-400 w-[70px] text-right">작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(([key, vars]) => (
+                <tr key={key} className="group border-b border-gray-50 hover:bg-stone-50/50">
+                  {editingKey === key ? (
+                    <>
+                      <td className="py-2 pr-3">
+                        <input
+                          value={editCanon}
+                          onChange={e => setEditCanon(e.target.value)}
+                          className="w-full text-sm border border-blue-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          autoFocus
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <input
+                          value={editVars}
+                          onChange={e => setEditVars(e.target.value)}
+                          className="w-full text-sm border border-blue-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          placeholder="동의어1, 동의어2, ..."
+                          onKeyDown={e => {
+                            if (e.nativeEvent.isComposing) return;
+                            if (e.key === 'Enter') handleSaveEdit();
+                            if (e.key === 'Escape') setEditingKey(null);
+                          }}
+                        />
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={handleSaveEdit} className="p-1 rounded text-blue-600 hover:bg-blue-50">
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditingKey(null)} className="p-1 rounded text-gray-400 hover:bg-gray-100">
+                            <Xmark className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-2.5 pr-3">
+                        <span className="font-medium text-gray-900">{key}</span>
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <div className="flex flex-wrap gap-1">
+                          {vars.map((v, i) => (
+                            <span key={i} className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">{v}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleStartEdit(key)} className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50" title="편집">
+                            <EditPencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(key)} className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50" title="삭제">
+                            <Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* 추가 모드 */}
+        {addMode && (
+          <div className={`flex items-center gap-2 ${entries.length > 0 ? 'mt-3' : ''}`}>
+            <input
+              value={newCanon}
+              onChange={e => setNewCanon(e.target.value)}
+              placeholder="대표어"
+              className="w-[160px] text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              autoFocus
+            />
+            <input
+              value={newVars}
+              onChange={e => setNewVars(e.target.value)}
+              placeholder="동의어1, 동의어2, 동의어3 (쉼표 구분)"
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              onKeyDown={e => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter') handleAdd();
+                if (e.key === 'Escape') { setAddMode(false); setNewCanon(''); setNewVars(''); }
+              }}
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!newCanon.trim() || !newVars.trim()}
+              className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-40 disabled:bg-gray-300 shrink-0"
+            >
+              <Check className="w-4 h-4" /> 추가
+            </button>
+            <button
+              onClick={() => { setAddMode(false); setNewCanon(''); setNewVars(''); }}
+              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 shrink-0"
+            >
+              <Xmark className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
