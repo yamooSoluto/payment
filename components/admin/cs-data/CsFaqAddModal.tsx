@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Xmark, Trash, Plus } from 'iconoir-react';
+import { UndoableInput, UndoableTextarea } from '@/components/ui/UndoableInput';
 
 // ═══════════════════════════════════════════════════════════
 // 타입
@@ -179,7 +180,7 @@ export default function CsFaqAddModal({ isOpen, onClose, onSubmit, tenants }: Cs
             <div className="space-y-1.5">
               {questions.map((q, idx) => (
                 <div key={idx} className="flex gap-2">
-                  <input
+                  <UndoableInput
                     type="text"
                     value={q}
                     onChange={(e) => {
@@ -239,7 +240,7 @@ export default function CsFaqAddModal({ isOpen, onClose, onSubmit, tenants }: Cs
           {/* 답변 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">답변</label>
-            <textarea
+            <UndoableTextarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               rows={4}
@@ -251,7 +252,7 @@ export default function CsFaqAddModal({ isOpen, onClose, onSubmit, tenants }: Cs
           {/* 가이드 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">답변 참고 <span className="text-gray-400 font-normal">(선택)</span></label>
-            <textarea
+            <UndoableTextarea
               value={guide}
               onChange={(e) => setGuide(e.target.value)}
               rows={2}
@@ -355,7 +356,7 @@ export default function CsFaqAddModal({ isOpen, onClose, onSubmit, tenants }: Cs
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">사전 안내 (조건부 전달)</label>
-                  <textarea
+                  <UndoableTextarea
                     value={rule}
                     onChange={(e) => setRule(e.target.value)}
                     rows={2}

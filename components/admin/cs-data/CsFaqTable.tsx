@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { Trash, NavArrowDown, Xmark, Check } from 'iconoir-react';
+import { UndoableInput, UndoableTextarea } from '@/components/ui/UndoableInput';
 
 // ═══════════════════════════════════════════════════════════
 // 타입
@@ -98,8 +99,8 @@ export function faqKey(faq: { tenantId: string; id: string }) {
 function getSourceIcon(source?: string) {
   switch (source) {
     case 'template': return '📋';
-    case 'library':  return '📚';
-    default:         return '✏️';
+    case 'library': return '📚';
+    default: return '✏️';
   }
 }
 
@@ -113,8 +114,8 @@ function getHandlerBadge(faq: CsFaq) {
 function getStatusDisplay(status?: string) {
   switch (status) {
     case 'synced': return { dot: 'bg-green-500', text: 'SYNCED', color: 'text-green-600' };
-    case 'error':  return { dot: 'bg-red-500', text: 'ERROR', color: 'text-red-600' };
-    default:       return { dot: 'bg-yellow-400', text: 'PENDING', color: 'text-yellow-600' };
+    case 'error': return { dot: 'bg-red-500', text: 'ERROR', color: 'text-red-600' };
+    default: return { dot: 'bg-yellow-400', text: 'PENDING', color: 'text-yellow-600' };
   }
 }
 
@@ -198,9 +199,9 @@ function TenantMultiSelect({
 
   const filtered = search
     ? tenants.filter(t =>
-        t.brandName.toLowerCase().includes(search.toLowerCase()) ||
-        (t.branchNo && t.branchNo.includes(search))
-      )
+      t.brandName.toLowerCase().includes(search.toLowerCase()) ||
+      (t.branchNo && t.branchNo.includes(search))
+    )
     : tenants;
 
   return (
@@ -221,11 +222,10 @@ function TenantMultiSelect({
               return (
                 <span
                   key={t.tenantId}
-                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-medium rounded-full ${
-                    isPending
+                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-medium rounded-full ${isPending
                       ? 'border border-dashed border-amber-400 bg-amber-50 text-amber-700'
                       : getTenantColor(t.tenantId)
-                  }`}
+                    }`}
                 >
                   {t.brandName}
                   {t.branchNo && <span className="text-[10px] opacity-70">#{t.branchNo}</span>}
@@ -265,11 +265,10 @@ function TenantMultiSelect({
           return (
             <label
               key={t.tenantId}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${
-                isSelf
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${isSelf
                   ? 'bg-gray-50 text-gray-400 cursor-default'
                   : 'hover:bg-gray-50 text-gray-600 cursor-pointer'
-              }`}
+                }`}
             >
               <input
                 type="checkbox"
@@ -562,9 +561,8 @@ export default function CsFaqTable({
                         <div className="relative">
                           <span
                             onClick={() => startEdit(k, 'handler')}
-                            className={`inline-flex px-1.5 py-0.5 text-[11px] font-medium rounded-full cursor-pointer hover:ring-2 hover:ring-gray-200 transition-all ${
-                              faq.handler === 'manager' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}
+                            className={`inline-flex px-1.5 py-0.5 text-[11px] font-medium rounded-full cursor-pointer hover:ring-2 hover:ring-gray-200 transition-all ${faq.handler === 'manager' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                              }`}
                           >
                             {faq.handler === 'manager' ? '현장' : '운영'}
                           </span>
@@ -596,11 +594,10 @@ export default function CsFaqTable({
                       <div className="relative">
                         <span
                           onClick={() => startEdit(k, 'topic')}
-                          className={`cursor-pointer hover:ring-2 hover:ring-gray-200 rounded-full transition-all inline-flex ${
-                            faq.topic
+                          className={`cursor-pointer hover:ring-2 hover:ring-gray-200 rounded-full transition-all inline-flex ${faq.topic
                               ? 'px-1.5 py-0.5 text-[11px] font-medium bg-gray-100 text-gray-700'
                               : 'px-1 py-0.5 text-sm text-gray-400'
-                          }`}
+                            }`}
                         >
                           {faq.topic || '—'}
                         </span>
@@ -663,9 +660,8 @@ export default function CsFaqTable({
                                   }}
                                   className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 ${isActive ? 'bg-blue-50/40' : ''}`}
                                 >
-                                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${
-                                    isActive ? (TAG_COLORS[tag] || 'bg-gray-900 text-white') : 'bg-gray-100 text-gray-500'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${isActive ? (TAG_COLORS[tag] || 'bg-gray-900 text-white') : 'bg-gray-100 text-gray-500'
+                                    }`}>
                                     {tag}
                                   </span>
                                   {isActive && <Check className="w-3 h-3 text-blue-500 ml-auto" />}
@@ -776,13 +772,12 @@ export default function CsFaqTable({
                                   <>
                                     {editQuestions.map((q, idx) => (
                                       <div key={idx} className="flex gap-2">
-                                        <input
+                                        <UndoableInput
                                           type="text"
                                           value={q}
                                           onChange={(e) => {
                                             const newQ = [...editQuestions];
                                             newQ[idx] = e.target.value;
-                                            // questionsRaw와 questions 모두 업데이트
                                             onCellEdit(faq.id, faq.tenantId, {
                                               questions: newQ,
                                               questionsRaw: newQ,
@@ -827,7 +822,7 @@ export default function CsFaqTable({
                           {/* 답변 */}
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1.5">답변</label>
-                            <textarea
+                            <UndoableTextarea
                               value={faq.answer}
                               onChange={(e) => onCellEdit(faq.id, faq.tenantId, { answer: e.target.value })}
                               rows={4}
@@ -838,7 +833,7 @@ export default function CsFaqTable({
                           {/* 가이드 */}
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1.5">가이드</label>
-                            <textarea
+                            <UndoableTextarea
                               value={faq.guide || ''}
                               onChange={(e) => onCellEdit(faq.id, faq.tenantId, { guide: e.target.value })}
                               rows={2}
@@ -853,7 +848,7 @@ export default function CsFaqTable({
                               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                 사전 안내 <span className="text-gray-400 font-normal">(입력 시 조건부 전달)</span>
                               </label>
-                              <textarea
+                              <UndoableTextarea
                                 value={faq.rule || ''}
                                 onChange={(e) => {
                                   const rule = e.target.value;

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { Search, Trash, Database, NavArrowDown, Check } from 'iconoir-react';
+import { UndoableInput, UndoableTextarea } from '@/components/ui/UndoableInput';
 
 // ═══════════════════════════════════════════════════════════
 // 타입
@@ -493,7 +494,7 @@ export default function FaqTable({ faqs, searchQuery, onSearchChange, onCellEdit
                             <div className="space-y-1.5">
                               {faq.questions.map((q, idx) => (
                                 <div key={idx} className="flex gap-2">
-                                  <input
+                                  <UndoableInput
                                     type="text"
                                     value={q}
                                     onChange={(e) => {
@@ -527,7 +528,7 @@ export default function FaqTable({ faqs, searchQuery, onSearchChange, onCellEdit
                           {/* ── 답변 ── */}
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1.5">답변</label>
-                            <textarea
+                            <UndoableTextarea
                               value={faq.answer}
                               onChange={(e) => onCellEdit(faq.id, { answer: e.target.value })}
                               rows={4}
@@ -538,7 +539,7 @@ export default function FaqTable({ faqs, searchQuery, onSearchChange, onCellEdit
                           {/* ── 가이드 ── */}
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1.5">가이드</label>
-                            <textarea
+                            <UndoableTextarea
                               value={faq.guide || ''}
                               onChange={(e) => onCellEdit(faq.id, { guide: e.target.value })}
                               rows={2}
@@ -553,7 +554,7 @@ export default function FaqTable({ faqs, searchQuery, onSearchChange, onCellEdit
                               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                 사전 안내 <span className="text-gray-400 font-normal">(입력 시 조건부 전달)</span>
                               </label>
-                              <textarea
+                              <UndoableTextarea
                                 value={faq.rule || ''}
                                 onChange={(e) => {
                                   const rule = e.target.value;
