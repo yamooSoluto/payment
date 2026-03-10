@@ -95,52 +95,43 @@ export async function GET(request: NextRequest) {
       const userDoc = await db.collection('users').doc(email).get();
       const userData = userDoc.exists ? userDoc.data() : null;
 
-      // n8n 웹훅 호출 (매장 생성)
-      const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
-      if (!n8nWebhookUrl) {
-        console.error('N8N_WEBHOOK_URL이 설정되지 않았습니다.');
-        const authQuery = authParam ? `&${authParam}` : '';
-        return NextResponse.redirect(
-          new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=system_configuration_error`, request.url)
-        );
-      }
-
+      // provision API 직접 호출 (tenant + naver/widget integration 자동 생성)
       try {
-        const timestamp = new Date().toISOString();
-        const n8nResponse = await fetch(n8nWebhookUrl, {
+        const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+        const provisionRes = await fetch(provisionUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.ADMIN_SYNC_TOKEN}`,
+          },
           body: JSON.stringify({
             email,
             name: userData?.name || null,
             phone: userData?.phone || null,
             brandName: brandNameParam.trim(),
             industry: industryParam || '',
-            timestamp,
-            createdAt: timestamp,
-            isTrialSignup: false, // 매장 추가용 (체험 신청 아님)
-            isPaidSubscription: true, // 유료 구독용
+            source: 'paid_subscription',
           }),
         });
 
-        if (!n8nResponse.ok) {
-          console.error('n8n webhook 호출 실패:', n8nResponse.status);
+        const provisionData = await provisionRes.json();
+        console.log('[billing-confirm] 프로비저닝 결과:', provisionData);
+
+        if (!provisionRes.ok) {
+          console.error('[billing-confirm] 프로비저닝 실패:', provisionData.error);
           const authQuery = authParam ? `&${authParam}` : '';
           return NextResponse.redirect(
             new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_creation_failed`, request.url)
           );
         }
 
-        const n8nData = await n8nResponse.json();
-        console.log('신규 매장 생성 n8n webhook 성공:', n8nData);
-
-        if (n8nData.tenantId) {
-          tenantId = n8nData.tenantId;
+        if (provisionData.tenantId) {
+          tenantId = provisionData.tenantId;
           console.log('새 tenantId 생성됨:', tenantId);
 
-          // tenants 컬렉션에 userId 설정 (n8n은 userId를 처리하지 않음)
+          // tenants 컬렉션에 userId 설정
           try {
-            await db.collection('tenants').doc(n8nData.tenantId).set(
+            await db.collection('tenants').doc(provisionData.tenantId).set(
               { userId: userData?.userId || null },
               { merge: true }
             );
@@ -148,14 +139,14 @@ export async function GET(request: NextRequest) {
             console.error('tenants userId 업데이트 오류:', updateError);
           }
         } else {
-          console.error('n8n webhook에서 tenantId를 받지 못함');
+          console.error('provision에서 tenantId를 받지 못함');
           const authQuery = authParam ? `&${authParam}` : '';
           return NextResponse.redirect(
             new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_id_missing`, request.url)
           );
         }
       } catch (error) {
-        console.error('n8n webhook 호출 오류:', error);
+        console.error('[billing-confirm] 프로비저닝 호출 오류:', error);
         const authQuery = authParam ? `&${authParam}` : '';
         return NextResponse.redirect(
           new URL(`/checkout?plan=${plan}&newTenant=true${authQuery}&error=tenant_creation_error`, request.url)

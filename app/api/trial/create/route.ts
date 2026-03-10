@@ -365,45 +365,39 @@ export async function POST(request: Request) {
       console.log(`Firebase Auth 계정 생성됨: ${email}`);
     }
 
-    // n8n webhook 호출
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    // 테넌트 + Integration 자동 프로비저닝 (N8N 대체)
     let tenantId: string | null = null;
 
-    if (n8nWebhookUrl) {
-      try {
-        const timestamp = new Date().toISOString();
-        const n8nResponse = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            name,
-            phone,
-            brandName,
-            industry,
-            timestamp, // n8n용
-            createdAt: timestamp, // 기존 호환성용
-          }),
-        });
+    try {
+      const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+      const provisionRes = await fetch(provisionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.ADMIN_SYNC_TOKEN}`,
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          phone,
+          brandName,
+          industry,
+          source: 'website_trial_form',
+        }),
+      });
 
-        if (!n8nResponse.ok) {
-          console.error('n8n webhook 호출 실패:', n8nResponse.status);
-        } else {
-          const n8nData = await n8nResponse.json();
-          console.log('n8n webhook 호출 성공:', n8nData);
-          // n8n에서 tenantId 반환 시 저장
-          if (n8nData.tenantId) {
-            tenantId = n8nData.tenantId;
-          }
-        }
-      } catch (error) {
-        console.error('n8n webhook 호출 오류:', error);
-        // n8n 실패해도 계속 진행
+      const provisionData = await provisionRes.json();
+      console.log('[trial/create] 프로비저닝 결과:', provisionData);
+
+      if (provisionData.tenantId) {
+        tenantId = provisionData.tenantId;
       }
-    } else {
-      console.warn('N8N_WEBHOOK_URL이 설정되지 않았습니다.');
+
+      if (!provisionRes.ok) {
+        console.error('[trial/create] 프로비저닝 실패:', provisionData.error);
+      }
+    } catch (error) {
+      console.error('[trial/create] 프로비저닝 호출 오류:', error);
     }
 
     // users 컬렉션에 저장 (이메일이 없는 경우만)

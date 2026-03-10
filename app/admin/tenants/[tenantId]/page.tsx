@@ -13,6 +13,7 @@ import FaqTab from '@/components/admin/tenant-detail/FaqTab';
 import TenantManagersTab from '@/components/admin/tenant-detail/ManagersTab';
 import TransferOwnershipModal from '@/components/admin/tenant-detail/TransferOwnershipModal';
 import type { TabType, CustomFieldSchema, CustomFieldTab } from '@/components/admin/tenant-detail/types';
+import TenantItemEditor from '@/components/admin/tenant-detail/TenantItemEditor';
 
 // 삭제 관련 필드 (삭제된 매장에서만 표시)
 const DELETION_FIELDS = ['deleted', 'deletedAt', 'deletedBy', 'permanentDeleteAt'];
@@ -666,8 +667,8 @@ export default function TenantDetailPage() {
               </div>
 
               {(() => {
-                const filteredAiFields = Object.entries(aiFields).filter(([key]) => key !== 'ai_stop');
-                return filteredAiFields.length === 0 && getCustomFieldsForTab('ai').length === 0 ? null : (
+                const filteredAiFields = Object.entries(aiFields).filter(([key]) => key !== 'ai_stop' && key !== 'tenantItem');
+                return filteredAiFields.length === 0 && getCustomFieldsForTab('ai').length === 0 && !('tenantItem' in aiFields) ? null : (
                   <>
                     {filteredAiFields.map(([key, value]) => (
                       <DynamicField
@@ -678,6 +679,13 @@ export default function TenantDetailPage() {
                         disabled={!isEditMode}
                       />
                     ))}
+                    {'tenantItem' in aiFields && (
+                      <TenantItemEditor
+                        value={aiFields.tenantItem as Record<string, unknown> | null}
+                        onChange={handleFieldChange}
+                        disabled={!isEditMode}
+                      />
+                    )}
                     {getCustomFieldsForTab('ai').map(schema => (
                       <DynamicField
                         key={schema.name}

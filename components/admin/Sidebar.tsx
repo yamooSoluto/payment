@@ -20,6 +20,7 @@ import {
   Xmark,
   NavArrowLeft,
   NavArrowRight,
+  Antenna,
 } from 'iconoir-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
@@ -30,6 +31,7 @@ const prefetchMap: Record<string, string> = {
   '/admin/admins': '/api/admin/admins',
   '/admin/plans': '/api/admin/plans',
   '/admin/tenants': '/api/admin/tenants',
+  '/admin/channels': '/api/admin/channels',
   '/admin/cs-data/faqs': '/api/admin/cs-data/faqs',
   '/admin/cs-data/rules': '/api/admin/cs-data/rules',
   '/admin/cs-data/packages': '/api/admin/cs-data/packages',
@@ -84,6 +86,12 @@ const menuItems = [
     name: '매장',
     href: '/admin/tenants',
     icon: HomeSimpleDoor,
+    permission: 'tenants:read',
+  },
+  {
+    name: '채널',
+    href: '/admin/channels',
+    icon: Antenna,
     permission: 'tenants:read',
   },
   {

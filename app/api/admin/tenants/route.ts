@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 관리자: 매장 생성 (n8n 웹훅 사용 - 마이페이지와 동일)
+// 관리자: 매장 생성 (provision API 직접 호출 — n8n 불필요)
 export async function POST(request: NextRequest) {
   const db = adminDb || initializeFirebaseAdmin();
   if (!db) {
@@ -221,6 +221,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const admin = await getAdminFromRequest(request);
+    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!hasPermission(admin, 'tenants:write')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const body = await request.json();
     const { email, brandName, industry } = body;
 
@@ -243,21 +247,16 @@ export async function POST(request: NextRequest) {
     const userDoc = await db.collection('users').doc(normalizedEmail).get();
     const userData = userDoc.exists ? userDoc.data() : null;
 
-    // n8n 웹훅 호출 (마이페이지 매장 추가와 동일)
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    // provision API 직접 호출 (tenant + naver/widget integration 자동 생성)
     let tenantId: string | null = null;
 
-    if (!n8nWebhookUrl) {
-      console.error('N8N_WEBHOOK_URL이 설정되지 않았습니다.');
-      return NextResponse.json({ error: '시스템 설정 오류입니다.' }, { status: 500 });
-    }
-
     try {
-      const timestamp = new Date().toISOString();
-      const n8nResponse = await fetch(n8nWebhookUrl, {
+      const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+      const provisionRes = await fetch(provisionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.ADMIN_SYNC_TOKEN}`,
         },
         body: JSON.stringify({
           email: normalizedEmail,
@@ -265,27 +264,21 @@ export async function POST(request: NextRequest) {
           phone: userData?.phone || null,
           brandName: brandName.trim(),
           industry,
-          timestamp,
-          createdAt: timestamp,
-          isTrialSignup: false, // 매장 추가용 (체험 신청 아님)
-          action: 'ADD', // Airtable automation 트리거용
-          createdBy: 'admin', // 관리자가 생성했음을 표시
+          source: 'admin_add_store',
         }),
       });
 
-      if (!n8nResponse.ok) {
-        console.error('n8n webhook 호출 실패:', n8nResponse.status);
-        return NextResponse.json({ error: '매장 생성에 실패했습니다.' }, { status: 500 });
+      const provisionData = await provisionRes.json();
+      console.log('[admin/tenants] 프로비저닝 결과:', provisionData);
+
+      if (!provisionRes.ok) {
+        console.error('[admin/tenants] 프로비저닝 실패:', provisionData.error);
+        return NextResponse.json({ error: provisionData.error || '매장 생성에 실패했습니다.' }, { status: 500 });
       }
 
-      const n8nData = await n8nResponse.json();
-      console.log('관리자 매장 추가 n8n webhook 성공:', n8nData);
-
-      if (n8nData.tenantId) {
-        tenantId = n8nData.tenantId;
-      }
+      tenantId = provisionData.tenantId;
     } catch (error) {
-      console.error('n8n webhook 호출 오류:', error);
+      console.error('[admin/tenants] 프로비저닝 호출 오류:', error);
       return NextResponse.json({ error: '매장 생성에 실패했습니다.' }, { status: 500 });
     }
 
@@ -293,7 +286,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '매장 ID 생성에 실패했습니다.' }, { status: 500 });
     }
 
-    // tenants 컬렉션에 subscription.status를 expired로 설정
+    // subscription.status를 expired로 설정 (체험/결제 전 상태)
     try {
       await db.collection('tenants').doc(tenantId).set(
         { subscription: { status: 'expired' } },
@@ -301,16 +294,6 @@ export async function POST(request: NextRequest) {
       );
     } catch (error) {
       console.error('subscription.status 설정 오류:', error);
-    }
-
-    // n8n이 Firestore에 전체 데이터를 기록할 때까지 폴링 (최대 30초)
-    const maxAttempts = 30;
-    for (let i = 0; i < maxAttempts; i++) {
-      const tenantDoc = await db.collection('tenants').doc(tenantId).get();
-      if (tenantDoc.exists && tenantDoc.data()?.brandName) {
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     return NextResponse.json({

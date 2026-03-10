@@ -173,21 +173,16 @@ export async function POST(request: NextRequest) {
     const userDoc = await db.collection('users').doc(email).get();
     const userData = userDoc.exists ? userDoc.data() : null;
 
-    // n8n 웹훅 호출 (isTrialSignup: false로 매장만 생성)
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    // 테넌트 + Integration 자동 프로비저닝 (N8N 대체)
     let tenantId: string | null = null;
 
-    if (!n8nWebhookUrl) {
-      console.error('N8N_WEBHOOK_URL이 설정되지 않았습니다.');
-      return NextResponse.json({ error: '시스템 설정 오류입니다.' }, { status: 500 });
-    }
-
     try {
-      const timestamp = new Date().toISOString();
-      const n8nResponse = await fetch(n8nWebhookUrl, {
+      const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+      const provisionRes = await fetch(provisionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.ADMIN_SYNC_TOKEN}`,
         },
         body: JSON.stringify({
           email,
@@ -195,26 +190,23 @@ export async function POST(request: NextRequest) {
           phone: userData?.phone || null,
           brandName: brandName.trim(),
           industry,
-          timestamp,
-          createdAt: timestamp,
-          isTrialSignup: false, // 매장 추가용 (체험 신청 아님)
-          action: 'ADD', // Airtable automation 트리거용
+          source: 'portal_add_store',
         }),
       });
 
-      if (!n8nResponse.ok) {
-        console.error('n8n webhook 호출 실패:', n8nResponse.status);
+      const provisionData = await provisionRes.json();
+      console.log('[tenants/POST] 프로비저닝 결과:', provisionData);
+
+      if (provisionData.tenantId) {
+        tenantId = provisionData.tenantId;
+      }
+
+      if (!provisionRes.ok) {
+        console.error('[tenants/POST] 프로비저닝 실패:', provisionData.error);
         return NextResponse.json({ error: '매장 생성에 실패했습니다.' }, { status: 500 });
       }
-
-      const n8nData = await n8nResponse.json();
-      console.log('매장 추가 n8n webhook 성공:', n8nData);
-
-      if (n8nData.tenantId) {
-        tenantId = n8nData.tenantId;
-      }
     } catch (error) {
-      console.error('n8n webhook 호출 오류:', error);
+      console.error('[tenants/POST] 프로비저닝 호출 오류:', error);
       return NextResponse.json({ error: '매장 생성에 실패했습니다.' }, { status: 500 });
     }
 
