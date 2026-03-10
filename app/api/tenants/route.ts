@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     let tenantId: string | null = null;
 
     try {
-      const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+      const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://yamoo.ai.kr'}/api/admin/integrations/provision`;
       const provisionRes = await fetch(provisionUrl, {
         method: 'POST',
         headers: {

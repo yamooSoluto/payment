@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
       // provision API 직접 호출 (tenant + naver/widget integration 자동 생성)
       try {
-        const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://payment.yamoo.ai.kr'}/api/admin/integrations/provision`;
+        const provisionUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://yamoo.ai.kr'}/api/admin/integrations/provision`;
         const provisionRes = await fetch(provisionUrl, {
           method: 'POST',
           headers: {
