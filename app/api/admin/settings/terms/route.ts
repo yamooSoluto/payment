@@ -4,15 +4,6 @@ import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { defaultTermsOfService, defaultPrivacyPolicy } from '@/lib/default-terms';
 import { addAdminLog } from '@/lib/admin-log';
 
-// 시행일 포맷
-function formatEffectiveDate(date: Date): string {
-  return date.toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
 // 내용에서 시행일 자동 업데이트
 // "본 약관은 YYYY년 MM월 DD일부터 시행된다." 패턴 찾아서 교체
 function updateEffectiveDateInContent(content: string, date: Date): string {
@@ -362,6 +353,17 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const results: { terms?: number; privacy?: number } = {};
 
+    // 요청 본문에서 시행일 가져오기
+    let customEffectiveDate: Date | null = null;
+    try {
+      const body = await request.json();
+      if (body.effectiveDate) {
+        customEffectiveDate = new Date(body.effectiveDate);
+      }
+    } catch {
+      // body가 없는 경우 무시
+    }
+
     // 이용약관 배포
     if (type === 'terms' || type === 'both') {
       const termsRef = db.collection('settings').doc('terms-published');
@@ -385,14 +387,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 새 버전 배포 (시행일 자동 업데이트)
-      const updatedTermsContent = updateEffectiveDateInContent(draftData?.termsOfService || '', now);
+      // 새 버전 배포 (시행일: 사용자 지정 또는 배포일)
+      const termsEffective = customEffectiveDate || now;
+      const updatedTermsContent = updateEffectiveDateInContent(draftData?.termsOfService || '', termsEffective);
       await termsRef.set({
         termsOfService: updatedTermsContent,
         publishedAt: now,
         publishedBy: admin.adminId,
         termsVersion: termsVersion,
-        termsEffectiveDate: now,
+        termsEffectiveDate: termsEffective,
         // 기존 privacy 데이터 유지 (마이그레이션용)
         ...(currentTerms.exists && currentTerms.data()?.privacyPolicy
           ? { privacyPolicy: currentTerms.data()?.privacyPolicy }
@@ -426,15 +429,16 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 새 버전 배포 (시행일 자동 업데이트)
-      const updatedPrivacyContent = updateEffectiveDateInContent(draftData?.privacyPolicy || '', now);
+      // 새 버전 배포 (시행일: 사용자 지정 또는 배포일)
+      const privacyEffective = customEffectiveDate || now;
+      const updatedPrivacyContent = updateEffectiveDateInContent(draftData?.privacyPolicy || '', privacyEffective);
       await privacyRef.set({
         privacyPolicy: updatedPrivacyContent,
         content: updatedPrivacyContent,
         publishedAt: now,
         publishedBy: admin.adminId,
         privacyVersion: privacyVersion,
-        privacyEffectiveDate: now,
+        privacyEffectiveDate: privacyEffective,
         version: privacyVersion, // 하위 호환
       });
 

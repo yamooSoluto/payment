@@ -16,6 +16,9 @@ export interface Member {
   deleted?: boolean;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  termsAgreedVersion?: number | null;
+  privacyAgreedVersion?: number | null;
+  termsAgreedAt?: string | null;
 }
 
 export interface TenantSubscription {

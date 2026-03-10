@@ -88,7 +88,35 @@ export default function MemberInfoCard({ member, editMode, formData, onFormChang
           </div>
         </div>
 
-        {/* Row 3: 그룹, 무료체험, 메모 */}
+        {/* Row 3: 약관 동의 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 py-5 border-b border-gray-100">
+          <div>
+            <label className="block text-xs sm:text-sm text-gray-500 mb-1">이용약관 동의</label>
+            {member.termsAgreedVersion ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                v{member.termsAgreedVersion}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">기록 없음</span>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs sm:text-sm text-gray-500 mb-1">개인정보처리방침 동의</label>
+            {member.privacyAgreedVersion ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                v{member.privacyAgreedVersion}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">기록 없음</span>
+            )}
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs sm:text-sm text-gray-500 mb-1">동의일시</label>
+            <p className="text-sm font-medium text-left">{member.termsAgreedAt ? new Date(member.termsAgreedAt).toLocaleString('ko-KR') : '-'}</p>
+          </div>
+        </div>
+
+        {/* Row 4: 그룹, 무료체험, 메모 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 pt-5">
           <div>
             <label className="block text-xs sm:text-sm text-gray-500 mb-1">그룹</label>

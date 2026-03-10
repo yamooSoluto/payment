@@ -38,6 +38,8 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
   // 회원가입 약관
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState<'terms' | 'privacy' | null>(null);
+  const [currentTermsVersion, setCurrentTermsVersion] = useState<number | null>(null);
+  const [currentPrivacyVersion, setCurrentPrivacyVersion] = useState<number | null>(null);
 
   // 로그인 상태 유지
   const [rememberMe, setRememberMe] = useState(false);
@@ -66,6 +68,19 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
 
   // 로그인 후 리다이렉트할 URL (없으면 /account)
   const redirectUrl = searchParams.get('redirect') || '/account';
+
+  // 약관 버전 정보 로드 (회원가입 동의 기록용)
+  useEffect(() => {
+    if (mode === 'signup' || mode === 'complete-profile') {
+      fetch('/api/terms')
+        .then(res => res.json())
+        .then(data => {
+          setCurrentTermsVersion(data.termsVersion || null);
+          setCurrentPrivacyVersion(data.privacyVersion || null);
+        })
+        .catch(() => {});
+    }
+  }, [mode]);
 
   // 프로필 미완성으로 리다이렉트된 경우 처리
   const incompleteProfile = searchParams.get('incomplete') === 'true';
@@ -419,6 +434,8 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
             name,
             phone: phone.replace(/-/g, ''),
             rememberMe,
+            termsVersion: currentTermsVersion,
+            privacyVersion: currentPrivacyVersion,
           }),
         });
 
@@ -599,6 +616,8 @@ export default function LoginContainer({ initialMode = 'login' }: LoginContainer
           password,  // 비밀번호 추가
           provider: 'google',
           rememberMe,
+          termsVersion: currentTermsVersion,
+          privacyVersion: currentPrivacyVersion,
         }),
       });
 

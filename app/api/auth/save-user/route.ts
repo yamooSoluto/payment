@@ -5,7 +5,7 @@ import { generateUniqueUserId } from '@/lib/user-utils';
 
 export async function POST(request: Request) {
   try {
-    const { email, name, phone, provider, password, rememberMe } = await request.json();
+    const { email, name, phone, provider, password, rememberMe, termsVersion, privacyVersion } = await request.json();
 
     if (!email || !name || !phone) {
       return NextResponse.json(
@@ -133,6 +133,23 @@ export async function POST(request: Request) {
     } else {
       await db.collection('users').doc(email).set(userDocData);
     }
+
+    // 약관 동의 기록 저장
+    const consentRecord = {
+      email,
+      termsVersion: termsVersion || null,
+      privacyVersion: privacyVersion || null,
+      agreedAt: now,
+      type: 'signup',
+    };
+    await db.collection('consent-records').add(consentRecord);
+
+    // 사용자 문서에도 최신 동의 정보 저장
+    await db.collection('users').doc(email).set({
+      termsAgreedVersion: termsVersion || null,
+      privacyAgreedVersion: privacyVersion || null,
+      termsAgreedAt: now,
+    }, { merge: true });
 
     // 로그인 토큰 생성 (account 페이지 접근용)
     const token = generateToken(email, 'account', rememberMe);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -32,6 +32,152 @@ const editorProps = {
     class: 'prose prose-sm max-w-none min-h-[400px] p-4 focus:outline-none',
   },
 };
+
+function TableFloatingMenu({ editor, containerRef }: { editor: ReturnType<typeof useEditor>; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [isInTable, setIsInTable] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!editor || !containerRef.current) {
+      setIsInTable(false);
+      return;
+    }
+
+    const inTable = editor.isActive('table');
+    setIsInTable(inTable);
+
+    if (!inTable) {
+      setPosition(null);
+      return;
+    }
+
+    // 현재 선택된 셀의 DOM 노드 찾기
+    const { selection } = editor.state;
+    const dom = editor.view.domAtPos(selection.from);
+    const cell = (dom.node as HTMLElement).closest?.('td, th') || (dom.node.parentElement as HTMLElement)?.closest?.('td, th');
+    if (!cell) {
+      setPosition(null);
+      return;
+    }
+
+    const table = cell.closest('table');
+    if (!table) {
+      setPosition(null);
+      return;
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+
+    setPosition({
+      top: tableRect.bottom - containerRect.top + 4,
+      left: tableRect.left - containerRect.left + (tableRect.width / 2),
+    });
+  }, [editor, containerRef]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    editor.on('selectionUpdate', updatePosition);
+    editor.on('transaction', updatePosition);
+
+    return () => {
+      editor.off('selectionUpdate', updatePosition);
+      editor.off('transaction', updatePosition);
+    };
+  }, [editor, updatePosition]);
+
+  if (!editor || !isInTable || !position) return null;
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute z-20 -translate-x-1/2"
+      style={{ top: position.top, left: position.left }}
+    >
+      <div className="flex items-center gap-0.5 px-2 py-1.5 bg-white rounded-lg shadow-lg border border-gray-200 text-xs whitespace-nowrap">
+        <span className="text-blue-500 font-medium px-1">열</span>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().addColumnBefore().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="왼쪽에 열 추가"
+        >
+          +왼쪽
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().addColumnAfter().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="오른쪽에 열 추가"
+        >
+          +오른쪽
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().deleteColumn().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-red-50 text-red-500"
+          title="열 삭제"
+        >
+          삭제
+        </button>
+        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <span className="text-blue-500 font-medium px-1">행</span>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().addRowBefore().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="위에 행 추가"
+        >
+          +위
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().addRowAfter().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="아래에 행 추가"
+        >
+          +아래
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().deleteRow().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-red-50 text-red-500"
+          title="행 삭제"
+        >
+          삭제
+        </button>
+        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().mergeCells().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="셀 병합"
+        >
+          병합
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().splitCell().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-blue-50 text-gray-700"
+          title="셀 분할"
+        >
+          분할
+        </button>
+        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().deleteTable().run(); }}
+          className="px-1.5 py-1 rounded hover:bg-red-50 text-red-500"
+          title="표 삭제"
+        >
+          표삭제
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
   if (!editor) return null;
@@ -131,71 +277,6 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
       >
         ▦ 표
       </button>
-      {editor.isActive('table') && (
-        <>
-          <div className="w-px bg-gray-300 mx-1" />
-          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-gray-50 rounded">
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().addColumnBefore().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="왼쪽에 열 추가"
-            >
-              ←열
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().addColumnAfter().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="오른쪽에 열 추가"
-            >
-              열→
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().deleteColumn().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="열 삭제"
-            >
-              열✕
-            </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().addRowBefore().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="위에 행 추가"
-            >
-              ↑행
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().addRowAfter().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="아래에 행 추가"
-            >
-              행↓
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().deleteRow().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200"
-              title="행 삭제"
-            >
-              행✕
-            </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().deleteTable().run()}
-              className="px-1.5 py-0.5 text-xs rounded hover:bg-gray-200 text-red-500 hover:text-red-600"
-              title="표 삭제"
-            >
-              표삭제
-            </button>
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -215,6 +296,9 @@ interface TermsEditorAreaProps {
 
 export default forwardRef<TermsEditorAreaHandle, TermsEditorAreaProps>(
   function TermsEditorArea({ activeTab, initialTermsContent, initialPrivacyContent, onTermsChange, onPrivacyChange }, ref) {
+    const termsContainerRef = useRef<HTMLDivElement>(null);
+    const privacyContainerRef = useRef<HTMLDivElement>(null);
+
     const termsEditor = useEditor({
       extensions: editorExtensions,
       content: initialTermsContent || '',
@@ -251,9 +335,15 @@ export default forwardRef<TermsEditorAreaHandle, TermsEditorAreaProps>(
         <EditorToolbar editor={currentEditor} />
         <div className="bg-white">
           {activeTab === 'terms' ? (
-            <EditorContent editor={termsEditor} />
+            <div ref={termsContainerRef} className="relative">
+              <EditorContent editor={termsEditor} />
+              {termsEditor && <TableFloatingMenu editor={termsEditor} containerRef={termsContainerRef} />}
+            </div>
           ) : (
-            <EditorContent editor={privacyEditor} />
+            <div ref={privacyContainerRef} className="relative">
+              <EditorContent editor={privacyEditor} />
+              {privacyEditor && <TableFloatingMenu editor={privacyEditor} containerRef={privacyContainerRef} />}
+            </div>
           )}
         </div>
       </div>

@@ -237,6 +237,8 @@ export default function TermsSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [publishingTerms, setPublishingTerms] = useState(false);
   const [publishingPrivacy, setPublishingPrivacy] = useState(false);
+  const [termsEffectiveDate, setTermsEffectiveDate] = useState('');
+  const [privacyEffectiveDate, setPrivacyEffectiveDate] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [publishTermsSuccess, setPublishTermsSuccess] = useState(false);
@@ -336,9 +338,14 @@ export default function TermsSettingsPage() {
     setError('');
 
     try {
+      const effectiveDate = type === 'terms' ? termsEffectiveDate : privacyEffectiveDate;
       const response = await fetch(`/api/admin/settings/terms?type=${type}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({
+          effectiveDate: effectiveDate || null,
+        }),
       });
 
       if (response.ok) {
@@ -555,13 +562,31 @@ export default function TermsSettingsPage() {
           />
         )}
 
-        {/* 안내 메시지 */}
-        <div className="p-4 bg-gray-50 border-t border-gray-100">
+        {/* 시행일 설정 + 안내 메시지 */}
+        <div className="p-4 bg-gray-50 border-t border-gray-100 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              {activeTab === 'terms' ? '이용약관' : '개인정보처리방침'} 시행일:
+            </label>
+            <input
+              type="date"
+              value={activeTab === 'terms' ? termsEffectiveDate : privacyEffectiveDate}
+              onChange={(e) => {
+                if (activeTab === 'terms') {
+                  setTermsEffectiveDate(e.target.value);
+                } else {
+                  setPrivacyEffectiveDate(e.target.value);
+                }
+              }}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            />
+            <span className="text-xs text-gray-400">미설정 시 배포 당일로 적용됩니다.</span>
+          </div>
           <p className="text-sm text-gray-500">
             이용약관과 개인정보처리방침은 개별적으로 배포됩니다. 저장 후 각 탭의 &quot;배포&quot; 버튼을 눌러 홈페이지에 반영하세요.
           </p>
           {currentPublished && (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-sm text-blue-600">
               현재 {activeTab === 'terms' ? '이용약관' : '개인정보처리방침'} 배포 버전: v{currentPublished.version} (시행일: {formatDate(currentPublished.effectiveDate || currentPublished.publishedAt)})
             </p>
           )}
@@ -573,7 +598,11 @@ export default function TermsSettingsPage() {
         <PreviewModal
           type={activeTab}
           content={currentContent}
-          effectiveDate={new Date().toISOString()}
+          effectiveDate={
+            (activeTab === 'terms' ? termsEffectiveDate : privacyEffectiveDate)
+              ? new Date(activeTab === 'terms' ? termsEffectiveDate : privacyEffectiveDate).toISOString()
+              : new Date().toISOString()
+          }
           onClose={() => setShowPreview(false)}
         />
       )}

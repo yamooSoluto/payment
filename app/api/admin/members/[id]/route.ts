@@ -67,6 +67,9 @@ export async function GET(
       deleted: userData.deleted || false,
       deletedAt: userData.deletedAt?.toDate?.()?.toISOString() || null,
       deletedBy: userData.deletedBy || null,
+      termsAgreedVersion: userData.termsAgreedVersion || null,
+      privacyAgreedVersion: userData.privacyAgreedVersion || null,
+      termsAgreedAt: userData.termsAgreedAt?.toDate?.()?.toISOString() || null,
     };
 
     // 모든 매장(tenant) 정보 수집
