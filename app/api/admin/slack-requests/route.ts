@@ -13,16 +13,18 @@ export async function GET(request: NextRequest) {
     const admin = await getAdminFromRequest(request);
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    await initializeFirebaseAdmin();
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+
     const tenantId = request.nextUrl.searchParams.get('tenantId');
 
     if (tenantId) {
-      const doc = await adminDb.collection('slack_requests').doc(tenantId).get();
+      const doc = await db.collection('slack_requests').doc(tenantId).get();
       return NextResponse.json({ request: doc.exists ? doc.data() : null });
     }
 
     // 전체 신청 목록 (pending/processing만)
-    const snap = await adminDb.collection('slack_requests')
+    const snap = await db.collection('slack_requests')
       .where('status', 'in', ['pending', 'processing'])
       .orderBy('requestedAt', 'desc')
       .get();
@@ -45,17 +47,19 @@ export async function PATCH(request: NextRequest) {
     const admin = await getAdminFromRequest(request);
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    await initializeFirebaseAdmin();
+    const db = adminDb || initializeFirebaseAdmin();
+    if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+
     const { tenantId, status } = await request.json();
 
     if (!tenantId || !['pending', 'processing', 'done'].includes(status)) {
       return NextResponse.json({ error: 'tenantId and valid status required' }, { status: 400 });
     }
 
-    await adminDb.collection('slack_requests').doc(tenantId).update({
+    await db.collection('slack_requests').doc(tenantId).update({
       status,
       updatedAt: new Date(),
-      updatedBy: admin.email || admin.id,
+      updatedBy: admin.loginId || admin.adminId,
     });
 
     return NextResponse.json({ success: true });
