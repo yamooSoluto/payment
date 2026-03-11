@@ -182,11 +182,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 지점 번호 오름차순 정렬 (branchNo가 없으면 맨 뒤로)
+    // 생성순 정렬 (오래된 순)
     tenants.sort((a, b) => {
-      const aNo = a.branchNo ? parseInt(a.branchNo, 10) : Infinity;
-      const bNo = b.branchNo ? parseInt(b.branchNo, 10) : Infinity;
-      return aNo - bNo;
+      const aTime = a.createdAt || '';
+      const bTime = b.createdAt || '';
+      return aTime.localeCompare(bTime);
     });
 
     // 페이지네이션

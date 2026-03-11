@@ -46,6 +46,7 @@ interface TenantSlack {
   teamId?: string | null;
   email?: string | null;
   allowedUserIds?: string[];
+  hideAdminMembers?: boolean;
   routing?: Record<string, { channelId?: string; mentions?: string }>;
 }
 
@@ -93,14 +94,22 @@ interface IntegrationConfig {
     opsChannelId?: string;
     defaultMentions?: string;
     allowedUserIds?: string[];
+    excludeUserIds?: string[];
   };
   [key: string]: Record<string, unknown> | undefined;
 }
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
-const CH_LABEL: Record<string, string> = { naver: '네이버톡톡', widget: '웹 위젯', slack: 'Slack', channeltalk: '채널톡' };
-const CH_ORDER: Record<string, number> = { naver: 0, widget: 1, slack: 2, channeltalk: 3 };
+const CH_LABEL: Record<string, string> = { naver: '네이버톡톡', widget: '웹 위젯', slack: 'Slack', channeltalk: '채널톡', instagram: 'Instagram' };
+const CH_ORDER: Record<string, number> = { naver: 90, widget: 91, slack: 92, channeltalk: 93 };
+const CH_COLOR: Record<string, { on: string; off: string }> = {
+  naver:       { on: 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200', off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' },
+  widget:      { on: 'text-sky-700 bg-sky-100 hover:bg-sky-200',             off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' },
+  slack:       { on: 'text-violet-700 bg-violet-100 hover:bg-violet-200',    off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' },
+  channeltalk: { on: 'text-amber-700 bg-amber-100 hover:bg-amber-200',       off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' },
+  instagram:   { on: 'text-pink-700 bg-pink-100 hover:bg-pink-200',          off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' },
+};
 
 // ─── 공통 컴포넌트 ───
 function Toggle({ on, onChange, disabled }: { on: boolean; onChange: () => void; disabled?: boolean }) {
@@ -119,11 +128,11 @@ function StatusDot({ ok }: { ok: boolean }) {
   return <span className={`inline-block w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-gray-300'}`} />;
 }
 
-function Field({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function Field({ label, value, tooltip, warn }: { label: string; value: string; tooltip?: string; warn?: boolean }) {
   return (
     <div>
       <dt className="text-[11px] text-gray-400 mb-0.5">{label}</dt>
-      <dd className={`text-[13px] font-mono truncate ${warn ? 'text-amber-600' : 'text-gray-800'}`}>{value}</dd>
+      <dd className={`text-[13px] font-mono truncate ${warn ? 'text-amber-600' : 'text-gray-800'}`} title={tooltip || undefined}>{value}</dd>
     </div>
   );
 }
@@ -276,6 +285,7 @@ function PendingRow({ ig, onDone }: { ig: Integration; onDone: () => void }) {
 function AllIntegrations() {
   const { data, error, isLoading, mutate } = useSWR<{ integrations: Integration[] }>('/api/admin/integrations', fetcher);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterChannel, setFilterChannel] = useState<string | null>(null);
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (error) return <p className="py-8 text-center text-[13px] text-red-500">불러오기 실패</p>;
@@ -289,8 +299,9 @@ function AllIntegrations() {
   }
 
   const sorted = [...groups.entries()].sort(([, a], [, b]) => {
-    const d = (parseInt(a.tenant?.branchNo || '0') || 0) - (parseInt(b.tenant?.branchNo || '0') || 0);
-    return d || (a.tenant?.brandName || '').localeCompare(b.tenant?.brandName || '');
+    const aTime = a.items[0]?.createdAt || '';
+    const bTime = b.items[0]?.createdAt || '';
+    return aTime.localeCompare(bTime);
   });
 
   return (
@@ -305,39 +316,55 @@ function AllIntegrations() {
       <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50">
         {sorted.map(([tid, { tenant, tenantId, items }]) => {
           const open = expandedId === tid;
-          const channels = [...items].sort((a, b) => (CH_ORDER[a.channel || ''] ?? 99) - (CH_ORDER[b.channel || ''] ?? 99));
+          const channels = [...items].sort((a, b) => (CH_ORDER[a.channel || ''] ?? 0) - (CH_ORDER[b.channel || ''] ?? 0));
           const slackCfg = (tenant?.slack || {}) as TenantSlack;
 
           return (
             <div key={tid} className={open ? 'bg-gray-50/70' : ''}>
               {/* 헤더 */}
-              <button
-                onClick={() => setExpandedId(open ? null : tid)}
-                className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50/60 transition-colors"
+              <div
+                onClick={() => { setExpandedId(open ? null : tid); setFilterChannel(null); }}
+                className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50/60 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <StatusDot ok={channels.every(i => i.channel === 'naver' ? !!tenant?.hasNaverAuth : !!(i.cw?.inboxId && i.cw.inboxId > 0))} />
                   <span className="text-[13px] font-semibold text-gray-800 truncate">{tenant?.brandName || tid}</span>
                   {tenant?.branchNo && <span className="text-[11px] text-gray-400">#{tenant.branchNo}</span>}
                 </div>
-                <div className="flex items-center gap-3 ml-6 flex-shrink-0">
-                  {/* 채널 태그 */}
+                <div className="flex items-center gap-3 ml-6 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {/* 채널 태그 — 클릭 시 해당 채널만 필터 */}
                   {[...channels.map(i => ({ ch: i.channel || '', ok: i.channel === 'naver' ? !!tenant?.hasNaverAuth : !!(i.cw?.inboxId && i.cw.inboxId > 0) })),
                     { ch: 'slack', ok: !!slackCfg.defaultChannelId }
-                  ].sort((a, b) => (CH_ORDER[a.ch] ?? 99) - (CH_ORDER[b.ch] ?? 99)).map((b, i) => (
-                    <span key={i} className={`text-[12px] font-medium px-3 py-1 rounded-full ${b.ok ? 'text-gray-700 bg-gray-100' : 'text-gray-300 bg-gray-50'}`}>
+                  ].sort((a, b) => (CH_ORDER[a.ch] ?? 0) - (CH_ORDER[b.ch] ?? 0)).map((b, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (expandedId === tid && filterChannel === b.ch) {
+                          setExpandedId(null);
+                          setFilterChannel(null);
+                        } else {
+                          setExpandedId(tid);
+                          setFilterChannel(b.ch);
+                        }
+                      }}
+                      className={`text-[12px] font-medium px-3 py-1 rounded-full transition-colors ${
+                        open && filterChannel === b.ch
+                          ? 'text-white bg-gray-800'
+                          : (CH_COLOR[b.ch] || { on: 'text-indigo-700 bg-indigo-100 hover:bg-indigo-200', off: 'text-gray-400 bg-gray-100 hover:bg-gray-200' })[b.ok ? 'on' : 'off']
+                      }`}
+                    >
                       {CH_LABEL[b.ch] || b.ch}
-                    </span>
+                    </button>
                   ))}
                   <NavArrowDown className={`w-4 h-4 text-gray-300 transition-transform ${open ? 'rotate-180' : ''}`} />
                 </div>
-              </button>
+              </div>
 
               {/* 펼침 */}
               {open && (
                 <div className="px-5 pb-5 space-y-4">
-                  {channels.map(ig => <ChannelCard key={ig.id} ig={ig} onSave={() => mutate()} />)}
-                  <SlackCard tenantId={tenantId} slack={slackCfg} addons={tenant?.addons || []} onSave={() => mutate()} />
+                  {channels.filter(ig => !filterChannel || ig.channel === filterChannel).map(ig => <ChannelCard key={ig.id} ig={ig} onSave={() => mutate()} />)}
+                  {(!filterChannel || filterChannel === 'slack') && <SlackCard tenantId={tenantId} slack={slackCfg} addons={tenant?.addons || []} onSave={() => mutate()} />}
                 </div>
               )}
             </div>
@@ -430,6 +457,16 @@ function ChannelCard({ ig, onSave }: { ig: Integration; onSave: () => void }) {
 }
 
 // ─── Slack 카드 ───
+interface SlackRequest {
+  tenantId: string;
+  teamEmails: string[];
+  contactEmail: string;
+  note: string;
+  requestedBy: string;
+  status: 'pending' | 'processing' | 'done';
+  requestedAt: string | null;
+}
+
 function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slack: TenantSlack; addons: string[]; onSave: () => void }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -440,6 +477,47 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
   const [members, setMembers] = useState<SlackMember[] | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupErr, setLookupErr] = useState('');
+
+  // 신청 내역
+  const [slackRequest, setSlackRequest] = useState<SlackRequest | null>(null);
+  const [reqStatusUpdating, setReqStatusUpdating] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/admin/slack-requests?tenantId=${tenantId}`)
+      .then(r => r.json())
+      .then(d => { if (d.request) setSlackRequest(d.request); })
+      .catch(() => {});
+  }, [tenantId]);
+
+  const updateRequestStatus = async (status: string) => {
+    setReqStatusUpdating(true);
+    try {
+      await fetch('/api/admin/slack-requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, status }),
+      });
+      setSlackRequest(prev => prev ? { ...prev, status: status as SlackRequest['status'] } : null);
+    } catch { /* */ }
+    finally { setReqStatusUpdating(false); }
+  };
+
+  // 읽기 모드에서도 채널명/멤버명 표시를 위해 마운트 시 로드
+  useEffect(() => {
+    if (!channels && !lookupLoading) {
+      const chId = slack.defaultChannelId || undefined;
+      const memberUrl = chId
+        ? `/api/admin/slack-lookup?tenantId=${tenantId}&type=members&channelId=${chId}`
+        : `/api/admin/slack-lookup?tenantId=${tenantId}&type=members`;
+      Promise.all([
+        fetch(`/api/admin/slack-lookup?tenantId=${tenantId}&type=channels`).then(r => r.json()),
+        fetch(memberUrl).then(r => r.json()),
+      ]).then(([cd, md]) => {
+        if (cd.channels) setChannels(cd.channels);
+        if (md.members) setMembers(md.members);
+      }).catch(() => { /* ignore */ });
+    }
+  }, [tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enabled = addons.includes('slack');
   const connected = !!slack.defaultChannelId;
@@ -453,18 +531,34 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
     } catch { /* */ } finally { setToggling(false); }
   };
 
-  const loadSlack = async () => {
+  const loadSlack = async (chId?: string) => {
     setLookupLoading(true); setLookupErr('');
     try {
+      const memberUrl = chId
+        ? `/api/admin/slack-lookup?tenantId=${tenantId}&type=members&channelId=${chId}`
+        : `/api/admin/slack-lookup?tenantId=${tenantId}&type=members`;
       const [cr, mr] = await Promise.all([
         fetch(`/api/admin/slack-lookup?tenantId=${tenantId}&type=channels`),
-        fetch(`/api/admin/slack-lookup?tenantId=${tenantId}&type=members`),
+        fetch(memberUrl),
       ]);
       const cd = await cr.json(), md = await mr.json();
       if (!cr.ok) throw new Error(cd.error);
       if (!mr.ok) throw new Error(md.error);
       setChannels(cd.channels); setMembers(md.members);
     } catch (e) { setLookupErr(e instanceof Error ? e.message : '조회 실패'); }
+    finally { setLookupLoading(false); }
+  };
+
+  const reloadMembers = async (chId: string) => {
+    setLookupLoading(true);
+    try {
+      const url = chId
+        ? `/api/admin/slack-lookup?tenantId=${tenantId}&type=members&channelId=${chId}`
+        : `/api/admin/slack-lookup?tenantId=${tenantId}&type=members`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if (r.ok) setMembers(d.members);
+    } catch { /* */ }
     finally { setLookupLoading(false); }
   };
 
@@ -477,10 +571,11 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
       defaultMentions: slack.defaultMentions || '',
       teamId: slack.teamId || '',
       allowedUserIds: slack.allowedUserIds || [],
+      hideAdminMembers: slack.hideAdminMembers ?? true,
       routing: slack.routing || {},
     });
     setEditing(true);
-    if (!channels && !lookupLoading) setTimeout(loadSlack, 0);
+    if (!channels && !lookupLoading) setTimeout(() => loadSlack(slack.defaultChannelId || undefined), 0);
   };
 
   const save = async () => {
@@ -518,7 +613,7 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
         </div>
         <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-gray-400">포탈 노출</span>
+            <span className="text-[11px] text-gray-400">서비스 활성</span>
             <Toggle on={enabled} onChange={toggleSlack} disabled={toggling} />
           </div>
           <div className="w-px h-4 bg-gray-200" />
@@ -532,10 +627,10 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
       {!editing && (
         <div className="px-5 py-4">
           <dl className="grid grid-cols-4 gap-y-3 gap-x-8">
-            <Field label="Default Channel" value={slack.defaultChannelId ? `${slack.defaultChannelId}${chName(slack.defaultChannelId) ? ` ${chName(slack.defaultChannelId)}` : ''}` : '미설정'} warn={!connected} />
-            <Field label="Ops Channel" value={slack.opsChannelId || '-'} />
+            <Field label="Default Channel" value={slack.defaultChannelId ? (chName(slack.defaultChannelId) || slack.defaultChannelId) : '미설정'} tooltip={slack.defaultChannelId || undefined} warn={!connected} />
+            <Field label="Ops Channel" value={slack.opsChannelId ? (chName(slack.opsChannelId) || slack.opsChannelId) : '-'} tooltip={slack.opsChannelId || undefined} />
             <Field label="Team ID" value={slack.teamId || '-'} />
-            <Field label="Bot Token Ref" value={slack.botTokenSecretRef || '-'} />
+            <Field label="Bot Token Ref" value={slack.botTokenSecretRef || '기본값'} tooltip={slack.botTokenSecretRef || '기본값 설정 사용'} />
           </dl>
 
           {(slack.defaultMentions || slack.allowedUserIds?.length || Object.keys(slack.routing || {}).length > 0) && (
@@ -560,6 +655,12 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
                   </div>
                 </div>
               )}
+              {slack.hideAdminMembers !== false && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">본사 제외</span>
+                  <span className="text-[11px] text-emerald-600">적용됨</span>
+                </div>
+              )}
               {Object.entries(slack.routing || {}).map(([h, r]) => (
                 <div key={h} className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">route.{h}</span>
@@ -569,67 +670,118 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
               ))}
             </div>
           )}
+
+          {/* 신청 내역 */}
+          {slackRequest && slackRequest.status !== 'done' && (
+            <div className="mt-3 pt-3 border-t border-amber-100 bg-amber-50/50 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${slackRequest.status === 'pending' ? 'bg-amber-400' : 'bg-blue-400'} animate-pulse`} />
+                  <span className="text-[12px] font-semibold text-gray-800">
+                    연동 신청 {slackRequest.status === 'pending' ? '대기' : '진행중'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {slackRequest.status === 'pending' && (
+                    <button
+                      onClick={() => updateRequestStatus('processing')}
+                      disabled={reqStatusUpdating}
+                      className="px-2 py-1 text-[11px] font-medium bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                    >
+                      진행중으로 변경
+                    </button>
+                  )}
+                  <button
+                    onClick={() => updateRequestStatus('done')}
+                    disabled={reqStatusUpdating}
+                    className="px-2 py-1 text-[11px] font-medium bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    완료
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">팀원</span>
+                  <div className="flex flex-wrap gap-1">
+                    {slackRequest.teamEmails.map((email, i) => (
+                      <span key={i} className="px-1.5 py-0.5 bg-white rounded text-[11px] text-gray-700 border border-gray-200">{email}</span>
+                    ))}
+                  </div>
+                </div>
+                {slackRequest.contactEmail && (
+                  <div className="flex gap-2">
+                    <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">연락처</span>
+                    <span className="text-[11px] text-gray-700">{slackRequest.contactEmail}</span>
+                  </div>
+                )}
+                {slackRequest.note && (
+                  <div className="flex gap-2">
+                    <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">요청</span>
+                    <span className="text-[11px] text-gray-600">{slackRequest.note}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* 수정 모드 */}
       {editing && (
-        <div className="px-5 py-4 space-y-4 bg-gray-50/30">
+        <div className="px-5 py-4 space-y-3 bg-gray-50/30">
           {lookupErr && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-[11px] text-amber-700">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-100 rounded-lg text-[11px] text-amber-700">
               <WarningCircle className="w-3.5 h-3.5" /> {lookupErr}
-              <button onClick={loadSlack} className="ml-auto underline">재시도</button>
+              <button onClick={() => loadSlack(draft.defaultChannelId || undefined)} className="ml-auto underline">재시도</button>
             </div>
           )}
-          {lookupLoading && <div className="text-[11px] text-gray-400 flex items-center gap-2"><Spinner /> 워크스페이스 정보 로딩 중...</div>}
+          {lookupLoading && <div className="text-[11px] text-gray-400 flex items-center gap-1.5"><Spinner /> 로딩 중...</div>}
 
-          {/* 채널 */}
-          <div>
-            <p className="text-[11px] font-medium text-gray-500 mb-2">채널</p>
-            <div className="grid grid-cols-2 gap-3">
-              <ChannelPicker label="Default Channel" value={draft.defaultChannelId || ''} onChange={v => set('defaultChannelId', v)} channels={channels} loading={lookupLoading} />
-              <ChannelPicker label="Ops Channel" value={draft.opsChannelId || ''} onChange={v => set('opsChannelId', v)} channels={channels} loading={lookupLoading} />
+          {/* 채널 + 멤버 */}
+          <div className="grid grid-cols-2 gap-3">
+            <ChannelPicker label="Default Channel" value={draft.defaultChannelId || ''} onChange={v => { set('defaultChannelId', v); reloadMembers(v); }} channels={channels} loading={lookupLoading} />
+            <ChannelPicker label="Ops Channel" value={draft.opsChannelId || ''} onChange={v => set('opsChannelId', v)} channels={channels} loading={lookupLoading} />
+            <div>
+              <label className="text-[11px] text-gray-400 mb-1 block">Default Mentions</label>
+              <MemberPicker selectedIds={parseMentions(String(draft.defaultMentions || ''))} onChange={ids => set('defaultMentions', ids.map(id => `<@${id}>`).join(' '))} members={members} loading={lookupLoading} />
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 mb-1 block">Allowed Users <span className="text-[10px] text-gray-300">(Slack 액션 권한)</span></label>
+              <MemberPicker selectedIds={Array.isArray(draft.allowedUserIds) ? draft.allowedUserIds : []} onChange={ids => set('allowedUserIds', ids)} members={members} loading={lookupLoading} />
             </div>
           </div>
 
-          {/* 멤버 */}
-          <div>
-            <p className="text-[11px] font-medium text-gray-500 mb-2">멤버</p>
-            <div className="space-y-2">
-              <div>
-                <label className="text-[11px] text-gray-400 mb-1 block">Default Mentions</label>
-                <MemberPicker selectedIds={parseMentions(String(draft.defaultMentions || ''))} onChange={ids => set('defaultMentions', ids.map(id => `<@${id}>`).join(' '))} members={members} loading={lookupLoading} />
-              </div>
-              <div>
-                <label className="text-[11px] text-gray-400 mb-1 block">Allowed Users</label>
-                <MemberPicker selectedIds={Array.isArray(draft.allowedUserIds) ? draft.allowedUserIds : []} onChange={ids => set('allowedUserIds', ids)} members={members} loading={lookupLoading} />
-              </div>
-            </div>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={!!draft.hideAdminMembers} onChange={e => set('hideAdminMembers', e.target.checked)} className="rounded border-gray-300" />
+            <span className="text-[11px] text-gray-600">포탈 멤버 목록에서 본사 관리자 제외</span>
+          </label>
 
           {/* 라우팅 */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-medium text-gray-500">Routing</p>
-              <button onClick={() => { const n = prompt('핸들러 이름'); if (n) setRouting(n, 'channelId', ''); }} className="text-[11px] text-gray-500 hover:text-gray-700">+ 추가</button>
+          <details>
+            <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600 flex items-center justify-between">
+              <span>Routing {Object.keys(draft.routing || {}).length > 0 && <span className="text-[10px] text-gray-300">({Object.keys(draft.routing || {}).length})</span>}</span>
+              <button onClick={e => { e.preventDefault(); const n = prompt('핸들러 이름'); if (n) setRouting(n, 'channelId', ''); }} className="text-[11px] text-gray-500 hover:text-gray-700">+ 추가</button>
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {Object.entries(draft.routing || {}).map(([h, r]) => (
+                <div key={h} className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-gray-600 w-14 flex-shrink-0">{h}</span>
+                  <div className="flex-1"><ChannelPicker label="" value={r.channelId || ''} onChange={v => setRouting(h, 'channelId', v)} channels={channels} loading={lookupLoading} compact /></div>
+                  <div className="flex-1"><MemberPicker selectedIds={parseMentions(r.mentions || '')} onChange={ids => setRouting(h, 'mentions', ids.map(id => `<@${id}>`).join(' '))} members={members} loading={lookupLoading} compact /></div>
+                  <button onClick={() => delRouting(h)} className="text-[11px] text-red-400 hover:text-red-600">삭제</button>
+                </div>
+              ))}
             </div>
-            {Object.entries(draft.routing || {}).map(([h, r]) => (
-              <div key={h} className="flex items-center gap-2 mb-2">
-                <span className="text-[12px] font-medium text-gray-600 w-16">{h}</span>
-                <div className="flex-1"><ChannelPicker label="" value={r.channelId || ''} onChange={v => setRouting(h, 'channelId', v)} channels={channels} loading={lookupLoading} compact /></div>
-                <div className="flex-1"><MemberPicker selectedIds={parseMentions(r.mentions || '')} onChange={ids => setRouting(h, 'mentions', ids.map(id => `<@${id}>`).join(' '))} members={members} loading={lookupLoading} compact /></div>
-                <button onClick={() => delRouting(h)} className="text-[11px] text-red-400 hover:text-red-600">삭제</button>
-              </div>
-            ))}
-          </div>
+          </details>
 
           {/* 고급 설정 */}
           <details>
-            <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">고급 설정</summary>
+            <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">고급 설정 <span className="text-[10px]">(비워두면 기본값 적용)</span></summary>
             <div className="grid grid-cols-3 gap-3 mt-2">
-              <Input label="Bot Token Ref" value={String(draft.botTokenSecretRef || '')} onChange={v => set('botTokenSecretRef', v)} placeholder="SLACK_BOT_TOKEN" />
-              <Input label="Signing Secret Ref" value={String(draft.signingSecretRef || '')} onChange={v => set('signingSecretRef', v)} placeholder="SLACK_SIGNING_SECRET" />
-              <Input label="Team ID" value={String(draft.teamId || '')} onChange={v => set('teamId', v)} placeholder="T08JH..." />
+              <Input label="Bot Token Ref" value={String(draft.botTokenSecretRef || '')} onChange={v => set('botTokenSecretRef', v)} placeholder="기본값 사용" />
+              <Input label="Signing Secret Ref" value={String(draft.signingSecretRef || '')} onChange={v => set('signingSecretRef', v)} placeholder="기본값 사용" />
+              <Input label="Team ID" value={String(draft.teamId || '')} onChange={v => set('teamId', v)} placeholder="기본값 사용" />
             </div>
           </details>
 
@@ -638,7 +790,7 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
             <Btn onClick={save} disabled={saving} variant="primary">{saving ? '저장 중...' : '저장'}</Btn>
             <Btn onClick={() => setEditing(false)} variant="ghost">취소</Btn>
             {!channels && !lookupLoading && (
-              <Btn onClick={loadSlack} className="ml-auto"><RefreshDouble className="w-3 h-3 mr-1 inline" />데이터 불러오기</Btn>
+              <Btn onClick={() => loadSlack(draft.defaultChannelId || undefined)} className="ml-auto"><RefreshDouble className="w-3 h-3 mr-1 inline" />데이터 불러오기</Btn>
             )}
           </div>
         </div>
@@ -743,9 +895,9 @@ function MemberPicker({ selectedIds, onChange, members, loading, compact }: {
   );
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━��━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 기본값
-// ━���━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function DefaultsEditor() {
   const { data, isLoading } = useSWR<{ config: IntegrationConfig }>('/api/admin/integration-config', fetcher);
@@ -851,6 +1003,11 @@ function DefaultsEditor() {
               <label className="block text-[11px] text-gray-500 mb-1">Allowed Users</label>
               <MemberPicker selectedIds={Array.isArray(sl.allowedUserIds) ? sl.allowedUserIds as string[] : []} onChange={ids => upd('slack', 'allowedUserIds', ids)} members={members} loading={lookupLoading} />
             </div>
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">포탈 멤버 목록 제외 (본사 관리자)</label>
+            <MemberPicker selectedIds={Array.isArray(sl.excludeUserIds) ? sl.excludeUserIds as string[] : []} onChange={ids => upd('slack', 'excludeUserIds', ids)} members={members} loading={lookupLoading} />
+            <p className="text-[10px] text-gray-400 mt-1">선택된 멤버는 포탈 Slack 멤버 목록에서 제외됩니다</p>
           </div>
           <Input label="Team ID" value={String(sl.teamId || '')} onChange={v => upd('slack', 'teamId', v)} placeholder="T08JH3FG7KK" />
         </div>

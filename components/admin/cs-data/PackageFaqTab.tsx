@@ -912,6 +912,159 @@ function ResizableHeader({ field, active, dir, onSort, onResizeStart, className,
 }
 
 // ═══════════════════════════════════════════════════════════
+// 패키지 생성 모달
+// ═══════════════════════════════════════════════════════════
+
+function CreatePackageModal({ tagOptions, defaultTags, onSubmit, onClose }: {
+  tagOptions: TagOptions;
+  defaultTags: string[];
+  onSubmit: (name: string, tags: string[]) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [tags, setTags] = useState<string[]>(defaultTags);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const allOptions = [
+    ...tagOptions.platforms.map(p => ({ value: p, group: '플랫폼' })),
+    ...tagOptions.services.map(s => ({ value: s, group: '서비스' })),
+  ];
+
+  const toggle = (val: string) => {
+    setTags(prev => prev.includes(val) ? prev.filter(t => t !== val) : [...prev, val]);
+  };
+
+  const handleSubmit = () => {
+    if (!name.trim()) return;
+    onSubmit(name.trim(), tags);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-5 pb-4">
+          <h3 className="text-base font-bold text-gray-900 mb-4">새 패키지</h3>
+
+          {/* 이름 */}
+          <div className="mb-4">
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">패키지 이름</label>
+            <input
+              ref={inputRef}
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onClose(); }}
+              placeholder="예: 락커 이용 안내"
+              className="w-full text-sm px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+            />
+          </div>
+
+          {/* 대상 태그 */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">
+              대상 그룹 <span className="text-gray-300 font-normal">(선택하면 해당 그룹에 자동 배치)</span>
+            </label>
+            {allOptions.length === 0 ? (
+              <p className="text-xs text-gray-400">설정된 플랫폼/서비스가 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {['플랫폼', '서비스'].map(group => {
+                  const items = allOptions.filter(o => o.group === group);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={group}>
+                      <span className="text-[10px] text-gray-400 font-medium uppercase">{group}</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {items.map(opt => {
+                          const active = tags.includes(opt.value);
+                          return (
+                            <button key={opt.value} type="button" onClick={() => toggle(opt.value)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                                active
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm'
+                                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              }`}>
+                              {opt.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {tags.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-400">
+                배치 그룹: <span className="font-medium text-gray-600">{tags.join(' · ')}</span>
+                <button onClick={() => setTags([])} className="text-gray-300 hover:text-red-400 ml-1">
+                  <Xmark className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {tags.length === 0 && (
+              <p className="mt-2 text-xs text-gray-400">&quot;공통&quot; 그룹에 배치됩니다.</p>
+            )}
+          </div>
+        </div>
+
+        {/* 하단 버튼 */}
+        <div className="flex items-center justify-end gap-2 px-6 py-3.5 bg-stone-50 border-t border-stone-100">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+            취소
+          </button>
+          <button onClick={handleSubmit} disabled={!name.trim()}
+            className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-40 disabled:bg-gray-300">
+            생성
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 패키지 이름 인라인 편집
+// ═══════════════════════════════════════════════════════════
+
+function InlinePackageName({ name, onSave }: { name: string; onSave: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+
+  useEffect(() => { setValue(name); }, [name]);
+
+  if (!editing) {
+    return (
+      <span
+        className="text-[13px] font-semibold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors group/pkgname"
+        onClick={() => setEditing(true)}
+        title="클릭하여 이름 편집"
+      >
+        {name}
+        <EditPencil className="w-3 h-3 ml-1 text-gray-300 inline opacity-0 group-hover/pkgname:opacity-100 transition-opacity" />
+      </span>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={() => { if (value.trim() && value.trim() !== name) onSave(value.trim()); setEditing(false); }}
+      onKeyDown={e => {
+        if (e.nativeEvent.isComposing) return;
+        if (e.key === 'Enter') { if (value.trim() && value.trim() !== name) onSave(value.trim()); setEditing(false); }
+        if (e.key === 'Escape') { setValue(name); setEditing(false); }
+      }}
+      className="text-[13px] font-semibold text-gray-700 bg-white border border-blue-300 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 w-48"
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // 패키지 메뉴 (···)
 // ═══════════════════════════════════════════════════════════
 
@@ -922,9 +1075,7 @@ function PackageMenu({ pkg, onUpdateMeta, onDelete, onClose }: {
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [editingName, setEditingName] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
-  const [nameVal, setNameVal] = useState(pkg.name);
   const [descVal, setDescVal] = useState(pkg.description);
 
   useEffect(() => {
@@ -937,44 +1088,30 @@ function PackageMenu({ pkg, onUpdateMeta, onDelete, onClose }: {
 
   return (
     <div ref={ref} data-dropdown className="absolute z-50 right-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-      {/* 이름 */}
-      <div className="px-3 py-2 border-b border-gray-100">
-        <label className="text-[10px] text-gray-400 font-medium">패키지 이름</label>
-        {editingName ? (
-          <div className="flex items-center gap-1 mt-1">
-            <input autoFocus value={nameVal} onChange={e => setNameVal(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && nameVal.trim()) { onUpdateMeta({ name: nameVal.trim() }); setEditingName(false); } if (e.key === 'Escape') setEditingName(false); }}
-              className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" />
-            <button onClick={() => { if (nameVal.trim()) { onUpdateMeta({ name: nameVal.trim() }); setEditingName(false); } }}
-              className="text-xs text-blue-600 px-1">확인</button>
-          </div>
-        ) : (
-          <div className="text-xs text-gray-700 mt-0.5 cursor-pointer hover:text-blue-600" onClick={() => setEditingName(true)}>
-            {pkg.name} <span className="text-gray-400">(클릭하여 편집)</span>
-          </div>
-        )}
-      </div>
-
       {/* 설명 */}
-      <div className="px-3 py-2 border-b border-gray-100">
-        <label className="text-[10px] text-gray-400 font-medium">설명</label>
+      <div className="px-3 py-2.5 border-b border-gray-100">
+        <label className="text-[10px] text-gray-400 font-medium mb-1 block">설명</label>
         {editingDesc ? (
-          <div className="mt-1">
+          <div>
             <textarea autoFocus value={descVal} onChange={e => setDescVal(e.target.value)} rows={2}
               onKeyDown={e => { if (e.key === 'Escape') setEditingDesc(false); }}
-              className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y" />
-            <button onClick={() => { onUpdateMeta({ description: descVal }); setEditingDesc(false); }}
-              className="text-xs text-blue-600 mt-1">확인</button>
+              className="w-full text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y" />
+            <div className="flex justify-end gap-1 mt-1.5">
+              <button onClick={() => setEditingDesc(false)} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-0.5">취소</button>
+              <button onClick={() => { onUpdateMeta({ description: descVal }); setEditingDesc(false); }}
+                className="text-xs text-blue-600 font-medium px-2 py-0.5 hover:bg-blue-50 rounded">저장</button>
+            </div>
           </div>
         ) : (
-          <div className="text-xs text-gray-500 mt-0.5 cursor-pointer hover:text-blue-600" onClick={() => setEditingDesc(true)}>
-            {pkg.description || '(없음)'} <span className="text-gray-400">(편집)</span>
+          <div className="group/desc flex items-start gap-1.5 cursor-pointer" onClick={() => setEditingDesc(true)}>
+            <span className="text-xs text-gray-500 flex-1">{pkg.description || '설명 없음'}</span>
+            <EditPencil className="w-3 h-3 text-gray-300 shrink-0 mt-0.5 opacity-0 group-hover/desc:opacity-100 transition-opacity" />
           </div>
         )}
       </div>
 
       {/* 탭 전환 */}
-      <div className="border-t border-gray-100 mt-1 pt-1">
+      <div className="border-t border-gray-100 pt-1">
         <button onClick={() => {
           const newMode = (pkg.provisionMode || 'manual') === 'manual' ? 'auto' : 'manual';
           onUpdateMeta({ provisionMode: newMode });
@@ -1097,6 +1234,7 @@ export default function PackageFaqTab({
   // 모달/메뉴
   const [tenantModalPkgId, setTenantModalPkgId] = useState<string | null>(null);
   const [menuPkgId, setMenuPkgId] = useState<string | null>(null);
+  const [createModal, setCreateModal] = useState<{ defaultTags: string[] } | null>(null);
 
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -1670,7 +1808,7 @@ export default function PackageFaqTab({
   // 일괄 삭제
   const handleBulkDelete = useCallback(() => {
     const ids = Array.from(checkedRows);
-    if (!confirm(ids.length + "개 FAQ를 삭제하시겠습니까?")) return;
+    if (!confirm(ids.length + "개 FAQ를 ���제하시겠습니까?")) return;
     const affectedPkgs = new Set<string>();
     for (const id of ids) { const pkgId = ownerMap.get(id); if (pkgId) affectedPkgs.add(pkgId); }
     setLocalPackages(prev => prev.map(pkg => {
@@ -1681,19 +1819,24 @@ export default function PackageFaqTab({
     setCheckedRows(new Set());
   }, [checkedRows, ownerMap]);
 
-  // 새 패키지
-  const handleCreatePkg = useCallback(async () => {
-    const label = activeTab === 'manual' ? '새 패키지 이름' : '새 규칙 이름';
-    const name = prompt(label);
-    if (!name?.trim()) return;
+  // 새 패키지 (모달 오픈)
+  const handleCreatePkg = useCallback((defaultTags: string[] = []) => {
+    setCreateModal({ defaultTags });
+  }, []);
+
+  // 모달에서 실제 생성
+  const handleCreatePkgSubmit = useCallback(async (name: string, tags: string[]) => {
+    setCreateModal(null);
     try {
-      const id = await onCreatePackage(name.trim());
+      const id = await onCreatePackage(name);
       const mode = activeTab as 'manual' | 'auto';
-      await onUpdateMeta(id, { provisionMode: mode });
+      const updates: Record<string, any> = { provisionMode: mode };
+      if (tags.length > 0) updates.requiredTags = tags;
+      await onUpdateMeta(id, updates);
       setLocalPackages(prev => [...prev, {
-        id, name: name.trim(), description: '', isPublic: false,
+        id, name, description: '', isPublic: false,
         provisionMode: mode,
-        requiredTags: [], faqTemplates: [], appliedTenants: [],
+        requiredTags: tags, faqTemplates: [], appliedTenants: [],
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       }]);
     } catch (err: any) { alert(err.message || '생성 실패'); }
@@ -1990,7 +2133,7 @@ export default function PackageFaqTab({
                   {saving && <span className="text-[11px] text-gray-400 animate-pulse">저장 중...</span>}
                   {!saving && hasDirty && <span className="text-[11px] text-amber-500">수정됨</span>}
                   {!saving && !hasDirty && lastSavedAt && <span className="text-[11px] text-green-500">✓</span>}
-                  <button onClick={handleCreatePkg}
+                  <button onClick={() => handleCreatePkg([])}
                     className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
                     <Plus className="w-3.5 h-3.5" /> {activeTab === 'manual' ? '새 패키지' : '새 규칙'}
                   </button>
@@ -2002,7 +2145,7 @@ export default function PackageFaqTab({
           {/* 그룹 아일랜드 */}
           {filteredPackages.length === 0 && (
             <div className="text-center py-20 text-sm text-gray-400">
-              {activeTab === 'manual' ? '패키지가 없습니다. 새 패키지를 추가하세요.' : '자동 FAQ 규칙이 없습니다. 새 규칙을 추가하세요.'}
+              {activeTab === 'manual' ? '패키지가 없습니다. 새 패키지를 추가하세요.' : '자동 FAQ 규칙이 없습니다. 새 규칙을 추가하세��.'}
             </div>
           )}
 
@@ -2013,17 +2156,28 @@ export default function PackageFaqTab({
               return (
                 <div key={groupKey} className="rounded-2xl bg-white shadow-sm overflow-visible">
                   {/* 그룹 헤더 */}
-                  <button
-                    onClick={() => setCollapsedGroups(prev => { const n = new Set(prev); isGroupCollapsed ? n.delete(groupKey) : n.add(groupKey); return n; })}
-                    className="flex items-center gap-3 w-full px-5 py-3 hover:bg-stone-50 transition-colors rounded-t-2xl border-b border-stone-100"
-                  >
-                    {isGroupCollapsed
-                      ? <NavArrowRight className="w-4 h-4 text-gray-400 shrink-0" />
-                      : <NavArrowDown className="w-4 h-4 text-gray-400 shrink-0" />
-                    }
-                    <span className="text-[13px] font-bold text-gray-800 tracking-tight">{groupKey}</span>
-                    <span className="text-[11px] text-gray-400 tabular-nums">{groupPkgs.length}개 패키지 · {groupFaqCount}건</span>
-                  </button>
+                  <div className="flex items-center w-full px-5 py-3 border-b border-stone-100 rounded-t-2xl">
+                    <button
+                      onClick={() => setCollapsedGroups(prev => { const n = new Set(prev); isGroupCollapsed ? n.delete(groupKey) : n.add(groupKey); return n; })}
+                      className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-70 transition-opacity"
+                    >
+                      {isGroupCollapsed
+                        ? <NavArrowRight className="w-4 h-4 text-gray-400 shrink-0" />
+                        : <NavArrowDown className="w-4 h-4 text-gray-400 shrink-0" />
+                      }
+                      <span className="text-[13px] font-bold text-gray-800 tracking-tight">{groupKey}</span>
+                      <span className="text-[11px] text-gray-400 tabular-nums">{groupPkgs.length}개 패키지 · {groupFaqCount}건</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const groupTags = groupKey === '공통' ? [] : groupKey.split(' · ');
+                        handleCreatePkg(groupTags);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] text-gray-400 hover:text-gray-700 hover:bg-stone-100 rounded-lg transition-colors shrink-0"
+                    >
+                      <Plus className="w-3 h-3" /> 패키지 추가
+                    </button>
+                  </div>
 
                   {/* 그룹 내 테이블 */}
                   {!isGroupCollapsed && (
@@ -2061,24 +2215,16 @@ export default function PackageFaqTab({
                 return (
                   <Fragment key={pkg.id}>
                     {/* 패키지 헤더 */}
-                    <tr className="bg-stone-50 border-b border-stone-200/60">
+                    <tr className="bg-stone-50/60 border-b border-stone-200/60" style={{ borderLeft: '2px solid rgba(147, 197, 253, 0.5)' }}>
                       <td colSpan={COL_SPAN} className="px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <button onClick={() => setCollapsedPkgs(prev => { const n = new Set(prev); isCollapsed ? n.delete(pkg.id) : n.add(pkg.id); return n; })}
                             className="flex items-center gap-1 shrink-0">
                             {isCollapsed ? <NavArrowRight className="w-4 h-4 text-gray-400" /> : <NavArrowDown className="w-4 h-4 text-gray-400" />}
                           </button>
-                          <span className="text-[13px] font-semibold text-gray-700">{pkg.name}</span>
+                          <InlinePackageName name={pkg.name} onSave={name => handleUpdatePkgMeta(pkg.id, { name })} />
                           <span className="text-[11px] text-gray-400 tabular-nums">({pkg.faqTemplates.length}건)</span>
                           {dirtyPkgIds.has(pkg.id) && <span className="text-[11px] text-amber-600 font-medium">변경됨</span>}
-
-                          <button onClick={() => handleUpdatePkgMeta(pkg.id, { isPublic: !pkg.isPublic })}
-                            className={`ml-1.5 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full transition-colors ${
-                              pkg.isPublic ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                            }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${pkg.isPublic ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                            {pkg.isPublic ? '공개' : '비공개'}
-                          </button>
 
                           {/* 대상 필터 (requiredTags) */}
                           <RequiredTagsSelector
@@ -2091,6 +2237,14 @@ export default function PackageFaqTab({
                           <div className="flex items-center gap-1.5 ml-auto">
                             {activeTab === 'manual' ? (
                               <div className="flex items-center gap-0.5 bg-gray-50 rounded-lg px-1 py-0.5">
+                                <button onClick={() => handleUpdatePkgMeta(pkg.id, { isPublic: !pkg.isPublic })}
+                                  className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-all font-medium ${
+                                    pkg.isPublic ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-white hover:shadow-sm'
+                                  }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${pkg.isPublic ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                  {pkg.isPublic ? '공개' : '비공개'}
+                                </button>
+                                <span className="w-px h-4 bg-gray-200" />
                                 <button onClick={() => setTenantModalPkgId(pkg.id)}
                                   className="flex items-center gap-1 px-2 py-1 text-[11px] text-gray-600 hover:bg-white hover:shadow-sm rounded-md transition-all font-medium">
                                   <Shop className="w-3.5 h-3.5" />
@@ -2463,6 +2617,16 @@ export default function PackageFaqTab({
           </div>
         </div>
       </div>}
+
+      {/* 패키지 생성 모달 */}
+      {createModal && (
+        <CreatePackageModal
+          tagOptions={tagOptions}
+          defaultTags={createModal.defaultTags}
+          onSubmit={handleCreatePkgSubmit}
+          onClose={() => setCreateModal(null)}
+        />
+      )}
 
       {/* 매장 관리 모달 */}
       {tenantModalPkg && (

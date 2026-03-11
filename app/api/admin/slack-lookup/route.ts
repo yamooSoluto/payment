@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const tenantId = searchParams.get('tenantId');
     const type = searchParams.get('type'); // 'channels' | 'members'
+    const channelId = searchParams.get('channelId'); // 선택: 특정 채널 멤버만 조회
 
     if (!tenantId) return NextResponse.json({ error: 'tenantId 필수' }, { status: 400 });
     if (!type || !['channels', 'members'].includes(type)) {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
     if (type === 'channels') {
       return await fetchChannels(botToken);
     } else {
-      return await fetchMembers(botToken);
+      return await fetchMembers(botToken, channelId);
     }
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown error';
@@ -115,7 +116,26 @@ async function fetchChannels(botToken: string) {
   return NextResponse.json({ channels: allChannels });
 }
 
-async function fetchMembers(botToken: string) {
+async function fetchMembers(botToken: string, channelId?: string | null) {
+  // 채널 지정 시 해당 채널 멤버만 조회
+  let memberIds: string[] | null = null;
+  if (channelId) {
+    memberIds = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const params = new URLSearchParams({ channel: channelId, limit: '200' });
+      if (cursor) params.set('cursor', cursor);
+      const res = await fetch(`https://slack.com/api/conversations.members?${params}`, {
+        headers: { Authorization: `Bearer ${botToken}` },
+      });
+      const data = await res.json();
+      if (!data.ok) { memberIds = null; break; } // 실패 시 전체 폴백
+      memberIds.push(...(data.members || []));
+      cursor = data.response_metadata?.next_cursor;
+      if (!cursor) break;
+    }
+  }
+
   const allMembers: Array<{
     id: string;
     name: string;
@@ -143,6 +163,7 @@ async function fetchMembers(botToken: string) {
 
     for (const m of data.members || []) {
       if (m.deleted || m.id === 'USLACKBOT') continue;
+      if (memberIds && !memberIds.includes(m.id)) continue; // 채널 멤버만
       allMembers.push({
         id: m.id,
         name: m.name,
@@ -163,5 +184,5 @@ async function fetchMembers(botToken: string) {
     return a.realName.localeCompare(b.realName);
   });
 
-  return NextResponse.json({ members: allMembers });
+  return NextResponse.json({ members: allMembers, channelFiltered: !!memberIds });
 }

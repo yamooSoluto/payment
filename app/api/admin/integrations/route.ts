@@ -119,6 +119,7 @@ export async function PUT(request: NextRequest) {
 
     const intgData = existing.data()!;
     const channel = intgData.channel || '';
+    const existingCw = intgData.cw || {};
 
     // 기본 설정 가져오기
     const configDoc = await db.doc('admin_config/integration_defaults').get();
@@ -129,40 +130,48 @@ export async function PUT(request: NextRequest) {
 
     // 채널 타입에 따라 secretRef 자동 유도
     const cwType = channel === 'widget' ? 'widget' : 'api';
-    const derivedCw: Record<string, unknown> = {
-      accountId: defaultCw.accountId || 0,
-      inboxId: Number(inboxId),
-      type: cwType,
-      botTokenSecretRef: defaultCw.botTokenSecretRef || null,
-      accessTokenSecretRef: defaultCw.accessTokenSecretRef || null,
+    const derivedRefs: Record<string, string | null> = {
       inboxIdentifierSecretRef: null,
       websiteTokenSecretRef: null,
       hmacSecretRef: null,
     };
-
     if (cwType === 'api') {
-      derivedCw.inboxIdentifierSecretRef = `CW_API_IDENTIFIER_${inboxId}`;
+      derivedRefs.inboxIdentifierSecretRef = `CW_API_IDENTIFIER_${inboxId}`;
     } else if (cwType === 'widget') {
-      derivedCw.websiteTokenSecretRef = `CW_WEB_TOKEN_${inboxId}`;
-      derivedCw.hmacSecretRef = `CW_WEB_HMAC_${inboxId}`;
+      derivedRefs.websiteTokenSecretRef = `CW_WEB_TOKEN_${inboxId}`;
+      derivedRefs.hmacSecretRef = `CW_WEB_HMAC_${inboxId}`;
     }
 
-    // overrides로 덮어쓰기 (수동 설정)
-    if (overrides?.cw) {
-      Object.assign(derivedCw, overrides.cw);
-    }
+    // 우선순위: overrides > 기존 커스텀 값 > defaults > 자동유도
+    const pick = (key: string) =>
+      overrides?.cw?.[key] ?? existingCw[key] ?? defaultCw[key] ?? derivedRefs[key] ?? null;
+
+    const finalCw: Record<string, unknown> = {
+      accountId: overrides?.cw?.accountId ?? existingCw.accountId ?? defaultCw.accountId ?? 0,
+      inboxId: Number(inboxId),
+      type: cwType,
+      botTokenSecretRef: pick('botTokenSecretRef'),
+      accessTokenSecretRef: pick('accessTokenSecretRef'),
+      inboxIdentifierSecretRef: pick('inboxIdentifierSecretRef'),
+      websiteTokenSecretRef: pick('websiteTokenSecretRef'),
+      hmacSecretRef: pick('hmacSecretRef'),
+    };
 
     const updates: Record<string, unknown> = {
-      cw: derivedCw,
+      cw: finalCw,
       updatedAt: new Date(),
       updatedBy: admin.adminId,
     };
 
-    // provider 기본값 (naver 등)
-    if (defaults.provider && !intgData.provider?.apiKeySecretRef) {
+    // provider: overrides > 기존 값 > defaults
+    const existingProvider = intgData.provider || {};
+    if (overrides?.provider || existingProvider.apiKeySecretRef || defaults.provider) {
       updates.provider = {
-        kind: defaults.provider.kind || channel,
-        apiKeySecretRef: overrides?.provider?.apiKeySecretRef || defaults.provider.apiKeySecretRef || null,
+        kind: overrides?.provider?.kind || existingProvider.kind || defaults.provider?.kind || channel,
+        apiKeySecretRef: overrides?.provider?.apiKeySecretRef ?? existingProvider.apiKeySecretRef ?? defaults.provider?.apiKeySecretRef ?? null,
+        ...(channel === 'naver' && (overrides?.provider?.sendUrl || existingProvider.sendUrl || defaults.provider?.sendUrl)
+          ? { sendUrl: overrides?.provider?.sendUrl ?? existingProvider.sendUrl ?? defaults.provider?.sendUrl }
+          : {}),
       };
     }
 

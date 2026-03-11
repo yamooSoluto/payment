@@ -530,7 +530,17 @@ export async function DELETE(
       reason: 'admin_delete',
     });
 
-    // 5. 관리자 로그 기록
+    // 5. integrations 컬렉션 삭제 (고아 integration 방지)
+    const integrationsSnap = await db.collection('integrations')
+      .where('tenantId', '==', tenantId)
+      .get();
+    if (!integrationsSnap.empty) {
+      const batch = db.batch();
+      integrationsSnap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    // 6. 관리자 로그 기록
     await addAdminLog(db, admin, {
       action: 'tenant_delete',
       tenantId,
