@@ -467,6 +467,133 @@ interface SlackRequest {
   requestedAt: string | null;
 }
 
+interface SlackLink {
+  portalEmail: string;
+  portalName: string | null;
+  slackDisplayName: string | null;
+  linkedAt: string | null;
+}
+
+function SlackLinksSection({ tenantId, members }: { tenantId: string; members: SlackMember[] | null }) {
+  const [links, setLinks] = useState<Record<string, SlackLink>>({});
+  const [loading, setLoading] = useState(true);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addSlackId, setAddSlackId] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addName, setAddName] = useState('');
+
+  useEffect(() => {
+    fetch(`/api/admin/slack-links?tenantId=${tenantId}`)
+      .then(r => r.json())
+      .then(d => setLinks(d.links || {}))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [tenantId]);
+
+  const handleLink = async (slackUserId: string, slackDisplayName: string, portalEmail: string, portalName: string) => {
+    setLinking(slackUserId);
+    try {
+      const r = await fetch('/api/admin/slack-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, slackUserId, slackDisplayName, portalEmail, portalName }),
+      });
+      if (!r.ok) throw new Error('실패');
+      setLinks(prev => ({ ...prev, [slackUserId]: { portalEmail, portalName, slackDisplayName, linkedAt: new Date().toISOString() } }));
+      setShowAdd(false); setAddSlackId(''); setAddEmail(''); setAddName('');
+    } catch { /* */ }
+    finally { setLinking(null); }
+  };
+
+  const handleUnlink = async (slackUserId: string) => {
+    if (!confirm('연결을 해제하시겠습니까?')) return;
+    setLinking(slackUserId);
+    try {
+      await fetch('/api/admin/slack-links', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, slackUserId }),
+      });
+      setLinks(prev => { const n = { ...prev }; delete n[slackUserId]; return n; });
+    } catch { /* */ }
+    finally { setLinking(null); }
+  };
+
+  const mName = (id: string) => { const m = members?.find(x => x.id === id); return m ? m.displayName || m.realName : id; };
+  const linkedEntries = Object.entries(links);
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[12px] font-semibold text-gray-700">계정 연결 관리</span>
+        <button onClick={() => setShowAdd(!showAdd)} className="text-[11px] text-gray-400 hover:text-gray-600">
+          {showAdd ? '닫기' : '+ 연결 추가'}
+        </button>
+      </div>
+
+      {loading && <p className="text-[11px] text-gray-400">로딩 중...</p>}
+
+      {!loading && linkedEntries.length === 0 && !showAdd && (
+        <p className="text-[11px] text-gray-400">연결된 계정이 없습니다.</p>
+      )}
+
+      {linkedEntries.map(([slackId, link]) => (
+        <div key={slackId} className="flex items-center justify-between py-1.5 group">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[11px] font-medium text-gray-700">{mName(slackId)}</span>
+            <span className="text-[10px] text-gray-300">→</span>
+            <span className="text-[11px] text-gray-500 truncate">{link.portalName || link.portalEmail}</span>
+          </div>
+          <button
+            onClick={() => handleUnlink(slackId)}
+            disabled={linking === slackId}
+            className="text-[10px] text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            {linking === slackId ? '...' : '해제'}
+          </button>
+        </div>
+      ))}
+
+      {showAdd && (
+        <div className="mt-2 p-3 bg-gray-50 rounded-lg space-y-2">
+          <div className="grid grid-cols-3 gap-2">
+            {members ? (
+              <div>
+                <label className="text-[10px] text-gray-400 mb-0.5 block">Slack 멤버</label>
+                <select
+                  value={addSlackId}
+                  onChange={e => { setAddSlackId(e.target.value); const m = members.find(x => x.id === e.target.value); if (m) setAddName(m.displayName || m.realName); }}
+                  className="w-full h-8 px-2 text-[11px] bg-white border border-gray-200 rounded-lg"
+                >
+                  <option value="">선택</option>
+                  {members.filter(m => !m.isBot && !links[m.id]).map(m => (
+                    <option key={m.id} value={m.id}>{m.displayName || m.realName}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <Input label="Slack User ID" value={addSlackId} onChange={setAddSlackId} placeholder="U..." />
+            )}
+            <Input label="포탈 이메일" value={addEmail} onChange={setAddEmail} placeholder="user@example.com" />
+            <Input label="표시 이름" value={addName} onChange={setAddName} placeholder="홍길동" />
+          </div>
+          <div className="flex gap-2">
+            <Btn
+              onClick={() => handleLink(addSlackId, addName, addEmail, addName)}
+              disabled={!addSlackId || !addEmail || !!linking}
+              variant="primary"
+            >
+              {linking ? '...' : '연결'}
+            </Btn>
+            <Btn onClick={() => { setShowAdd(false); setAddSlackId(''); setAddEmail(''); setAddName(''); }} variant="ghost">취소</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slack: TenantSlack; addons: string[]; onSave: () => void }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -724,6 +851,9 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
               </div>
             </div>
           )}
+
+          {/* Slack ↔ 포탈 계정 연결 관리 */}
+          {connected && <SlackLinksSection tenantId={tenantId} members={members} />}
         </div>
       )}
 

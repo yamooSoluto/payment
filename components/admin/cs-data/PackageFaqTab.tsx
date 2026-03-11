@@ -1808,7 +1808,7 @@ export default function PackageFaqTab({
   // 일괄 삭제
   const handleBulkDelete = useCallback(() => {
     const ids = Array.from(checkedRows);
-    if (!confirm(ids.length + "개 FAQ를 ���제하시겠습니까?")) return;
+    if (!confirm(ids.length + "개 FAQ를 삭제하시겠습니까?")) return;
     const affectedPkgs = new Set<string>();
     for (const id of ids) { const pkgId = ownerMap.get(id); if (pkgId) affectedPkgs.add(pkgId); }
     setLocalPackages(prev => prev.map(pkg => {
@@ -2145,7 +2145,7 @@ export default function PackageFaqTab({
           {/* 그룹 아일랜드 */}
           {filteredPackages.length === 0 && (
             <div className="text-center py-20 text-sm text-gray-400">
-              {activeTab === 'manual' ? '패키지가 없습니다. 새 패키지를 추가하세요.' : '자동 FAQ 규칙이 없습니다. 새 규칙을 추가하세��.'}
+              {activeTab === 'manual' ? '패키지가 없습니다. 새 패키지를 추가하세요.' : '자동 FAQ 규칙이 없습니다. 새 규칙을 추가하세요.'}
             </div>
           )}
 
