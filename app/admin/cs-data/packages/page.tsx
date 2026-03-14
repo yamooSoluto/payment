@@ -18,7 +18,7 @@ export default function PackagesPage() {
   const [rules, setRules] = useState<RuleOption[]>([]);
   const [allTenants, setAllTenants] = useState<TenantOption[]>([]);
   const [schemaData, setSchemaData] = useState<SchemaData | null>(null);
-  const [tagOptions, setTagOptions] = useState<{ platforms: string[]; services: string[] }>({ platforms: [], services: [] });
+  const [tagOptions, setTagOptions] = useState<{ platforms: string[]; services: string[]; brands: string[] }>({ platforms: [], services: [], brands: [] });
   const [loading, setLoading] = useState(true);
 
   // ── 데이터 로드 ──
@@ -60,11 +60,17 @@ export default function PackagesPage() {
         })));
       }
 
+      let tenantBrands: string[] = [];
       if (tenantRes.ok) {
         const data = await tenantRes.json();
+        const tenantList = data.tenants || [];
         setAllTenants(
-          (data.tenants || []).map((t: any) => ({ tenantId: t.tenantId, brandName: t.brandName }))
+          tenantList.map((t: any) => ({ tenantId: t.tenantId, brandName: t.brandName }))
         );
+        // 테넌트에서 브랜드 목록 수집
+        tenantBrands = [...new Set(
+          tenantList.map((t: any) => t.brand).filter((b: string) => b && b.trim())
+        )] as string[];
       }
 
       if (schemaRes?.ok) {
@@ -74,7 +80,13 @@ export default function PackagesPage() {
 
       if (settingsRes?.ok) {
         const data = await settingsRes.json();
-        setTagOptions({ platforms: data.platforms || [], services: data.services || [] });
+        setTagOptions({
+          platforms: data.platforms || [],
+          services: data.services || [],
+          brands: tenantBrands,
+        });
+      } else {
+        setTagOptions(prev => ({ ...prev, brands: tenantBrands }));
       }
     } catch (err) {
       console.error('[packages page] fetch error:', err);

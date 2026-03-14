@@ -21,7 +21,7 @@ const DELETION_FIELDS = ['deleted', 'deletedAt', 'deletedBy', 'permanentDeleteAt
 // 탭별 필드 그룹핑
 const FIELD_GROUPS: Record<string, string[]> = {
   basic: [
-    'tenantId', 'branchNo', 'brandName', 'brandCode', 'address', 'industry',
+    'tenantId', 'branchNo', 'brandName', 'brandCode', 'brand', 'address', 'industry',
     'email', 'phone', 'name', 'userId',
     'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
     'isManualRegistration', 'onboardingCompleted', 'onboardingCompletedAt',

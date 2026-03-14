@@ -33,7 +33,6 @@ const prefetchMap: Record<string, string> = {
   '/admin/tenants': '/api/admin/tenants',
   '/admin/channels': '/api/admin/channels',
   '/admin/cs-data/faqs': '/api/admin/cs-data/faqs',
-  '/admin/cs-data/rules': '/api/admin/cs-data/rules',
   '/admin/cs-data/packages': '/api/admin/cs-data/packages',
   '/admin/orders': '/api/admin/orders',
   '/admin/subscriptions': '/api/admin/subscriptions/list',
@@ -101,7 +100,6 @@ const menuItems = [
     permission: 'tenants:read',
     children: [
       { name: 'FAQ 관리', href: '/admin/cs-data/faqs' },
-      { name: '참조 데이터', href: '/admin/cs-data/rules' },
       { name: '패키지', href: '/admin/cs-data/packages' },
       { name: '설정', href: '/admin/cs-data/settings' },
     ],

@@ -66,6 +66,7 @@ export interface SchemaData {
 export interface TagOptions {
   platforms: string[];
   services: string[];
+  brands: string[];
 }
 
 export interface PackageFaqTabProps {
@@ -829,6 +830,7 @@ function RequiredTagsSelector({ tags, tagOptions, onChange }: {
   const allOptions = [
     ...tagOptions.platforms.map(p => ({ value: p, group: '플랫폼' })),
     ...tagOptions.services.map(s => ({ value: s, group: '서비스' })),
+    ...(tagOptions.brands || []).map(b => ({ value: b, group: '브랜드' })),
   ];
 
   const toggle = (val: string) => {
@@ -858,7 +860,7 @@ function RequiredTagsSelector({ tags, tagOptions, onChange }: {
             className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${tags.length === 0 ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50 text-gray-600'}`}>
             전체 (필터 없음)
           </button>
-          {['플랫폼', '서비스'].map(group => {
+          {['플랫폼', '서비스', '브랜드'].map(group => {
             const items = allOptions.filter(o => o.group === group);
             if (items.length === 0) return null;
             return (
@@ -930,6 +932,7 @@ function CreatePackageModal({ tagOptions, defaultTags, onSubmit, onClose }: {
   const allOptions = [
     ...tagOptions.platforms.map(p => ({ value: p, group: '플랫폼' })),
     ...tagOptions.services.map(s => ({ value: s, group: '서비스' })),
+    ...(tagOptions.brands || []).map(b => ({ value: b, group: '브랜드' })),
   ];
 
   const toggle = (val: string) => {
@@ -969,7 +972,7 @@ function CreatePackageModal({ tagOptions, defaultTags, onSubmit, onClose }: {
               <p className="text-xs text-gray-400">설정된 플랫폼/서비스가 없습니다.</p>
             ) : (
               <div className="space-y-2">
-                {['플랫폼', '서비스'].map(group => {
+                {['플랫폼', '서비스', '브랜드'].map(group => {
                   const items = allOptions.filter(o => o.group === group);
                   if (items.length === 0) return null;
                   return (
@@ -1223,8 +1226,8 @@ export default function PackageFaqTab({
   const [questionWidth, setQuestionWidth] = useState<number | null>(null);
   const resizing = useRef<{ field: string; startX: number; startW: number } | null>(null);
 
-  // 탭 (수동/자동)
-  const [activeTab, setActiveTab] = useState<'manual' | 'auto' | 'synonyms'>('manual');
+  // 탭
+  const [activeTab, setActiveTab] = useState<'manual' | 'auto' | 'rules' | 'synonyms'>('manual');
 
   // 필터
   const [filterText, setFilterText] = useState('');
@@ -2023,6 +2026,14 @@ export default function PackageFaqTab({
           }`}>
           자동 FAQ 규칙 {autoCount > 0 && <span className="ml-1 text-xs text-gray-400">({autoCount})</span>}
         </button>
+        <button onClick={() => setActiveTab('rules')}
+          className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+            activeTab === 'rules'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'
+          }`}>
+          참조 데이터
+        </button>
         <button onClick={() => setActiveTab('synonyms')}
           className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
             activeTab === 'synonyms'
@@ -2033,11 +2044,14 @@ export default function PackageFaqTab({
         </button>
       </div>
 
+      {/* 참조 데이터 탭 */}
+      {activeTab === 'rules' && <RulesTab allTenants={allTenants} />}
+
       {/* 동의어 사전 탭 */}
       {activeTab === 'synonyms' && <SynonymTab />}
 
       {/* 테이블 wrapper */}
-      {activeTab !== 'synonyms' && <div className="overflow-visible">
+      {(activeTab === 'manual' || activeTab === 'auto') && <div className="overflow-visible">
         <div ref={tableRef} className="outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
 
           {/* 필터 + 툴바 */}
@@ -2641,6 +2655,246 @@ export default function PackageFaqTab({
           onClose={() => setTenantModalPkgId(null)}
         />
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 참조 데이터 탭 (RulesTable 래핑)
+// ═══════════════════════════════════════════════════════════
+
+function RulesTab({ allTenants }: { allTenants: { tenantId: string; brandName: string }[] }) {
+  const [rules, setRules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [platforms, setPlatforms] = useState<string[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
+  const [syncingDirty, setSyncingDirty] = useState(false);
+
+  // 필터
+  const [platformFilter, setPlatformFilter] = useState('');
+  const [storeFilter, setStoreFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
+
+  const undoStack = useRef<{ ruleId: string; field: string; oldValue: any; newValue: any }[]>([]);
+  const redoStack = useRef<{ ruleId: string; field: string; oldValue: any; newValue: any }[]>([]);
+
+  // 초기 로드
+  useEffect(() => {
+    (async () => {
+      try {
+        const [settingsRes, packagesRes, rulesRes] = await Promise.all([
+          fetch('/api/admin/settings/cs-data'),
+          fetch('/api/admin/cs-data/packages'),
+          fetch('/api/admin/cs-data/rules'),
+        ]);
+        if (settingsRes.ok) {
+          const s = await settingsRes.json();
+          setPlatforms(s.platforms || []);
+          setCategoryOptions(s.ruleCategories || []);
+        }
+        if (packagesRes.ok) {
+          const p = await packagesRes.json();
+          setPackages((p.packages || []).map((pkg: any) => ({
+            id: pkg.id, name: pkg.name || '', description: pkg.description || '', faqCount: pkg.faqCount || 0,
+          })));
+        }
+        if (rulesRes.ok) {
+          const data = await rulesRes.json();
+          setRules(data.rules || []);
+        }
+      } catch (err) {
+        console.error('[rules tab] load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // 검색 디바운스
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchDebounced(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // 클라이언트 필터링
+  const filteredRules = useMemo(() => {
+    let result = rules;
+    if (platformFilter) result = result.filter((r: any) => r.platform === platformFilter);
+    if (storeFilter) result = result.filter((r: any) => (r.store || []).includes(storeFilter));
+    if (searchDebounced) {
+      const q = searchDebounced.toLowerCase();
+      result = result.filter((r: any) =>
+        (r.label || '').toLowerCase().includes(q) ||
+        (r.content || '').toLowerCase().includes(q) ||
+        (r.platform || '').toLowerCase().includes(q) ||
+        (r.store || []).some((s: string) => s.toLowerCase().includes(q)) ||
+        (r.category || '').toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [rules, platformFilter, storeFilter, searchDebounced]);
+
+  const scopeOptions = useMemo(() => ({
+    platforms,
+    stores: allTenants.map(t => t.brandName),
+  }), [platforms, allTenants]);
+
+  const packagesMap = useMemo(() => {
+    const map = new Map();
+    packages.forEach(pkg => map.set(pkg.id, pkg));
+    return map;
+  }, [packages]);
+
+  const tenantsMap = useMemo(() => {
+    const map = new Map();
+    allTenants.forEach(t => map.set(t.tenantId, t.brandName));
+    return map;
+  }, [allTenants]);
+
+  const handleCellEdit = useCallback((ruleId: string, field: string, value: any) => {
+    setRules(prev => {
+      const oldRule = prev.find((r: any) => r.id === ruleId);
+      if (!oldRule) return prev;
+      const oldValue = oldRule[field];
+      if (JSON.stringify(oldValue) === JSON.stringify(value)) return prev;
+      undoStack.current.push({ ruleId, field, oldValue, newValue: value });
+      redoStack.current = [];
+      setDirtyIds(p => new Set(p).add(ruleId));
+      return prev.map((r: any) => r.id === ruleId ? { ...r, [field]: value } : r);
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    const entry = undoStack.current.pop();
+    if (!entry) return;
+    redoStack.current.push(entry);
+    setRules(prev => prev.map((r: any) => r.id === entry.ruleId ? { ...r, [entry.field]: entry.oldValue } : r));
+    setDirtyIds(prev => new Set(prev).add(entry.ruleId));
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    const entry = redoStack.current.pop();
+    if (!entry) return;
+    undoStack.current.push(entry);
+    setRules(prev => prev.map((r: any) => r.id === entry.ruleId ? { ...r, [entry.field]: entry.newValue } : r));
+    setDirtyIds(prev => new Set(prev).add(entry.ruleId));
+  }, []);
+
+  const handleSyncDirty = useCallback(async () => {
+    if (dirtyIds.size === 0) return;
+    setSyncingDirty(true);
+    const dirtyRules = rules.filter((r: any) => dirtyIds.has(r.id));
+    const syncLinkedFaqs = dirtyRules.length > 0 && confirm('참조 중인 FAQ의 keyData도 함께 업데이트하시겠습니까?');
+    try {
+      await Promise.all(dirtyRules.map(async (rule: any) => {
+        await fetch(`/api/admin/cs-data/rules/${rule.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: rule.label, content: rule.content, platform: rule.platform, store: rule.store, category: rule.category, tags: rule.tags, syncLinkedFaqs }),
+        });
+      }));
+      setDirtyIds(new Set());
+    } catch { alert('저장 중 오류가 발생했습니다.'); }
+    finally { setSyncingDirty(false); }
+  }, [dirtyIds, rules]);
+
+  const handleDelete = useCallback(async (ruleId: string) => {
+    try {
+      const res = await fetch(`/api/admin/cs-data/rules/${ruleId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.status === 409 && data.linkedFaqCount) {
+        if (!confirm(`이 규정을 ${data.linkedFaqCount}개 FAQ에서 참조 중입니다. 강제 삭제하시겠습니까?`)) return;
+        await fetch(`/api/admin/cs-data/rules/${ruleId}?force=true`, { method: 'DELETE' });
+      }
+      setRules(prev => prev.filter((r: any) => r.id !== ruleId));
+    } catch { alert('삭제 중 오류가 발생했습니다.'); }
+  }, []);
+
+  const handleBulkDelete = useCallback(async (ruleIds: string[]) => {
+    try {
+      const results = await Promise.allSettled(ruleIds.map(id => fetch(`/api/admin/cs-data/rules/${id}`, { method: 'DELETE' })));
+      const deletedIds = new Set<string>();
+      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value.ok) deletedIds.add(ruleIds[i]); });
+      if (deletedIds.size > 0) setRules(prev => prev.filter((r: any) => !deletedIds.has(r.id)));
+    } catch { alert('일괄 삭제 중 오류가 발생했습니다.'); }
+  }, []);
+
+  const handleAdd = useCallback(async (data: any) => {
+    const res = await fetch('/api/admin/cs-data/rules', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('추가 실패');
+    const result = await res.json();
+    if (result.rule) setRules(prev => [...prev, result.rule]);
+  }, []);
+
+  const handleAddCategory = useCallback(async (cat: string) => {
+    const newOptions = [...categoryOptions, cat];
+    setCategoryOptions(newOptions);
+    try { await fetch('/api/admin/settings/cs-data', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ruleCategories: newOptions }) }); }
+    catch {}
+  }, [categoryOptions]);
+
+  // RulesTable 동적 임포트 (이미 로드됨)
+  const [RulesTableComp, setRulesTableComp] = useState<any>(null);
+  useEffect(() => {
+    import('./RulesTable').then(mod => setRulesTableComp(() => mod.default));
+  }, []);
+
+  if (loading || !RulesTableComp) {
+    return <div className="flex justify-center py-20 text-sm text-gray-400">불러오는 중...</div>;
+  }
+
+  return (
+    <div>
+      {/* 필터바 + 저장 버튼 */}
+      <div className="flex items-center gap-3 mb-4">
+        <select value={platformFilter} onChange={e => setPlatformFilter(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">전체 플랫폼</option>
+          <option value="-">-</option>
+          {platforms.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={storeFilter} onChange={e => setStoreFilter(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">전체 매장</option>
+          <option value="공통">공통</option>
+          {allTenants.map(t => <option key={t.tenantId} value={t.brandName}>{t.brandName}</option>)}
+        </select>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="검색..."
+          className="flex-1 max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span className="text-xs text-gray-400 ml-auto">
+          {filteredRules.length !== rules.length ? `${filteredRules.length} / ` : ''}전체 {rules.length}건
+        </span>
+        {dirtyIds.size > 0 && (
+          <button onClick={handleSyncDirty} disabled={syncingDirty}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
+            {syncingDirty ? '저장 중...' : `${dirtyIds.size}건 변경됨 — 저장`}
+          </button>
+        )}
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
+        <RulesTableComp
+          rules={filteredRules}
+          scopeOptions={scopeOptions}
+          onCellEdit={handleCellEdit}
+          onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
+          onAdd={handleAdd}
+          dirtyIds={dirtyIds}
+          packagesMap={packagesMap}
+          tenantsMap={tenantsMap}
+          onRefClick={() => {}}
+          categoryOptions={categoryOptions}
+          onAddCategory={handleAddCategory}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+        />
+      </div>
     </div>
   );
 }

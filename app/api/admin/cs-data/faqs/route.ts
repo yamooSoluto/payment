@@ -45,33 +45,19 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 2. collectionGroup 쿼리 구성 (복합 인덱스: isActive ASC + updatedAt DESC)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query: any = db.collectionGroup('faqs')
+    // 2. 전체 FAQ 조회 (JS 필터 + 오프셋 페이지네이션)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const snapshot = await db.collectionGroup('faqs')
       .where('isActive', '!=', false)
       .orderBy('isActive')
-      .orderBy('updatedAt', 'desc');
+      .orderBy('updatedAt', 'desc')
+      .get();
 
-    // 커서 기반 페이지네이션
-    if (cursor) {
-      const cursorDate = new Date(cursor);
-      query = query.startAfter(true, cursorDate);
-    }
-
-    // Firestore에서 넉넉하게 가져오기 (JS 필터 적용 후 limit 맞춤)
-    // source/topic/handler/search는 JS에서 필터
-    const fetchLimit = searchQuery || sourceFilter || topicFilter || handlerFilter || tenantIdFilter
-      ? limit * 4
-      : limit + 1;
-
-    const snapshot = await query.limit(fetchLimit).get();
-
-    // 3. 결과 매핑 + 필터
+    // 결과 매핑
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let faqs: any[] = [];
 
     for (const doc of snapshot.docs) {
-      // ref.parent = 'faqs' subcollection, ref.parent.parent = tenant doc
       const tenantId = doc.ref.parent.parent?.id;
       if (!tenantId || !tenantMap.has(tenantId)) continue;
 
@@ -90,7 +76,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 4. JS 필터 적용
+    // 3. JS 필터 적용
     if (tenantIdFilter) {
       faqs = faqs.filter(f => f.tenantId === tenantIdFilter);
     }
@@ -117,13 +103,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 5. limit + hasMore 계산
-    const hasMore = faqs.length > limit;
-    const resultFaqs = faqs.slice(0, limit);
-    const lastFaq = resultFaqs[resultFaqs.length - 1];
-    const nextCursor = hasMore && lastFaq?.updatedAt
-      ? (lastFaq.updatedAt instanceof Date ? lastFaq.updatedAt.toISOString() : new Date(lastFaq.updatedAt).toISOString())
-      : null;
+    // 4. 오프셋 페이지네이션
+    const totalCount = faqs.length;
+    const totalPages = Math.ceil(totalCount / limit) || 1;
+    const offset = (page - 1) * limit;
+    const resultFaqs = faqs.slice(offset, offset + limit);
+    const hasMore = page < totalPages;
 
     // 6. 테넌트 목록 (드롭다운용)
     const tenants = Array.from(tenantMap.entries()).map(([id, info]) => ({
@@ -136,7 +121,9 @@ export async function GET(request: NextRequest) {
       success: true,
       faqs: resultFaqs,
       hasMore,
-      nextCursor,
+      totalCount,
+      totalPages,
+      page,
       tenants,
     });
 

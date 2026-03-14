@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       name: string;
       brandName: string;
       brandCode: string;
+      brand: string;
       branchNo: string | null;
       phone: string;
       industry: string;
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
           name: userMap.get(data.email?.toLowerCase() || '')?.name || data.name || data.ownerName || '',
           brandName: data.brandName || data.businessName || '이름 없음',
           brandCode: data.brandCode || '',
+          brand: data.brand || '',
           branchNo: data.branchNo != null ? String(data.branchNo) : null,
           phone: userMap.get(data.email?.toLowerCase() || '')?.phone || data.phone || '',
           industry: data.industry || '',

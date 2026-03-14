@@ -48,10 +48,10 @@ export default function CsDataFaqsPage() {
     search: '',
   });
 
-  // 커서 페이지네이션
-  const [cursors, setCursors] = useState<string[]>([]); // 이전 페이지 커서 스택
-  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  // 페이지네이션
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
   // 편집 상태
@@ -73,12 +73,12 @@ export default function CsDataFaqsPage() {
   const [csvUploadOpen, setCsvUploadOpen] = useState(false);
 
   // ── 데이터 로드 ──
-  const fetchData = useCallback(async (cursor?: string | null) => {
+  const fetchData = useCallback(async (page: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('limit', String(PAGE_SIZE));
-      if (cursor) params.set('cursor', cursor);
+      params.set('page', String(page));
       if (filters.tenantId) params.set('tenantId', filters.tenantId);
       if (filters.source) params.set('source', filters.source);
       if (filters.topic) params.set('topic', filters.topic);
@@ -91,7 +91,9 @@ export default function CsDataFaqsPage() {
 
       setFaqs(data.faqs || []);
       setHasMore(data.hasMore || false);
-      setNextCursor(data.nextCursor || null);
+      setTotalCount(data.totalCount || 0);
+      setTotalPages(data.totalPages || 1);
+      setCurrentPage(data.page || 1);
       if (data.tenants) setTenants(data.tenants);
       setSelectedIds(new Set());
     } catch (error) {
@@ -101,40 +103,19 @@ export default function CsDataFaqsPage() {
     }
   }, [filters]);
 
-  // 필터/페이지 변경 시 다시 로드
+  // 필터 변경 시 1페이지로 리셋
   useEffect(() => {
-    setCursors([]);
-    setCurrentCursor(null);
-    fetchData(null);
+    fetchData(1);
   }, [filters]);
 
   // 같은 질문을 가진 FAQ를 하나의 행으로 그룹핑 (중복 행 방지)
   const groupedFaqs = useMemo(() => groupFaqs(faqs), [faqs]);
 
   // ── 페이지네이션 ──
-  const goNextPage = () => {
-    if (!nextCursor) return;
-    setCursors(prev => [...prev, currentCursor || '']);
-    setCurrentCursor(nextCursor);
-    fetchData(nextCursor);
+  const goToPage = (page: number) => {
+    if (page < 1 || page > totalPages || page === currentPage) return;
+    fetchData(page);
   };
-
-  const goPrevPage = () => {
-    if (cursors.length === 0) return;
-    const prevCursors = [...cursors];
-    const prevCursor = prevCursors.pop() || null;
-    setCursors(prevCursors);
-    setCurrentCursor(prevCursor);
-    fetchData(prevCursor || null);
-  };
-
-  const goFirstPage = () => {
-    setCursors([]);
-    setCurrentCursor(null);
-    fetchData(null);
-  };
-
-  const currentPage = cursors.length + 1;
 
   // ── 인라인 셀 편집 ──
   const handleCellEdit = useCallback((faqId: string, tenantId: string, updates: Partial<CsFaq>) => {
@@ -201,7 +182,7 @@ export default function CsDataFaqsPage() {
       }
 
       setDirtyIds(new Set());
-      fetchData(currentCursor);
+      fetchData(currentPage);
     } catch (error) {
       console.error('Sync dirty failed:', error);
       alert('동기화 중 오류가 발생했습니다.');
@@ -263,7 +244,7 @@ export default function CsDataFaqsPage() {
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
     alert(result.message);
-    fetchData(currentCursor);
+    fetchData(currentPage);
   };
 
 
@@ -340,7 +321,7 @@ export default function CsDataFaqsPage() {
     }
 
     alert(`CSV 업로드 완료: ${created}건 생성${failed > 0 ? `, ${failed}건 실패` : ''}`);
-    fetchData(currentCursor);
+    fetchData(currentPage);
   };
 
   // ── 매장 멀티셀렉: 로컬 토글 (즉시 API 호출 X → pending에 누적) ──
@@ -435,7 +416,7 @@ export default function CsDataFaqsPage() {
         alert(`${allOps.length}건 중 ${failed.length}건 실패`);
       }
       setPendingTenantChanges(new Map());
-      fetchData(currentCursor);
+      fetchData(currentPage);
     } catch {
       alert('매장 변경 반영 중 오류가 발생했습니다.');
     } finally {
@@ -460,7 +441,7 @@ export default function CsDataFaqsPage() {
         alert(`${selectedFaqs.length}건 중 ${failed.length}건 삭제 실패`);
       }
       setSelectedIds(new Set());
-      fetchData(currentCursor);
+      fetchData(currentPage);
       return;
     }
 
@@ -483,7 +464,7 @@ export default function CsDataFaqsPage() {
         alert(`${selectedFaqs.length}건 중 ${failed.length}건 변경 실패`);
       }
       setSelectedIds(new Set());
-      fetchData(currentCursor);
+      fetchData(currentPage);
       return;
     }
 
@@ -502,7 +483,7 @@ export default function CsDataFaqsPage() {
         alert(`${selectedFaqs.length}건 중 ${failed.length}건 변경 실패`);
       }
       setSelectedIds(new Set());
-      fetchData(currentCursor);
+      fetchData(currentPage);
     }
   };
 
@@ -643,7 +624,7 @@ export default function CsDataFaqsPage() {
 
       {/* 결과 통계 */}
       <div className="flex items-center justify-between text-sm text-gray-500">
-        <span>{groupedFaqs.length}건 표시 (페이지 {currentPage})</span>
+        <span>전체 {totalCount}건 · {groupedFaqs.length}건 표시 (페이지 {currentPage} / {totalPages})</span>
         {loading && <Spinner size="sm" />}
       </div>
 
@@ -663,31 +644,55 @@ export default function CsDataFaqsPage() {
         startIndex={(currentPage - 1) * PAGE_SIZE}
       />
 
-      {/* 커서 기반 페이지네이션 */}
-      <div className="flex items-center justify-center gap-2 pt-2">
+      {/* 페이지네이션 */}
+      <div className="flex items-center justify-center gap-1 pt-2">
         <button
-          onClick={goFirstPage}
+          onClick={() => goToPage(1)}
           disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           처음
         </button>
         <button
-          onClick={goPrevPage}
+          onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           이전
         </button>
-        <span className="px-3 py-1.5 text-sm font-medium text-gray-700">
-          {currentPage} 페이지
-        </span>
+        {(() => {
+          const pages: number[] = [];
+          let start = Math.max(1, currentPage - 2);
+          let end = Math.min(totalPages, start + 4);
+          if (end - start < 4) start = Math.max(1, end - 4);
+          for (let i = start; i <= end; i++) pages.push(i);
+          return pages.map(p => (
+            <button
+              key={p}
+              onClick={() => goToPage(p)}
+              className={`min-w-[36px] px-2 py-1.5 text-sm rounded-lg transition-colors ${
+                p === currentPage
+                  ? 'bg-gray-900 text-white font-medium'
+                  : 'border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {p}
+            </button>
+          ));
+        })()}
         <button
-          onClick={goNextPage}
+          onClick={() => goToPage(currentPage + 1)}
           disabled={!hasMore}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           다음
+        </button>
+        <button
+          onClick={() => goToPage(totalPages)}
+          disabled={currentPage === totalPages}
+          className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          끝
         </button>
       </div>
 
