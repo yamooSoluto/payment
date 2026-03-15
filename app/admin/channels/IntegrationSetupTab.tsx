@@ -804,7 +804,7 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
                   <span className="text-[11px] text-emerald-600">적용됨</span>
                 </div>
               )}
-              {Object.entries(normalizedSlack.routing || {}).map(([h, r]) => (
+              {Object.entries((normalizedSlack.routing || {}) as Record<string, SlackRouteConfig>).map(([h, r]) => (
                 <div key={h} className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">route.{h}</span>
                   <span className="text-[11px] font-mono text-gray-700">{r.channelId || '-'}{chName(r.channelId) ? ` ${chName(r.channelId)}` : ''}</span>
@@ -1050,7 +1050,7 @@ function MemberPicker({ selectedIds, onChange, members, loading, compact }: {
 // ─── Notion-like Slack 기본값 섹션 ───
 function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, lookupErr, loadSlack, parseMentions }: {
   sl: Record<string, unknown>;
-  upd: (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => void;
+  upd: (ch: string, path: string, val: string | number | boolean | string[] | Record<string, SlackRouteConfig>) => void;
   channels: SlackChannel[] | null;
   members: SlackMember[] | null;
   lookupLoading: boolean;
@@ -1058,46 +1058,7 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
   loadSlack: () => void;
   parseMentions: (s: string) => string[];
 }) {
-  const [editing, setEditing] = useState<string | null>(null);
   const normalized = normalizeSlackDraft(sl);
-
-  const fields: { key: string; label: string; path: string; type: 'text' | 'channel' | 'mentions' | 'members' | 'boolean' }[] = [
-    { key: 'botTokenSecretRef', label: '봇 토큰 Ref', path: 'botTokenSecretRef', type: 'text' },
-    { key: 'signingSecretRef', label: '서명 시크릿 Ref', path: 'signingSecretRef', type: 'text' },
-    { key: 'teamId', label: '팀 ID', path: 'teamId', type: 'text' },
-    { key: 'defaultChannelId', label: '기본 채널', path: 'defaultChannelId', type: 'channel' },
-    { key: 'managerChannelId', label: '매니저 채널', path: 'routing.manager.channelId', type: 'channel' },
-    { key: 'opChannelId', label: '운영 채널', path: 'routing.op.channelId', type: 'channel' },
-    { key: 'errorChannelId', label: '오류 채널', path: 'errorChannelId', type: 'channel' },
-    { key: 'defaultMentions', label: '기본 멘션', path: 'defaultMentions', type: 'mentions' },
-    { key: 'allowedUserIds', label: '허용된 사용자', path: 'allowedUserIds', type: 'members' },
-    { key: 'excludeUserIds', label: '포탈 제외 멤버', path: 'excludeUserIds', type: 'members' },
-  ];
-
-  const getDisplay = (f: typeof fields[0]): string => {
-    const v =
-      f.key === 'managerChannelId'
-        ? normalized.routing?.manager?.channelId
-        : f.key === 'opChannelId'
-          ? normalized.routing?.op?.channelId
-          : normalized[f.key as keyof TenantSlack];
-    if (f.type === 'boolean') return v ? '사용' : '미사용';
-    if (f.type === 'channel') {
-      const ch = channels?.find(c => c.id === v);
-      return ch ? `#${ch.name}` : (v ? String(v) : '—');
-    }
-    if (f.type === 'mentions') {
-      if (!v) return '—';
-      const ids = parseMentions(String(v));
-      return ids.map(id => { const m = members?.find(u => u.id === id); return m ? m.realName : id; }).join(', ') || String(v);
-    }
-    if (f.type === 'members') {
-      const arr = Array.isArray(v) ? v as string[] : [];
-      if (!arr.length) return '—';
-      return arr.map(id => { const m = members?.find(u => u.id === id); return m ? m.realName : id; }).join(', ');
-    }
-    return v ? String(v) : '—';
-  };
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
@@ -1119,106 +1080,85 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
         <div className="mx-5 mb-2 px-3 py-1.5 text-[11px] text-red-600 bg-red-50 rounded-lg">{lookupErr}</div>
       )}
 
-      <div className="divide-y divide-gray-50">
-        {fields.map(f => {
-          const isEditing = editing === f.key;
-          const val =
-            f.key === 'managerChannelId'
-              ? normalized.routing?.manager?.channelId
-              : f.key === 'opChannelId'
-                ? normalized.routing?.op?.channelId
-                : normalized[f.key as keyof TenantSlack];
+      <div className="px-5 py-4 space-y-3 bg-gray-50/30">
+        {lookupLoading && <div className="text-[11px] text-gray-400 flex items-center gap-1.5"><Spinner /> 로딩 중...</div>}
 
-          return (
-            <div
-              key={f.key}
-              className="group px-5 py-2.5 flex items-center gap-4 hover:bg-gray-50/50 cursor-pointer transition-colors"
-              onClick={() => { if (!isEditing) setEditing(f.key); }}
-            >
-              <span className="w-32 shrink-0 text-[12px] text-gray-400">{f.label}</span>
+        <div className="grid grid-cols-2 gap-3">
+          <ChannelPicker
+            label="기본 채널"
+            value={normalized.defaultChannelId || ''}
+            onChange={v => upd('slack', 'defaultChannelId', v)}
+            channels={channels}
+            loading={lookupLoading}
+          />
+          <ChannelPicker
+            label="매니저 채널"
+            value={normalized.routing?.manager?.channelId || ''}
+            onChange={v => upd('slack', 'routing.manager.channelId', v)}
+            channels={channels}
+            loading={lookupLoading}
+          />
+          <ChannelPicker
+            label="운영 채널"
+            value={normalized.routing?.op?.channelId || ''}
+            onChange={v => upd('slack', 'routing.op.channelId', v)}
+            channels={channels}
+            loading={lookupLoading}
+          />
+          <ChannelPicker
+            label="오류 채널"
+            value={normalized.errorChannelId || ''}
+            onChange={v => upd('slack', 'errorChannelId', v)}
+            channels={channels}
+            loading={lookupLoading}
+          />
+          <div>
+            <label className="text-[11px] text-gray-400 mb-1 block">기본 멘션</label>
+            <MemberPicker
+              selectedIds={parseMentions(String(normalized.defaultMentions || ''))}
+              onChange={ids => upd('slack', 'defaultMentions', ids.map(id => `<@${id}>`).join(' '))}
+              members={members}
+              loading={lookupLoading}
+            />
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-400 mb-1 block">허용된 사용자 <span className="text-[10px] text-gray-300">(Slack 액션 권한)</span></label>
+            <MemberPicker
+              selectedIds={Array.isArray(normalized.allowedUserIds) ? normalized.allowedUserIds : []}
+              onChange={ids => upd('slack', 'allowedUserIds', ids)}
+              members={members}
+              loading={lookupLoading}
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="text-[11px] text-gray-400 mb-1 block">포탈 제외 멤버</label>
+            <MemberPicker
+              selectedIds={Array.isArray(normalized.excludeUserIds) ? normalized.excludeUserIds : []}
+              onChange={ids => upd('slack', 'excludeUserIds', ids)}
+              members={members}
+              loading={lookupLoading}
+            />
+          </div>
+        </div>
 
-              <div className="flex-1 min-w-0">
-                {!isEditing ? (
-                  <span className={`text-[13px] truncate block ${val && val !== '—' ? 'text-gray-800' : 'text-gray-300'}`}>
-                    {getDisplay(f)}
-                  </span>
-                ) : f.type === 'text' ? (
-                  <input
-                    autoFocus
-                    value={String(val || '')}
-                    onChange={e => upd('slack', f.path, e.target.value)}
-                    onBlur={() => setEditing(null)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditing(null); }}
-                    className="w-full text-[13px] font-mono bg-transparent outline-none border-b border-gray-300 focus:border-gray-500 py-0.5"
-                    placeholder="값 입력..."
-                  />
-                ) : f.type === 'channel' ? (
-                  <div className="flex items-center gap-2">
-                    <select
-                      autoFocus
-                      value={String(val || '')}
-                      onChange={e => { upd('slack', f.path, e.target.value); setEditing(null); }}
-                      onBlur={() => setEditing(null)}
-                      className="flex-1 text-[13px] bg-transparent outline-none border-b border-gray-300 focus:border-gray-500 py-0.5"
-                    >
-                      <option value="">선택 안 함</option>
-                      {(channels || []).map(c => <option key={c.id} value={c.id}>#{c.name} ({c.memberCount}명)</option>)}
-                    </select>
-                    {!channels?.length && (
-                      <span className="text-[11px] text-gray-400">채널/멤버 조회 필요</span>
-                    )}
-                  </div>
-                ) : f.type === 'mentions' ? (
-                  <input
-                    autoFocus
-                    value={String(val || '')}
-                    onChange={e => upd('slack', f.path, e.target.value)}
-                    onBlur={() => setEditing(null)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditing(null); }}
-                    className="w-full text-[13px] font-mono bg-transparent outline-none border-b border-gray-300 focus:border-gray-500 py-0.5"
-                    placeholder="<@U12345> <@U67890>"
-                  />
-                ) : f.type === 'members' ? (
-                  <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
-                    <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(val) ? val as string[] : []).map(id => {
-                        const m = members?.find(u => u.id === id);
-                        return (
-                          <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 rounded-full">
-                            {m ? m.realName : id}
-                            <button
-                              onClick={() => upd('slack', f.path, (Array.isArray(val) ? val as string[] : []).filter(x => x !== id))}
-                              className="text-gray-400 hover:text-red-500 ml-0.5"
-                            >&times;</button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {members && members.length > 0 ? (
-                      <select
-                        value=""
-                        onChange={e => {
-                          if (!e.target.value) return;
-                          const cur = Array.isArray(val) ? val as string[] : [];
-                          if (!cur.includes(e.target.value)) upd('slack', f.path, [...cur, e.target.value]);
-                        }}
-                        className="text-[12px] bg-transparent outline-none border-b border-gray-300 focus:border-gray-500 py-0.5"
-                      >
-                        <option value="">+ 추가...</option>
-                        {(members || []).filter(m => !(Array.isArray(val) ? val as string[] : []).includes(m.id)).map(m => (
-                          <option key={m.id} value={m.id}>{m.realName} ({m.id})</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-[11px] text-gray-400">채널/멤버 조회 필요</span>
-                    )}
-                    <button onClick={() => setEditing(null)} className="text-[11px] text-gray-400 hover:text-gray-600">완료</button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={normalized.hideAdminMembers !== false}
+            onChange={e => upd('slack', 'hideAdminMembers', e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-[11px] text-gray-600">포탈 멤버 목록에서 본사 관리자 제외</span>
+        </label>
+
+        <details>
+          <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">고급 설정</summary>
+          <div className="grid grid-cols-3 gap-3 mt-2">
+            <Input label="Bot Token Ref" value={String(normalized.botTokenSecretRef || '')} onChange={v => upd('slack', 'botTokenSecretRef', v)} placeholder="기본값 사용" />
+            <Input label="Signing Secret Ref" value={String(normalized.signingSecretRef || '')} onChange={v => upd('slack', 'signingSecretRef', v)} placeholder="기본값 사용" />
+            <Input label="Team ID" value={String(normalized.teamId || '')} onChange={v => upd('slack', 'teamId', v)} placeholder="기본값 사용" />
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -1226,7 +1166,7 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
 
 function DefaultsWidgetSection({ wCw, upd }: {
   wCw: Record<string, unknown>;
-  upd: (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => void;
+  upd: (ch: string, path: string, val: string | number | boolean | string[] | Record<string, SlackRouteConfig>) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -1337,7 +1277,7 @@ function DefaultsEditor() {
 
   if (isLoading || !config) return <div className="flex justify-center py-16"><Spinner /></div>;
 
-  const upd = (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => {
+  const upd = (ch: string, path: string, val: string | number | boolean | string[] | Record<string, SlackRouteConfig>) => {
     setConfig(prev => {
       if (!prev) return prev;
       const next = { ...prev };

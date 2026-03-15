@@ -1,6 +1,6 @@
 export type SlackRouteConfig = {
-  channelId?: string | null;
-  mentions?: string | null;
+  channelId?: string;
+  mentions?: string;
 };
 
 export type SlackConfigLike = {
@@ -9,14 +9,15 @@ export type SlackConfigLike = {
   errorChannelId?: string | null;
   defaultMentions?: string | null;
   allowedUserIds?: string[];
+  excludeUserIds?: string[];
   teamId?: string | null;
   botTokenSecretRef?: string | null;
   signingSecretRef?: string | null;
+  hideAdminMembers?: boolean;
   routing?: Record<string, SlackRouteConfig> | null;
-  [key: string]: unknown;
 };
 
-export function normalizeSlackDraft<T extends SlackConfigLike | Record<string, unknown>>(source: T) {
+export function normalizeSlackDraft(source: Partial<SlackConfigLike> | null | undefined) {
   const slack = (source || {}) as SlackConfigLike;
   const rawRouting =
     slack.routing && typeof slack.routing === 'object'
@@ -43,6 +44,8 @@ export function normalizeSlackDraft<T extends SlackConfigLike | Record<string, u
     typeof slack.opsChannelId === 'string' ? slack.opsChannelId.trim() : '';
   const errorChannelId =
     typeof slack.errorChannelId === 'string' ? slack.errorChannelId.trim() : '';
+  const hideAdminMembers =
+    typeof slack.hideAdminMembers === 'boolean' ? slack.hideAdminMembers : true;
 
   if (!routing.manager?.channelId && defaultChannelId) {
     routing.manager = {
@@ -66,12 +69,13 @@ export function normalizeSlackDraft<T extends SlackConfigLike | Record<string, u
     defaultChannelId,
     defaultMentions,
     errorChannelId,
+    hideAdminMembers,
     opsChannelId: routing.op?.channelId || '',
     routing,
   };
 }
 
-export function buildNormalizedSlackPayload<T extends SlackConfigLike | Record<string, unknown>>(source: T) {
+export function buildNormalizedSlackPayload(source: Partial<SlackConfigLike> | null | undefined) {
   const normalized = normalizeSlackDraft(source);
   return {
     ...normalized,
@@ -80,9 +84,11 @@ export function buildNormalizedSlackPayload<T extends SlackConfigLike | Record<s
     errorChannelId: normalized.errorChannelId || null,
     opsChannelId: normalized.routing?.op?.channelId || null,
     allowedUserIds: Array.isArray(normalized.allowedUserIds) ? normalized.allowedUserIds : [],
+    excludeUserIds: Array.isArray(normalized.excludeUserIds) ? normalized.excludeUserIds : [],
     routing: normalized.routing || {},
     teamId: normalized.teamId || null,
     botTokenSecretRef: normalized.botTokenSecretRef || null,
     signingSecretRef: normalized.signingSecretRef || null,
+    hideAdminMembers: normalized.hideAdminMembers !== false,
   };
 }
