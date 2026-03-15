@@ -6,6 +6,11 @@ import {
   Plus, Check, WarningCircle, NavArrowDown, Settings, RefreshDouble,
 } from 'iconoir-react';
 import Spinner from '@/components/admin/Spinner';
+import {
+  buildNormalizedSlackPayload,
+  normalizeSlackDraft,
+  type SlackRouteConfig,
+} from '@/lib/slackRouting';
 
 // ─── Slack Lookup Types ───
 interface SlackChannel {
@@ -42,6 +47,7 @@ interface TenantSlack {
   signingSecretRef?: string | null;
   defaultChannelId?: string | null;
   opsChannelId?: string | null;
+  errorChannelId?: string | null;
   defaultMentions?: string | null;
   teamId?: string | null;
   email?: string | null;
@@ -92,9 +98,11 @@ interface IntegrationConfig {
     teamId?: string;
     defaultChannelId?: string;
     opsChannelId?: string;
+    errorChannelId?: string;
     defaultMentions?: string;
     allowedUserIds?: string[];
     excludeUserIds?: string[];
+    routing?: Record<string, SlackRouteConfig>;
   };
   [key: string]: Record<string, unknown> | undefined;
 }
@@ -647,7 +655,8 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
   }, [tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enabled = addons.includes('slack');
-  const connected = !!slack.defaultChannelId;
+  const normalizedSlack = normalizeSlackDraft(slack);
+  const connected = !!normalizedSlack.defaultChannelId;
 
   const toggleSlack = async () => {
     setToggling(true);
@@ -689,26 +698,31 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
     finally { setLookupLoading(false); }
   };
 
+  const routeChannelId = (handler: 'manager' | 'op') =>
+    normalizeSlackDraft(slack).routing?.[handler]?.channelId || '';
+
   const startEdit = () => {
+    const normalized = normalizeSlackDraft(slack);
     setDraft({
-      botTokenSecretRef: slack.botTokenSecretRef || '',
-      signingSecretRef: slack.signingSecretRef || '',
-      defaultChannelId: slack.defaultChannelId || '',
-      opsChannelId: slack.opsChannelId || '',
-      defaultMentions: slack.defaultMentions || '',
-      teamId: slack.teamId || '',
-      allowedUserIds: slack.allowedUserIds || [],
-      hideAdminMembers: slack.hideAdminMembers ?? true,
-      routing: slack.routing || {},
+      botTokenSecretRef: normalized.botTokenSecretRef || '',
+      signingSecretRef: normalized.signingSecretRef || '',
+      defaultChannelId: normalized.defaultChannelId || '',
+      opsChannelId: normalized.opsChannelId || '',
+      errorChannelId: normalized.errorChannelId || '',
+      defaultMentions: normalized.defaultMentions || '',
+      teamId: normalized.teamId || '',
+      allowedUserIds: normalized.allowedUserIds || [],
+      hideAdminMembers: normalized.hideAdminMembers ?? true,
+      routing: normalized.routing || {},
     });
     setEditing(true);
-    if (!channels && !lookupLoading) setTimeout(() => loadSlack(slack.defaultChannelId || undefined), 0);
+    if (!channels && !lookupLoading) setTimeout(() => loadSlack(normalizedSlack.defaultChannelId || undefined), 0);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      const payload = { ...draft };
+      const payload = buildNormalizedSlackPayload(draft);
       if (typeof payload.allowedUserIds === 'string') {
         payload.allowedUserIds = (payload.allowedUserIds as unknown as string).split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -754,41 +768,43 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
       {!editing && (
         <div className="px-5 py-4">
           <dl className="grid grid-cols-4 gap-y-3 gap-x-8">
-            <Field label="Default Channel" value={slack.defaultChannelId ? (chName(slack.defaultChannelId) || slack.defaultChannelId) : '미설정'} tooltip={slack.defaultChannelId || undefined} warn={!connected} />
-            <Field label="Ops Channel" value={slack.opsChannelId ? (chName(slack.opsChannelId) || slack.opsChannelId) : '-'} tooltip={slack.opsChannelId || undefined} />
-            <Field label="Team ID" value={slack.teamId || '-'} />
-            <Field label="Bot Token Ref" value={slack.botTokenSecretRef || '기본값'} tooltip={slack.botTokenSecretRef || '기본값 설정 사용'} />
+            <Field label="Default Channel" value={normalizedSlack.defaultChannelId ? (chName(normalizedSlack.defaultChannelId) || normalizedSlack.defaultChannelId) : '미설정'} tooltip={normalizedSlack.defaultChannelId || undefined} warn={!connected} />
+            <Field label="Manager Channel" value={routeChannelId('manager') ? (chName(routeChannelId('manager')) || routeChannelId('manager')) : (normalizedSlack.defaultChannelId ? '기본 채널 사용' : '-')} tooltip={routeChannelId('manager') || undefined} />
+            <Field label="Op Channel" value={routeChannelId('op') ? (chName(routeChannelId('op')) || routeChannelId('op')) : '-'} tooltip={routeChannelId('op') || undefined} />
+            <Field label="Error Channel" value={normalizedSlack.errorChannelId ? (chName(normalizedSlack.errorChannelId) || normalizedSlack.errorChannelId) : '-'} tooltip={normalizedSlack.errorChannelId || undefined} />
+            <Field label="Team ID" value={normalizedSlack.teamId || '-'} />
+            <Field label="Bot Token Ref" value={normalizedSlack.botTokenSecretRef || '기본값'} tooltip={normalizedSlack.botTokenSecretRef || '기본값 설정 사용'} />
           </dl>
 
-          {(slack.defaultMentions || slack.allowedUserIds?.length || Object.keys(slack.routing || {}).length > 0) && (
+          {(normalizedSlack.defaultMentions || normalizedSlack.allowedUserIds?.length || Object.keys(normalizedSlack.routing || {}).length > 0) && (
             <div className="mt-3 pt-3 border-t border-gray-50 space-y-2">
-              {slack.defaultMentions && (
+              {normalizedSlack.defaultMentions && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">Mentions</span>
                   <div className="flex flex-wrap gap-1">
-                    {parseMentions(slack.defaultMentions).map(uid => (
+                    {parseMentions(normalizedSlack.defaultMentions).map(uid => (
                       <span key={uid} className="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] text-gray-700 font-mono">@{mName(uid)}</span>
                     ))}
                   </div>
                 </div>
               )}
-              {slack.allowedUserIds && slack.allowedUserIds.length > 0 && (
+              {normalizedSlack.allowedUserIds && normalizedSlack.allowedUserIds.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">Allowed</span>
                   <div className="flex flex-wrap gap-1">
-                    {slack.allowedUserIds.map(uid => (
+                    {normalizedSlack.allowedUserIds.map(uid => (
                       <span key={uid} className="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] text-gray-700 font-mono">{mName(uid)}</span>
                     ))}
                   </div>
                 </div>
               )}
-              {slack.hideAdminMembers !== false && (
+              {normalizedSlack.hideAdminMembers !== false && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">본사 제외</span>
                   <span className="text-[11px] text-emerald-600">적용됨</span>
                 </div>
               )}
-              {Object.entries(slack.routing || {}).map(([h, r]) => (
+              {Object.entries(normalizedSlack.routing || {}).map(([h, r]) => (
                 <div key={h} className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">route.{h}</span>
                   <span className="text-[11px] font-mono text-gray-700">{r.channelId || '-'}{chName(r.channelId) ? ` ${chName(r.channelId)}` : ''}</span>
@@ -871,7 +887,9 @@ function SlackCard({ tenantId, slack, addons, onSave }: { tenantId: string; slac
           {/* 채널 + 멤버 */}
           <div className="grid grid-cols-2 gap-3">
             <ChannelPicker label="Default Channel" value={draft.defaultChannelId || ''} onChange={v => { set('defaultChannelId', v); reloadMembers(v); }} channels={channels} loading={lookupLoading} />
-            <ChannelPicker label="Ops Channel" value={draft.opsChannelId || ''} onChange={v => set('opsChannelId', v)} channels={channels} loading={lookupLoading} />
+            <ChannelPicker label="Manager Channel" value={draft.routing?.manager?.channelId || ''} onChange={v => setRouting('manager', 'channelId', v)} channels={channels} loading={lookupLoading} />
+            <ChannelPicker label="Op Channel" value={draft.routing?.op?.channelId || ''} onChange={v => setRouting('op', 'channelId', v)} channels={channels} loading={lookupLoading} />
+            <ChannelPicker label="Error Channel" value={draft.errorChannelId || ''} onChange={v => set('errorChannelId', v)} channels={channels} loading={lookupLoading} />
             <div>
               <label className="text-[11px] text-gray-400 mb-1 block">Default Mentions</label>
               <MemberPicker selectedIds={parseMentions(String(draft.defaultMentions || ''))} onChange={ids => set('defaultMentions', ids.map(id => `<@${id}>`).join(' '))} members={members} loading={lookupLoading} />
@@ -1032,7 +1050,7 @@ function MemberPicker({ selectedIds, onChange, members, loading, compact }: {
 // ─── Notion-like Slack 기본값 섹션 ───
 function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, lookupErr, loadSlack, parseMentions }: {
   sl: Record<string, unknown>;
-  upd: (ch: string, path: string, val: string | number | string[]) => void;
+  upd: (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => void;
   channels: SlackChannel[] | null;
   members: SlackMember[] | null;
   lookupLoading: boolean;
@@ -1041,20 +1059,28 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
   parseMentions: (s: string) => string[];
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const normalized = normalizeSlackDraft(sl);
 
   const fields: { key: string; label: string; path: string; type: 'text' | 'channel' | 'mentions' | 'members' | 'boolean' }[] = [
     { key: 'botTokenSecretRef', label: '봇 토큰 Ref', path: 'botTokenSecretRef', type: 'text' },
     { key: 'signingSecretRef', label: '서명 시크릿 Ref', path: 'signingSecretRef', type: 'text' },
     { key: 'teamId', label: '팀 ID', path: 'teamId', type: 'text' },
     { key: 'defaultChannelId', label: '기본 채널', path: 'defaultChannelId', type: 'channel' },
-    { key: 'opsChannelId', label: '운영 채널', path: 'opsChannelId', type: 'channel' },
+    { key: 'managerChannelId', label: '매니저 채널', path: 'routing.manager.channelId', type: 'channel' },
+    { key: 'opChannelId', label: '운영 채널', path: 'routing.op.channelId', type: 'channel' },
+    { key: 'errorChannelId', label: '오류 채널', path: 'errorChannelId', type: 'channel' },
     { key: 'defaultMentions', label: '기본 멘션', path: 'defaultMentions', type: 'mentions' },
     { key: 'allowedUserIds', label: '허용된 사용자', path: 'allowedUserIds', type: 'members' },
     { key: 'excludeUserIds', label: '포탈 제외 멤버', path: 'excludeUserIds', type: 'members' },
   ];
 
   const getDisplay = (f: typeof fields[0]): string => {
-    const v = sl[f.key];
+    const v =
+      f.key === 'managerChannelId'
+        ? normalized.routing?.manager?.channelId
+        : f.key === 'opChannelId'
+          ? normalized.routing?.op?.channelId
+          : normalized[f.key as keyof TenantSlack];
     if (f.type === 'boolean') return v ? '사용' : '미사용';
     if (f.type === 'channel') {
       const ch = channels?.find(c => c.id === v);
@@ -1081,7 +1107,7 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
         </div>
         <button
           onClick={loadSlack}
-          disabled={lookupLoading || !sl.botTokenSecretRef}
+          disabled={lookupLoading || !normalized.botTokenSecretRef}
           className="flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-40"
         >
           <RefreshDouble className={`w-3.5 h-3.5 ${lookupLoading ? 'animate-spin' : ''}`} />
@@ -1096,7 +1122,12 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
       <div className="divide-y divide-gray-50">
         {fields.map(f => {
           const isEditing = editing === f.key;
-          const val = sl[f.key];
+          const val =
+            f.key === 'managerChannelId'
+              ? normalized.routing?.manager?.channelId
+              : f.key === 'opChannelId'
+                ? normalized.routing?.op?.channelId
+                : normalized[f.key as keyof TenantSlack];
 
           return (
             <div
@@ -1195,7 +1226,7 @@ function DefaultsSlackSection({ sl, upd, channels, members, lookupLoading, looku
 
 function DefaultsWidgetSection({ wCw, upd }: {
   wCw: Record<string, unknown>;
-  upd: (ch: string, path: string, val: string | number | string[]) => void;
+  upd: (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -1270,7 +1301,11 @@ function DefaultsEditor() {
   const doSave = useCallback(async (cfg: IntegrationConfig) => {
     setSaveStatus('saving');
     try {
-      const r = await fetch('/api/admin/integration-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: cfg }) });
+      const payload = {
+        ...cfg,
+        ...(cfg.slack ? { slack: buildNormalizedSlackPayload(cfg.slack as Record<string, unknown>) } : {}),
+      };
+      const r = await fetch('/api/admin/integration-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: payload }) });
       if (!r.ok) throw new Error('실패');
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 1500);
@@ -1302,21 +1337,39 @@ function DefaultsEditor() {
 
   if (isLoading || !config) return <div className="flex justify-center py-16"><Spinner /></div>;
 
-  const upd = (ch: string, path: string, val: string | number | string[]) => {
+  const upd = (ch: string, path: string, val: string | number | string[] | Record<string, SlackRouteConfig>) => {
     setConfig(prev => {
       if (!prev) return prev;
       const next = { ...prev };
       const c = { ...(next[ch] || {}) } as Record<string, unknown>;
       const p = path.split('.');
       if (p.length === 1) c[p[0]] = val;
-      else if (p[0] === 'cw') { const cw = { ...((c.cw || {}) as Record<string, unknown>) }; cw[p[1]] = val; c.cw = cw; }
+      else if (p[0] === 'cw') {
+        const cw = { ...((c.cw || {}) as Record<string, unknown>) };
+        cw[p[1]] = val;
+        c.cw = cw;
+      } else if (p[0] === 'routing') {
+        const routing = {
+          ...(((c.routing || normalizeSlackDraft(c).routing || {}) as Record<string, SlackRouteConfig>)),
+        };
+        const handler = p[1];
+        const route = { ...(routing[handler] || {}) };
+        if (p.length === 3) {
+          const strVal = typeof val === 'string' ? val : '';
+          if (strVal) route[p[2] as keyof SlackRouteConfig] = strVal;
+          else delete route[p[2] as keyof SlackRouteConfig];
+        }
+        if (Object.keys(route).length > 0) routing[handler] = route;
+        else delete routing[handler];
+        c.routing = routing;
+      }
       next[ch] = c;
       return next as IntegrationConfig;
     });
   };
 
   const wCw = (config.widget?.cw || {}) as Record<string, unknown>;
-  const sl = (config.slack || {}) as Record<string, unknown>;
+  const sl = normalizeSlackDraft((config.slack || {}) as Record<string, unknown>) as Record<string, unknown>;
   const parseMentions = (s: string) => (s.match(/<@(U[A-Z0-9]+)>/g) || []).map(m => m.replace(/<@|>/g, ''));
 
   return (

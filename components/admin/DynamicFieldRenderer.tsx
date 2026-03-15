@@ -78,6 +78,7 @@ const DEFAULT_JSON_SCHEMAS: Record<string, Record<string, unknown>> = {
     teamId: null,
     defaultChannelId: null,
     opsChannelId: null,
+    errorChannelId: null,
     defaultTeam: null,
     botTokenSecretRef: null,
     routing: null,

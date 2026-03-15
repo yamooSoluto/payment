@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
+import { buildNormalizedSlackPayload } from '@/lib/slackRouting';
 
 /**
  * GET: 전체 Integration 목록 (채널별 필터 가능)
@@ -237,11 +238,12 @@ export async function PATCH(request: NextRequest) {
     // slack 설정 업데이트
     if (slack && typeof slack === 'object') {
       const currentSlack = existing.data()?.slack || {};
-      const merged = { ...currentSlack, ...slack };
-      for (const [k, v] of Object.entries(merged)) {
-        if (v === '') merged[k] = null;
+      const normalized = buildNormalizedSlackPayload({ ...currentSlack, ...slack } as Record<string, unknown>);
+      const cleanedSlack = { ...normalized } as Record<string, unknown>;
+      for (const [k, v] of Object.entries(cleanedSlack)) {
+        if (v === '') cleanedSlack[k] = null;
       }
-      updates.slack = merged;
+      updates.slack = cleanedSlack;
     }
 
     // addon 토글

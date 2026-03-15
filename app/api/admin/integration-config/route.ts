@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth';
+import { buildNormalizedSlackPayload } from '@/lib/slackRouting';
 
 const CONFIG_DOC = 'admin_config/integration_defaults';
 
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
 
     const doc = await db.doc(CONFIG_DOC).get();
     const config = doc.exists ? doc.data() : getDefaultConfig();
+    if (config?.slack) config.slack = buildNormalizedSlackPayload(config.slack as Record<string, unknown>);
 
     return NextResponse.json({ config });
   } catch (e: unknown) {
@@ -52,8 +54,13 @@ export async function PUT(request: NextRequest) {
     const { config } = body;
     if (!config) return NextResponse.json({ error: 'config 필수' }, { status: 400 });
 
-    await db.doc(CONFIG_DOC).set({
+    const normalizedConfig = {
       ...config,
+      ...(config.slack ? { slack: buildNormalizedSlackPayload(config.slack as Record<string, unknown>) } : {}),
+    };
+
+    await db.doc(CONFIG_DOC).set({
+      ...normalizedConfig,
       updatedAt: new Date(),
       updatedBy: admin.adminId,
     }, { merge: true });
@@ -91,6 +98,18 @@ function getDefaultConfig() {
         websiteTokenSecretRef: 'CW_WEB_TOKEN_73335',
         hmacSecretRef: 'CW_WEB_HMAC_73335',
       },
+    },
+    slack: {
+      botTokenSecretRef: 'SLACK_BOT_TOKEN',
+      signingSecretRef: 'SLACK_SIGNING_SECRET',
+      teamId: null,
+      defaultChannelId: null,
+      opsChannelId: null,
+      errorChannelId: null,
+      defaultMentions: null,
+      allowedUserIds: [],
+      excludeUserIds: [],
+      routing: {},
     },
   };
 }
